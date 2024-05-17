@@ -1,0 +1,74 @@
+@import "_variables.less";
+@import "_mixins.less";
+
+html, body {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    font-size: 16px;
+    font-family: @font-family;
+}
+
+.querygantt-tab {
+    display: flex;
+    flex-direction: column;
+
+    b {
+        font-weight: 600;
+    }
+
+    &__spinner {
+        padding: rem(16px) 0;
+    }
+
+    &__header {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background-color: var(--background-color);
+    }
+
+    &__body {
+        padding-top: rem(16px);
+    }
+
+    &__footer {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        line-height: rem(24px);
+        padding-top: rem(16px);
+        font-size: rem(14px);
+        position: sticky;
+        bottom: 0;
+        z-index: 1;
+        background-color: var(--background-color);
+
+        > div + div {
+            &:before {
+                content: "\00a0\00a0|\00a0\00a0";
+                color: var(--text-disabled-color);
+                position: relative;
+                top: rem(-1px);
+            }
+        }
+
+        .tablet({
+            flex-direction: column;
+
+            > div + div {
+                padding-top: rem(8px);
+
+                &:before {
+                    display: none;
+                }
+            }
+        });
+    }
+}
+
+@import "components/count.less";
+@import "components/legend.less";
+@import "components/header.less";
+@import "components/timeline.less";

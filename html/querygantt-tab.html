@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <link href="../js/libs/ui/Core/core.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
+        <link href="../js/libs/ui/Core/override.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
+        <link href="../js/libs/ui/Components/Icon/FabricIcons.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
+        <link href="../js/libs/ui/Components/Icon/FluentIcons.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
+        <link href="../js/libs/ui/Components/Header/Header.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
+        <link href="../js/libs/ui/Components/Button/Button.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
+        <link href="../js/libs/ui/Components/Spinner/Spinner.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
+        <link href="../css/vis-timeline.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
+        <link href="../css/#{Extension.Id}#-tab.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
+    </head>
+    <body class="querygantt-tab" data-bind="attr: { 'data-version': 'v' + version }">
+        <!-- ko if: isLoading -->
+        <div class="querygantt-tab__spinner bolt-spinner flex-column text-center rhythm-vertical-8">
+            <div class="bolt-spinner-circle medium"></div>
+            <div class="bolt-spinner-label">... loading</div>
+        </div>
+        <!-- /ko -->
+        <!-- ko if: !isLoading() -->
+        <div class="querygantt-tab__header">
+            <my-header params="selectedItem: current,
+                               showTags: showTags,
+                               showDates: showDates,
+                               showAssignedTo: showAssignedTo,
+                               title: title,
+                               callbacks: {
+                                    download: download.bind($root),
+                                    share: share.bind($root),
+                                    expand: expand.bind($root),
+                                    collapse: collapse.bind($root),
+                                    moveLeft: moveLeft.bind($root),
+                                    moveRight: moveRight.bind($root),
+                                    zoomOut: zoomOut.bind($root),
+                                    zoomIn: zoomIn.bind($root),
+                                    zoomReset: zoomReset.bind($root),
+                                    focus: focus.bind($root),
+                                    close: close.bind($root),
+                                    refresh: refresh.bind($root),
+                                    edit: edit.bind($root)
+                               }"></my-header>
+        </div>
+        <div class="querygantt-tab__body" data-bind="if: wits().length">
+            <!-- ko if: current() -->
+            <span data-bind="text: JSON.stringify(current())" style="display: none"></span>
+            <!-- /ko -->
+            <my-timeline params="items: wits, 
+                                 selectedItem: current,
+                                 states: states, 
+                                 priorities: priorities, 
+                                 types: types, 
+                                 showTags: showTags,
+                                 showDates: showDates,
+                                 showAssignedTo: showAssignedTo,
+                                 callbacks: {
+                                    openNewWindow: openNewWindow.bind($root)
+                                 },
+                                 actions: {
+                                    expand: _timeline_expandAction,
+                                    collapse: _timeline_collapseAction,
+                                    moveLeft: _timeline_moveLeftAction,
+                                    moveRight: _timeline_moveRightAction,
+                                    zoomOut: _timeline_zoomOutAction,
+                                    zoomIn: _timeline_zoomInAction,
+                                    zoomReset: _timeline_zoomResetAction,
+                                    focus: _timeline_focusAction,
+                                    close: _timeline_closeAction,
+                                    refresh: _timeline_refreshAction
+                                 }"></my-timeline>
+        </div>
+        <div class="querygantt-tab__footer">
+            <my-count params="items: wits"></my-count>
+            <my-legend params="items: states, title: 'States:'"></my-legend>
+            <my-legend params="items: priorities, title: 'Priorities:', classes: 'my-legend--square'"></my-legend>
+        </div>
+        <!-- /ko -->
+        <script data-main="../js/#{Extension.Id}#-tab.js?v=#{Project.AssemblyInfo.Version}#" src="../js/libs/require.js"></script>
+    </body>
+</html>

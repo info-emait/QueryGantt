@@ -1,0 +1,28 @@
+@import "../_variables.less";
+
+.my-header {
+    body & {
+        padding: rem(16px) 0 0 0;
+    }
+
+    &__title {
+        padding-left: rem(10px);
+    }
+
+    &__button {
+        &--icon {
+            width: rem(32px);
+            height: rem(32px) !important;
+        }
+
+        &--for-item {
+            color: var(--communication-foreground);
+        }
+
+        &--toggle {
+            &-on {
+                color: var(--communication-background);
+            }
+        }
+    }
+}

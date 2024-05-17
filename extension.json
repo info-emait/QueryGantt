@@ -1,0 +1,97 @@
+{
+    "manifestVersion": 1,
+    "id": "#{Extension.Id}#",
+    "version": "#{Project.AssemblyInfo.Version}#",
+    "name": "Query Gantt",
+    "description": "Query Gantt enables you to view the selected query results in the form of a Gantt chart.",
+    "publisher": "#{Extension.Publisher}#",
+    "public": true,
+    "categories": [
+        "Azure Boards"
+    ], 
+    "targets": [{
+        "id": "Microsoft.VisualStudio.Services"
+    }],
+    "icons": {
+        "default": "img/logo.png"
+    },
+    "screenshots": [{
+        "path": "img/screenshot1.png"
+    }, {
+        "path": "img/screenshot2.png"
+    }],
+    "tags": [
+        "Query", "Gantt", "Chart", "Tab", "Results"
+    ],
+    "links": {
+        "support": {
+            "uri": "mailto:info.emait@gmail.com"
+        }
+    },
+    "repository": {
+        "type": "git",
+        "uri": "https://github.com/info-emait/QueryGantt"
+    },
+    "content": {
+        "details": {
+            "path": "Overview.md"
+        },
+        "license": {
+            "path": "License.md"
+        }
+    },
+    "branding": {
+        "color": "#212121",
+        "theme": "dark"
+    },
+    "contributions": [{
+        "id": "#{Extension.Id}#-feature",
+        "type": "ms.vss-web.feature",
+        "targets": [
+            "ms.vss-web.managed-features-onprem"
+        ],
+        "description": "Query Gantt feature adds the new Gantt tab to the Queries hub.",
+        "properties": {
+            "name": "Query Gantt",
+            "userConfigurable": false,
+            "hostConfigurable": true,
+            "defaultState":  false,
+            "hostScopes": [
+                "project"
+            ]
+        }
+    }, {
+        "id": "#{Extension.Id}#-tab",
+        "type": "ms.vss-web.tab",
+        "targets": [
+            "ms.vss-work-web.query-tabs"
+        ],
+        "properties": {
+            "uri": "html/#{Extension.Id}#-tab.html?v=#{Project.AssemblyInfo.Version}#",
+            "title": "Query Gantt Tab",
+            "name": "Gantt"
+        },
+        "constraints": [{
+            "name": "Feature",
+            "properties": {
+                "featureId": "#{Extension.Publisher}#.#{Extension.Id}#.#{Extension.Id}#-feature"
+            }
+        }]
+    }],
+    "files": [
+        { "path": "html", "addressable": true },
+        { "path": "js", "addressable": true },
+        { "path": "css", "addressable": true },
+        { "path": "img", "addressable": true },
+        { "path": "xlsx", "addressable": true },
+        { "path": "fonts/AzDevMDL2.woff", "addressable": true },
+        { "path": "fonts/fabric-icons.woff", "addressable": true },
+        { "path": "fonts/fluent-filled-v1.1.201.woff2", "addressable": true, "contentType": "application/x-font-woff2" },
+        { "path": "fonts/fluent-regular-v1.1.201.woff2", "addressable": true, "contentType": "application/x-font-woff2" }
+    ],
+    "scopes":[
+        "vso.work",
+        "vso.work_write",
+        "vso.work_full"
+    ]
+}

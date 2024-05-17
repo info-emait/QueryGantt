@@ -1,0 +1,28 @@
+@import "../_variables.less";
+
+.my-legend {
+    display: flex;
+
+    &__item {
+        margin-left: rem(12px);
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        
+        > i {
+            display: inline-block;
+            width: rem(8px);
+            height: rem(8px);
+            border-radius: 50%;
+            margin: rem(2px) rem(6px) 0 0;
+        }
+    }
+
+    &--square {
+        .my-legend__item {
+            > i {
+                border-radius: rem(2px);
+            }
+        }
+    }
+}

@@ -1,0 +1,9 @@
+/node_modules
+/wwwroot
+/js/libs
+package-lock.json
+fonts/AzDevMDL2.woff
+fonts/fabric-icons.woff
+fonts/fluent-filled-v1.1.201.woff2
+fonts/fluent-regular-v1.1.201.woff2
+css/vis-timeline.css

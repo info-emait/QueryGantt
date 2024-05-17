@@ -1,0 +1,15 @@
+{
+    "files.exclude": {
+        ".vscode": true,
+        "node_modules": true,
+        "Properties": true,
+        "js/libs": true,
+        "wwwroot": true,
+        ".gitignore": true,
+        "package-lock.json": true,
+		"fonts/AzDevMDL2.woff": true,
+		"fonts/fabric-icons.woff": true,
+		"fonts/fluent-filled-v1.1.201.woff2": true,
+		"fonts/fluent-regular-v1.1.201.woff2": true
+    }
+}

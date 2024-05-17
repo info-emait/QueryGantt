@@ -1,0 +1,129 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "restore",
+            "type": "npm",
+            "script": "install",
+            "group": "build",
+            "presentation": {
+				"panel": "new"
+			},
+            "problemMatcher": []
+        },
+        {
+            "label": "patchversion",
+            "type": "shell",
+            "windows": {
+                "command": ".\\node_modules\\.bin\\grunt"
+            },
+            "args": [
+                "--gruntfile",
+                "'gruntfile.js'",
+                "app-patchversion",
+                "--color"
+            ],
+            "presentation": {
+				"panel": "new"
+			},
+            "problemMatcher": []
+        },
+        {
+            "label": "build:Debug",
+            "type": "shell",
+            "windows": {
+                "command": ".\\node_modules\\.bin\\grunt"
+            },
+            "args": [
+                "--gruntfile",
+                "'gruntfile.js'",
+                "app-build:Debug",
+                "--color"
+            ],
+            "group": "build",
+            "presentation": {
+				"panel": "new"
+			},
+            "problemMatcher": []
+        },
+		{
+            "label": "build:Release",
+            "type": "shell",
+            "windows": {
+                "command": ".\\node_modules\\.bin\\grunt"
+            },
+            "args": [
+                "--gruntfile",
+                "'gruntfile.js'",
+                "app-build:Release",
+                "--color"
+            ],
+            "group": "build",
+            "presentation": {
+				"panel": "new"
+			},
+            "problemMatcher": []
+        },
+        {
+            "label": "vsix",
+            "type": "shell",
+            "windows": {
+                "command": ".\\node_modules\\.bin\\tfx"
+            },
+            "args": [
+                "extension",
+                "create",
+				"--root",
+				"'wwwroot'",
+                "--manifest-globs",
+                "'vss-extension.json'",
+				"--output-path",
+				"'wwwroot'"
+            ],
+            "presentation": {
+				"panel": "new"
+			},
+            "problemMatcher": []
+        },
+		{
+            "label": "vsix:Debug",
+            "type": "shell",
+			"dependsOrder": "sequence",
+			"dependsOn": ["patchversion", "build:Debug", "vsix"],
+            "windows": {
+                "command": ".\\node_modules\\.bin\\grunt"
+            },
+            "args": [
+                "--gruntfile",
+                "'gruntfile.js'",
+                "app-clean",
+                "--color"
+            ],
+            "group": "build",
+            "presentation": {
+				"panel": "new"
+			},
+            "problemMatcher": []
+        },
+		{
+            "label": "vsix:Release",
+            "type": "shell",
+			"dependsOrder": "sequence",
+			"dependsOn": ["patchversion", "build:Release", "vsix"],
+            "windows": {
+                "command": ".\\node_modules\\.bin\\grunt"
+            },
+            "args": [
+                "--gruntfile",
+                "'gruntfile.js'",
+                "app-clean",
+                "--color"
+            ],
+            "group": "build",
+            "presentation": {
+				"panel": "new"
+			},
+            "problemMatcher": []
+        }
+    ]
+}
