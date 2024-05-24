@@ -68,7 +68,7 @@ define([
             createViewModel: Count.createViewModel 
         },
         template: 
-            `<div class="my-count">Showing <b data-bind="text: items().length"></b> work items</div>`
+            `<div class="my-count">Showing <b data-bind="text: items().length"></b> work <span data-bind="text: items().length === 1 ? 'item' : 'items'"></span></div>`
     });
 
     //#endregion

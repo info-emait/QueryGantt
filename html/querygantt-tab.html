@@ -9,6 +9,7 @@
         <link href="../js/libs/ui/Components/Header/Header.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
         <link href="../js/libs/ui/Components/Button/Button.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
         <link href="../js/libs/ui/Components/Spinner/Spinner.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
+        <link href="../js/libs/ui/Components/TextField/TextField.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
         <link href="../css/vis-timeline.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
         <link href="../css/#{Extension.Id}#-tab.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
     </head>
@@ -26,6 +27,7 @@
                                showDates: showDates,
                                showAssignedTo: showAssignedTo,
                                title: title,
+                               filter: filter,
                                callbacks: {
                                     download: download.bind($root),
                                     share: share.bind($root),
@@ -42,11 +44,11 @@
                                     edit: edit.bind($root)
                                }"></my-header>
         </div>
-        <div class="querygantt-tab__body" data-bind="if: wits().length">
+        <div class="querygantt-tab__body" data-bind="if: filteredWits().length">
             <!-- ko if: current() -->
             <span data-bind="text: JSON.stringify(current())" style="display: none"></span>
             <!-- /ko -->
-            <my-timeline params="items: wits, 
+            <my-timeline params="items: filteredWits, 
                                  selectedItem: current,
                                  states: states, 
                                  priorities: priorities, 
@@ -71,7 +73,7 @@
                                  }"></my-timeline>
         </div>
         <div class="querygantt-tab__footer">
-            <my-count params="items: wits"></my-count>
+            <my-count params="items: filteredWits"></my-count>
             <my-legend params="items: states, title: 'States:'"></my-legend>
             <my-legend params="items: priorities, title: 'Priorities:', classes: 'my-legend--square'"></my-legend>
         </div>

@@ -1,5 +1,11 @@
 # Changelog
 
+## QueryGantt v1.1.0
+
+### Added
+* Updated documentation.
+* Quick filter support.
+
 ## QueryGantt v1.0.0
 
 ### Added
@@ -10,7 +16,3 @@
 * Share functionality.
 * Display tags and dates.
 * Export to excel.
-
-### Changed
-
-### Fixed

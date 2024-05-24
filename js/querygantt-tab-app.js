@@ -54,6 +54,8 @@ define([
         this.states = ko.computed(this._getStates, this);
         this.priorities = ko.observableArray(args.priorities);
         this.title = ko.computed(this._getTitle, this);
+        this.filter = ko.observable("").extend({ rateLimit: { timeout: 500, method: "notifyWhenChangesStop" } });
+        this.filteredWits = ko.computed(this._getFilteredWits, this);
 
         this._timeline_expandAction = ko.observable();
         this._timeline_collapseAction = ko.observable();
@@ -411,6 +413,7 @@ define([
 
         this.states.dispose();
         this.title.dispose();
+        this.filteredWits.dispose();
         this._onSettingsChangedSubscribe.dispose();
     };
 
@@ -457,6 +460,66 @@ define([
         }
 
         return current.title;
+    };
+
+
+    /**
+     * Gets the work items filtered by the quick filter.
+     */
+    Model.prototype._getFilteredWits = function () {
+        //var filter = (this.filter() || "").toLowerCase().toAccentInsensitive();
+        var filter = this.filter() || "";
+        var wits = this.wits();
+        
+        if (!filter.length) {
+            return wits;
+        }
+
+        let query = filter.parseFilter();
+        let predicates = query.map((q) => {
+            // Joining operators
+            if (q.operator) {
+                return q.operator === "OR" ? " || " :
+                       q.operator === "AND" ? " && " : " && ";
+            }
+
+            // For basic match we search within the title attribute
+            if ("match" === q.key) {
+                return q.accept ? `(wit.title.toLowerCase().toAccentInsensitive().indexOf("${q.accept.toLowerCase().toAccentInsensitive()}") !== -1)` : 
+                                  `(wit.title.toLowerCase().toAccentInsensitive().indexOf("${q.reject.toLowerCase().toAccentInsensitive()}") === -1)`;
+            }
+            // Search only by the title
+            if ("title" === q.key) {
+                return `(wit.title.toLowerCase().toAccentInsensitive().indexOf("${q.value.toLowerCase().toAccentInsensitive()}") !== -1)`;
+            }
+            // Search by tags
+            if ("tag" === q.key) {
+                return `((wit.tags || []).map((t) => t.toLowerCase().toAccentInsensitive()).includes("${q.value.toLowerCase().toAccentInsensitive()}"))`;
+            }
+            // Search by state
+            if ("state" === q.key) {
+                return `(wit.state.toLowerCase().toAccentInsensitive().replace(/\\s/g,'') === "${q.value.toLowerCase().toAccentInsensitive()}".replace(/\\s/g,''))`;
+            }
+            // Search by priority
+            if ("priority" === q.key) {
+                return `(wit.priority == ${q.value})`;
+            }
+            // Search by assigned to
+            if ("assignedto" === q.key) {
+                return `(wit.assignedTo.toLowerCase().toAccentInsensitive().replace(/\\s/g,'').indexOf("${q.value.toLowerCase().toAccentInsensitive()}".replace(/\\s/g,'')) !== -1)`;
+            }
+        });
+
+        // Remove the last logical operator
+        if ((predicates[predicates.length - 1] === " && ") || (predicates[predicates.length - 1] === " || ")) {
+            predicates.pop();
+        }
+
+        // Create funcion
+        var lambda = Function("wit", "return " + predicates.join("") + ";");
+        console.warn("query: ", query, predicates);
+
+        return wits.filter((w) => lambda(w));
     };
     
 
