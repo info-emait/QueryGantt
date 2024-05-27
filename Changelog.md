@@ -1,5 +1,11 @@
 # Changelog
 
+## QueryGantt v1.1.1
+
+### Changed
+* Changed the `hostScopes` setting to support organization scope.
+
+
 ## QueryGantt v1.1.0
 
 ### Added

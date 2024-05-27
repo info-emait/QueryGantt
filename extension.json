@@ -55,11 +55,11 @@
         "description": "Query Gantt feature adds the new Gantt tab to the Queries hub.",
         "properties": {
             "name": "Query Gantt",
-            "userConfigurable": false,
+            "userConfigurable": true,
             "hostConfigurable": true,
-            "defaultState":  false,
+            "defaultState": true,
             "hostScopes": [
-                "project"
+                "project", null
             ]
         }
     }, {
