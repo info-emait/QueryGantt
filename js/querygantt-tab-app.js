@@ -10,8 +10,9 @@ define([
     "my/components/count",
     "my/components/legend",
     "my/components/header",
-    "my/components/timeline"
-], function (module, require, polyfills, ko, sdk, xlsx, api, witApi, Count, Legend, Header, Timeline) {
+    "my/components/timeline",
+    "my/templates/gantt"
+], function (module, require, polyfills, ko, sdk, xlsx, api, witApi, Count, Legend, Header, Timeline, ganttTemplate) {
     //#region [ Fields ]
 
     var global = (function () { return this; })();
@@ -220,22 +221,7 @@ define([
      * Downloads the timeline.
      */
     Model.prototype.download = function () {
-        var extension = sdk.getExtensionContext();
-        var baseUri = (function() {return this;})().location.href.split("/_apis/")[0];
-        var uri = [
-            //this.path.replace(sdk.getHost().name, "_apis"),
-            baseUri,
-            //"public/gallery/publisher/",
-            "/_apis/public/gallery/publisher/",
-            extension.publisherId,
-            "/extension/",
-            extension.extensionId,
-            "/",
-            this.version,
-            "/assetbyname/xlsx/gantt.xlsx"
-        ].join("");
-
-        fetch(uri, this._getFetchParams())
+        ganttTemplate.fetch()
             .then((response) => response.ok ? response.arrayBuffer() : null)
             .then((blob) => xlsx.fromDataAsync(blob))
             .then((workbook) => {
@@ -259,6 +245,11 @@ define([
             })
             .then((blob) => api.getClient(witApi.WorkItemTrackingRestClient).createAttachment(blob, this.project.id, `${this.query.name}_${(new Date()).toISOString().split(".").shift().replace(/(-|:)/gi,"")}.xlsx`))
             .then((response) => sdk.getService(api.CommonServiceIds.HostNavigationService).then((service) => service.navigate(response.url)));
+        /*
+        var extension = sdk.getExtensionContext();
+        var baseUri = (function() {return this;})().location.href.split("/_apis/")[0];
+        var uri = [ baseUri, "/_apis/public/gallery/publisher/", extension.publisherId, "/extension/", extension.extensionId, "/", this.version, "/assetbyname/xlsx/gantt.xlsx" ].join("");
+        */
     };
 
 
