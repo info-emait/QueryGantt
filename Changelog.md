@@ -1,5 +1,10 @@
 # Changelog
 
+## QueryGantt v1.1.4
+
+### Fixed
+* Fixed issue when share url did not contain the query id.
+
 ## QueryGantt v1.1.3
 
 ### Fixed

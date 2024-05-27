@@ -262,9 +262,8 @@ define([
             .then((service) => Promise.all([service.getPageRoute(), service.getQueryParams()]))
             .then((response) => {
                 var extension = sdk.getExtensionContext();
-                var route = response[0].routeValues;
                 var query = response[1];
-                var uri = this.path + this.project.name + "/_queries/" + extension.id + "." + extension.extensionId + "-tab" + "/" + route.id + "/?" + new URLSearchParams(query).toString();
+                var uri = this.path + this.project.name + "/_queries/" + extension.id + "." + extension.extensionId + "-tab" + "/" + this.query.id + "/?" + new URLSearchParams(query).toString();
 
                 var link = doc.createElement("a");
                 link.style.opacity = "0";
