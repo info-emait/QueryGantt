@@ -221,9 +221,12 @@ define([
      */
     Model.prototype.download = function () {
         var extension = sdk.getExtensionContext();
+        var baseUri = (function() {return this;})().location.href.split("/_apis/")[0];
         var uri = [
-            this.path.replace(sdk.getHost().name, "_apis"),
-            "public/gallery/publisher/",
+            //this.path.replace(sdk.getHost().name, "_apis"),
+            baseUri,
+            //"public/gallery/publisher/",
+            "/_apis/public/gallery/publisher/",
             extension.publisherId,
             "/extension/",
             extension.extensionId,
