@@ -1,5 +1,10 @@
 # Changelog
 
+## QueryGantt v1.1.3
+
+### Fixed
+* Fixed issue when downloading of the xlsx file was not working within Auzure DevOps Services.
+
 ## QueryGantt v1.1.1
 
 ### Changed
