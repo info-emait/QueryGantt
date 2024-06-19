@@ -11,7 +11,7 @@ module.exports = function (grunt) {
                     switch (path.toLowerCase()) {
                         case "azure-devops-ui/fabricicons.css":
                         case "azure-devops-ui/fluenticons.css":
-                            return content.replace(/.\/fonts\//gi, "../../../../../fonts/");
+                            return content.replace(/.\/fonts\//gi, "../fonts/");
                         default:
                             return content;
                     }
@@ -29,6 +29,7 @@ module.exports = function (grunt) {
                     "knockout/build/output/knockout-latest.debug.js",
                     "whatwg-fetch/dist/fetch.umd.js",
                     "vis-timeline/standalone/umd/vis-timeline-graph2d.js",
+                    "dom-to-image/src/dom-to-image.js",
                     "@eyeseetea/xlsx-populate/browser/xlsx-populate.js"
                 ],
                 dest: "js/libs/",
@@ -46,8 +47,16 @@ module.exports = function (grunt) {
                 expand: true,
                 cwd: "node_modules/azure-devops-ui/",
                 src: [
-                    "**/*.js",
-                    "**/*.css",
+                    //"**/*.js",
+                    //"**/*.css",
+                    "Core/core.css",
+                    "Core/override.css",
+                    "Components/Icon/FabricIcons.css",
+                    "Components/Icon/FluentIcons.css",
+                    "Components/Header/Header.css",
+                    "Components/Button/Button.css",
+                    "Components/Spinner/Spinner.css",
+                    "Components/TextField/TextField.css",
                     "!buildScripts/**",
                     "!node_modules/**",
                     "!**/*.min.js"

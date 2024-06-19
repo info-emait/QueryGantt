@@ -13,7 +13,8 @@ module.exports = function (grunt) {
         cssmin: {
             files: [
                 { src: ["wwwroot/css/querygantt-tab.min.css"], dest: "wwwroot/css/querygantt-tab.css" },
-                { src: ["wwwroot/css/vis-timeline.min.css"], dest: "wwwroot/css/vis-timeline.css" }
+                { src: ["wwwroot/css/vis-timeline.min.css"], dest: "wwwroot/css/vis-timeline.css" },
+                { src: ["wwwroot/css/azure-devops-ui.min.css"], dest: "wwwroot/css/azure-devops-ui.css" }
             ]
         }
     });

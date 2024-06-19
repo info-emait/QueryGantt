@@ -2,14 +2,7 @@
 <html>
     <head>
         <meta charset="utf-8" />
-        <link href="../js/libs/ui/Core/core.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
-        <link href="../js/libs/ui/Core/override.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
-        <link href="../js/libs/ui/Components/Icon/FabricIcons.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
-        <link href="../js/libs/ui/Components/Icon/FluentIcons.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
-        <link href="../js/libs/ui/Components/Header/Header.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
-        <link href="../js/libs/ui/Components/Button/Button.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
-        <link href="../js/libs/ui/Components/Spinner/Spinner.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
-        <link href="../js/libs/ui/Components/TextField/TextField.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
+        <link href="../css/azure-devops-ui.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
         <link href="../css/vis-timeline.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
         <link href="../css/#{Extension.Id}#-tab.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
     </head>
@@ -28,8 +21,10 @@
                                showAssignedTo: showAssignedTo,
                                title: title,
                                filter: filter,
+                               queryType: queryType,
                                callbacks: {
                                     download: download.bind($root),
+                                    downloadImage: downloadImage.bind($root),
                                     share: share.bind($root),
                                     expand: expand.bind($root),
                                     collapse: collapse.bind($root),
@@ -53,6 +48,7 @@
                                  states: states, 
                                  priorities: priorities, 
                                  types: types, 
+                                 typesOther: typesOther, 
                                  showTags: showTags,
                                  showDates: showDates,
                                  showAssignedTo: showAssignedTo,

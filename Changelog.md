@@ -1,5 +1,18 @@
 # Changelog
 
+## QueryGantt v1.1.6
+
+### Fixed
+* Expand all/Collapse all buttons are now disabled for the flat queries.
+* Quick filter is now added to the query string, in order to be preserved via share functionality.
+* Color and icon of the work item is now respective of the project it belongs to.
+
+### Changed
+* Loading of the Azure DevOps UI components has been optimized.
+
+### Added
+* Export to image.
+
 ## QueryGantt v1.1.4
 
 ### Fixed

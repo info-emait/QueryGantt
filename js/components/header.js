@@ -18,6 +18,7 @@ define([
         this.showDates = ko.isObservable(args.showDates) ? args.showDates : ko.observable(args.showDates || false);
         this.showAssignedTo = ko.isObservable(args.showAssignedTo) ? args.showAssignedTo : ko.observable(args.showAssignedTo || false);
         this.filter = ko.isObservable(args.filter) ? args.filter : ko.observable(args.filter || "");
+        this.queryType = ko.isObservable(args.queryType) ? args.queryType : ko.observable(args.queryType || "");
 
         this.callbacks = args.callbacks;
     };
@@ -98,13 +99,13 @@ define([
         template: 
             `<div class="my-header bolt-header-with-commandbar bolt-header-with-back-button bolt-header flex-row flex-noshrink flex-start bolt-header-no-spacing-defined">
                 <button aria-label="Expand all" title="Expand all" class="my-header__button my-header__button--icon icon-only bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="1" type="button"
-                        data-bind="click: () => callback('expand')">
+                        data-bind="click: () => callback('expand'), css: { disabled: queryType() === 'flat' }">
                     <span class="fluent-icons-enabled">
                         <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Add medium"></span>
                     </span>
                 </button>
                 <button aria-label="Collapse all" title="Collapse all" class="my-header__button my-header__button--icon icon-only bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="2" type="button"
-                        data-bind="click: () => callback('collapse')">
+                        data-bind="click: () => callback('collapse'), css: { disabled: queryType() === 'flat' }">
                     <span class="fluent-icons-enabled">
                         <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Remove medium"></span>
                     </span>
@@ -220,7 +221,15 @@ define([
                                 <span class="fluent-icons-enabled">
                                     <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Download medium"></span>
                                 </span>
-                                <span class="bolt-button-text body-m">Download</span>
+                                <span class="bolt-button-text body-m">XLSX</span>
+                            </button>
+                            <button aria-roledescription="button" class="bolt-header-command-item-button bolt-button bolt-icon-button enabled bolt-focus-treatment" role="menuitem" tabindex="15" type="button"
+                                    title="Downloads the Gantt chart as an image"
+                                    data-bind="click: () => callback('downloadImage')">
+                                <span class="fluent-icons-enabled">
+                                    <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Download medium"></span>
+                                </span>
+                                <span class="bolt-button-text body-m">PNG</span>
                             </button>
                             <button aria-roledescription="button" class="bolt-header-command-item-button bolt-button bolt-icon-button enabled bolt-focus-treatment" role="menuitem" tabindex="16" type="button"
                                     title="Shares the Gantt chart using default email client"

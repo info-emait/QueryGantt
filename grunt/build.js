@@ -26,6 +26,8 @@ module.exports = function (grunt) {
             "clean:dependencies",
             "copy:dependencies",
             "rename:dependencies",
+            "concat:azure-devops-ui",
+            "clean:azure-devops-ui",
             "jshint",
             "copy:css",
             "copy:img",

@@ -24,6 +24,7 @@ define([
         this.states = ko.isObservable(args.states) ? args.states : ko.observable(args.states || []);
         this.priorities = ko.isObservable(args.priorities) ? args.priorities : ko.observable(args.priorities || []);
         this.types = ko.isObservable(args.types) ? args.types : ko.observable(args.types || []);
+        this.typesOther = ko.isObservable(args.typesOther) ? args.typesOther : ko.observable(args.typesOther || []);
         this.showTags = ko.isObservable(args.showTags) ? args.showTags : ko.observable(args.showTags || false);
         this.showDates = ko.isObservable(args.showDates) ? args.showDates : ko.observable(args.showDates || false);
         this.showAssignedTo = ko.isObservable(args.showAssignedTo) ? args.showAssignedTo : ko.observable(args.showAssignedTo || false);
@@ -252,8 +253,9 @@ define([
      * Create styles for the input types.
      * 
      * @param {array} types List of supported project types.
+     * @param {array} typesOther List of supported types for other projects in the query.
      */
-    Timeline.prototype._createStyles = function(types) {
+    Timeline.prototype._createStyles = function(types, typesOther) {
         // Remove any custom styles
         global.document.head
             .querySelectorAll("style[data-mytimeline-styles='true']")
@@ -273,8 +275,19 @@ define([
              
              .my-timeline-item--${t.name.toLowerCase().replace(/\s+/g,"-")}.vis-selected {
                 background: #${darkenColor(t.color, 25)};
-                /*background: repeating-linear-gradient(-55deg, #${t.color}, #${t.color} 5px, #${darkenColor(t.color, 25)} 5px, #${darkenColor(t.color, 25)} 10px);*/
              }`).join("\n\n");
+
+        if(typesOther.length) {
+            el.innerHTML += "\n\n";
+            el.innerHTML += typesOther.map((to) => to.types.map((t) => 
+                `.my-timeline-item--${to.project.toLowerCase().replace(/\s+/g,"")}-${t.name.toLowerCase().replace(/\s+/g,"-")} { 
+                   background-color: #${t.color}; 
+                 }
+                    
+                 .my-timeline-item--${to.project.toLowerCase().replace(/\s+/g,"")}-${t.name.toLowerCase().replace(/\s+/g,"-")}.vis-selected {
+                    background: #${darkenColor(t.color, 25)};
+                 }`).join("\n\n")).join("\n\n");
+        }
         global.document.head.appendChild(el);
     };
 
@@ -373,12 +386,13 @@ define([
         var states = this.states();
         var priorities = this.priorities();
         var types = this.types();
+        var typesOther = this.typesOther();
         var showTags = this.showTags();
         var showDates = this.showDates();
         var showAssignedTo = this.showAssignedTo();
         var now = new Date();
 
-        this._createStyles(types);
+        this._createStyles(types, typesOther);
         this._destroyTimeline();
 
         if (!items || !items.length) {
@@ -425,7 +439,7 @@ define([
             horizontalScroll: true,
             verticalScroll: true,
             zoomKey: "ctrlKey",
-            groupTemplate: (record, element) => createGroupTemplate(this, record, element, states, priorities, types, showTags, showDates, showAssignedTo)
+            groupTemplate: (record, element) => createGroupTemplate(this, record, element, states, priorities, types, typesOther, showTags, showDates, showAssignedTo)
         };
 
         this.groups = new VisTimeline.DataSet(groups);
@@ -508,6 +522,7 @@ define([
     let createGroup = function (wit, items, now) {
         var group = {
             id: wit.id,
+            project: wit.project,
             assignedTo: wit.assignedTo,
             url: wit.url,
             treeLevel: wit.level,
@@ -555,7 +570,7 @@ define([
             id: wit.id,
             assignedTo: wit.assignedTo,
             group: isMarker(wit) ? "markers" : wit.id,
-            className: `my-timeline-item my-timeline-item--${wit.type.toLowerCase().replace(/\s+/g,"-")}`,
+            className: `my-timeline-item my-timeline-item--${wit.type.toLowerCase().replace(/\s+/g,"-")} my-timeline-item--${wit.project.toLowerCase().replace(/\s+/g,"")}-${wit.type.toLowerCase().replace(/\s+/g,"-")}`,
             title: wit.title + "<br/>(" + subtitle.join(", ") + ")",
             content: isMarker(wit) ? wit.title : "&nbsp;",
             selectable: true,
@@ -575,11 +590,12 @@ define([
      * @param {array} states List of supported states.
      * @param {array} priorities List of supported priorities.
      * @param {array} types List of supported types.
+     * @param {array} types List of supported types for other projects in the across project query.
      * @param {boolean} showTags If set to true, tags will be rendered.
      * @param {boolean} showDates If set to true, dates will be rendered.
      * @param {boolean} showAssignedTo If set to true, assigned to will be rendered.
      */
-    let createGroupTemplate = function (vm, record, element, states, priorities, types, showTags, showDates, showAssignedTo) {
+    let createGroupTemplate = function (vm, record, element, states, priorities, types, typesOther, showTags, showDates, showAssignedTo) {
         // Do not create group label for markers group
         if (!record || (record.type === "markers")) {
             return "";
@@ -604,7 +620,7 @@ define([
         var priority = priorities.find((p) => p.value === record.priority) || {};
 
         // Prepare type
-        var type = types.find((t) => t.name === record.type) || {};
+        var type = ((typesOther.find((to) => to.project === record.project) || {}).types || types).find((t) => t.name === record.type) || {};
 
         // Create element
         let el = global.document.createElement("div");

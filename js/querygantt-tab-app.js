@@ -5,6 +5,7 @@ define([
     "knockout",
     "sdk",
     "xlsx",
+    "dom-to-image",
     "api/index",
     "api/WorkItemTracking/index",
     "my/components/count",
@@ -12,7 +13,7 @@ define([
     "my/components/header",
     "my/components/timeline",
     "my/templates/gantt"
-], function (module, require, polyfills, ko, sdk, xlsx, api, witApi, Count, Legend, Header, Timeline, ganttTemplate) {
+], function (module, require, polyfills, ko, sdk, xlsx, domtoimage, api, witApi, Count, Legend, Header, Timeline, ganttTemplate) {
     //#region [ Fields ]
 
     var global = (function () { return this; })();
@@ -46,6 +47,7 @@ define([
 
         this.isLoading = ko.observable(true);
         this.types = ko.observableArray([]);
+        this.typesOther = ko.observableArray([]);
         this.sortColumns = ko.observableArray([]);
         this.witIds = ko.observableArray([]);
         this.relations = ko.observableArray([]);
@@ -57,6 +59,8 @@ define([
         this.title = ko.computed(this._getTitle, this);
         this.filter = ko.observable("").extend({ rateLimit: { timeout: 500, method: "notifyWhenChangesStop" } });
         this.filteredWits = ko.computed(this._getFilteredWits, this);
+
+        this.queryType = ko.observable("");
 
         this._timeline_expandAction = ko.observable();
         this._timeline_collapseAction = ko.observable();
@@ -105,6 +109,10 @@ define([
                                    (state["showAssignedTo"] === "false") ? false : false);
                 }
 
+                if(state["filter"]) {
+                    this.filter(state["filter"]);
+                }
+
                 return sdk.getAccessToken();
             })
             .then((token) => {
@@ -118,6 +126,7 @@ define([
             })
             .then((data) => {
                 this.sortColumns(data.sortColumns || []);
+                this.queryType(data.queryType === 1 ? "flat" : data.queryType === 2 ? "tree" : "onehop");
 
                 // Query type "flat"
                 if (data.queryType === 1) {
@@ -202,7 +211,24 @@ define([
 
                 return results;
             })
-            .then((wits) => this.wits(wits));
+            .then((wits) => {
+                // Get unique project names except the current one
+                let projects = [...new Set(wits.map((w) => w.project).filter((p) => p !== this.project.name))];
+
+                // If the query is done across multiple projects we need to download types for these projects as well
+                if (projects.length) {
+                    let xhrs = projects.map((p) => fetch(this.path + p + "/_apis/wit/workItemTypes", this._getFetchParams())
+                        .then((response) => response.ok ? response.json() : null));
+                    Promise.all(xhrs).then((projectTypes) => {
+                        this.typesOther(projectTypes.map((p,i) => ({ project: projects[i], types: p.value})));
+                        this.wits(wits);
+                    });
+                    return;
+                }
+
+                // If there are not any other projects in the query we can display the items
+                this.wits(wits);
+            });
     };
 
 
@@ -214,6 +240,20 @@ define([
     Model.prototype.openNewWindow = function (url) {
         sdk.getService(api.CommonServiceIds.HostNavigationService)
             .then((service) => service.openNewWindow(url));
+    };
+
+
+    /**
+     * Downloads the timeline as an png image.
+     */
+    Model.prototype.downloadImage = function () {
+        global.domtoimage
+            .toBlob(doc.querySelector(".my-timeline"), { 
+                filter: (node) => (node.tagName || "").toLowerCase() !== "img",
+                bgcolor: global.getComputedStyle(doc.body).getPropertyValue("--background-color")
+            })
+            .then((blob) => api.getClient(witApi.WorkItemTrackingRestClient).createAttachment(blob, this.project.id, `${this.query.name}_${(new Date()).toISOString().split(".").shift().replace(/(-|:)/gi,"")}.png`))
+            .then((response) => sdk.getService(api.CommonServiceIds.HostNavigationService).then((service) => service.openNewWindow(response.url)));
     };
 
 
@@ -540,6 +580,7 @@ define([
         var showTags = this.showTags();
         var showDates = this.showDates();
         var showAssignedTo = this.showAssignedTo();
+        var filter = this.filter();
 
         if (ko.computedContext.isInitial()) {
             return;
@@ -552,6 +593,7 @@ define([
                         state.showTags = showTags;
                         state.showDates = showDates;
                         state.showAssignedTo = showAssignedTo;
+                        state.filter = filter;
                         service.setQueryParams(state);
                     });
             });
