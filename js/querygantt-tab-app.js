@@ -44,6 +44,7 @@ define([
         this.showTags = ko.observable(false);
         this.showDates = ko.observable(false);
         this.showAssignedTo = ko.observable(false);
+        this.shareLink = ko.observable("");
 
         this.isLoading = ko.observable(true);
         this.types = ko.observableArray([]);
@@ -293,30 +294,30 @@ define([
     };
 
 
-    /**
-     * Shares the Gantt chart.
-     */
-    Model.prototype.share = function () {
-        this._onSettingsChanged()
-            .then(() => sdk.getService(api.CommonServiceIds.HostNavigationService))
-            .then((service) => Promise.all([service.getPageRoute(), service.getQueryParams()]))
-            .then((response) => {
-                var extension = sdk.getExtensionContext();
-                var query = response[1];
-                var uri = this.path + this.project.name + "/_queries/" + extension.id + "." + extension.extensionId + "-tab" + "/" + this.query.id + "/?" + new URLSearchParams(query).toString();
+    // /**
+    //  * Shares the Gantt chart.
+    //  */
+    // Model.prototype.share = function () {
+    //     this._onSettingsChanged()
+    //         .then(() => sdk.getService(api.CommonServiceIds.HostNavigationService))
+    //         .then((service) => Promise.all([service.getPageRoute(), service.getQueryParams()]))
+    //         .then((response) => {
+    //             var extension = sdk.getExtensionContext();
+    //             var query = response[1];
+    //             var uri = this.path + this.project.name + "/_queries/" + extension.id + "." + extension.extensionId + "-tab" + "/" + this.query.id + "/?" + new URLSearchParams(query).toString();
 
-                var link = doc.createElement("a");
-                link.style.opacity = "0";
-                doc.body.append(link);
-                link.href = "mailto:?subject=" 
-                    + encodeURIComponent("ddd") 
-                    + "&body="
-                    + encodeURIComponent(uri)
-                    + "\n";
-                link.click();
-                link.remove();
-            });
-    };
+    //             var link = doc.createElement("a");
+    //             link.style.opacity = "0";
+    //             doc.body.append(link);
+    //             link.href = "mailto:?subject=" 
+    //                 + encodeURIComponent("ddd") 
+    //                 + "&body="
+    //                 + encodeURIComponent(uri)
+    //                 + "\n";
+    //             link.click();
+    //             link.remove();
+    //         });
+    // };
 
 
     /**
@@ -581,6 +582,25 @@ define([
         var showDates = this.showDates();
         var showAssignedTo = this.showAssignedTo();
         var filter = this.filter();
+
+        // Create share link
+        sdk.getService(api.CommonServiceIds.HostNavigationService)
+            .then((service) => service.getQueryParams())
+            .then((state) => {
+                state.showTags = showTags;
+                state.showDates = showDates;
+                state.showAssignedTo = showAssignedTo;
+                state.filter = filter;
+
+                var extension = sdk.getExtensionContext();
+                var uri = this.path + this.project.name + "/_queries/" + extension.id + "." + extension.extensionId + "-tab" + "/" + this.query.id + "/?" + new URLSearchParams(state).toString();
+
+                this.shareLink("mailto:?subject=" 
+                    + encodeURIComponent(this.query.name) 
+                    + "&body="
+                    + encodeURIComponent(uri)
+                    + "\n");
+            });
 
         if (ko.computedContext.isInitial()) {
             return;

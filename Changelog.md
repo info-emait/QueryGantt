@@ -1,5 +1,14 @@
 # Changelog
 
+
+
+## QueryGantt v1.1.8
+
+### Fixed
+* Share button was not working in Edge.
+
+
+
 ## QueryGantt v1.1.6
 
 ### Fixed
@@ -13,15 +22,21 @@
 ### Added
 * Export to image.
 
+
+
 ## QueryGantt v1.1.4
 
 ### Fixed
 * Fixed issue when share url did not contain the query id.
 
+
+
 ## QueryGantt v1.1.3
 
 ### Fixed
 * Fixed issue when downloading of the xlsx file was not working within Auzure DevOps Services.
+
+
 
 ## QueryGantt v1.1.1
 
@@ -29,11 +44,14 @@
 * Changed the `hostScopes` setting to support organization scope.
 
 
+
 ## QueryGantt v1.1.0
 
 ### Added
 * Updated documentation.
 * Quick filter support.
+
+
 
 ## QueryGantt v1.0.0
 
