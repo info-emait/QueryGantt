@@ -2,7 +2,7 @@
 
 
 
-## QueryGantt v1.1.8
+## QueryGantt v1.1.9
 
 ### Fixed
 * Share button was not working in Edge.

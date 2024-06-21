@@ -229,6 +229,9 @@ define([
 
                 // If there are not any other projects in the query we can display the items
                 this.wits(wits);
+
+                // Force to update share link
+                this._onSettingsChanged();
             });
     };
 
