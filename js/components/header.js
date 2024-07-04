@@ -151,35 +151,19 @@ define([
                                 </span>
                                 <input autocomplete="off" aria-label="Search items" class="bolt-textfield-input flex-grow bolt-textfield-input-with-prefix" placeholder="Search items" tabindex="0"
                                        data-bind="textInput: filter,
+                                                  placeholder: [
+                                                    'Search items',
+                                                    'text: lorem // which title contains lorem',
+                                                    'text: -(lorem) // which title does not contain lorem',
+                                                    'state:todo // which state is set to To Do',
+                                                    'state:todo AND tag:customer // with multiple conditions'
+                                                  ],
                                                   event: { focus: (vm, e) => e.target.select() }" />
                             </div>
-                        </div>
-                        <div class="bolt-header-title-row flex-row flex-baseline"
-                             data-bind="visible: title().length">
-                            <div aria-level="3" class="my-header__title bolt-header-title body-xl m" role="heading"
-                                 data-bind="text: title"></div>
                         </div>
                     </div>
                     <div class="flex-self-start bolt-header-commandbar bolt-button-group flex-row" role="menubar">
                         <div class="flex-self-start bolt-header-commandbar-button-group flex-row flex-center flex-grow scroll-hidden rhythm-horizontal-8">
-                            <button aria-label="Edit the selected work item" title="Edit the selected work item" class="my-header__button my-header__button--icon my-header__button--for-item icon-only bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="6" type="button"
-                                    data-bind="click: () => callback('edit'), visible: selectedItem()">
-                                <span class="fluent-icons-enabled">
-                                    <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Edit medium"></span>
-                                </span>
-                            </button>
-                            <button aria-label="Focus the selected work item" title="Focus the selected work item" class="my-header__button my-header__button--icon my-header__button--for-item icon-only bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="7" type="button"
-                                    data-bind="click: () => callback('focus'), visible: selectedItem()">
-                                <span class="fluent-icons-enabled">
-                                    <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Pin medium"></span>
-                                </span>
-                            </button>
-                            <button aria-label="Close the selected work item" title="Close the selected work item" class="my-header__button my-header__button--icon my-header__button--for-item icon-only bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="8" type="button"
-                                    data-bind="click: () => callback('close'), visible: selectedItem()">
-                                <span class="fluent-icons-enabled">
-                                    <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--ChromeClose medium"></span>
-                                </span>
-                            </button>
                             <button aria-label="Refresh data" title="Refresh data" class="my-header__button my-header__button--icon icon-only bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="9" type="button"
                                     data-bind="click: () => callback('refresh')">
                                 <span class="fluent-icons-enabled">

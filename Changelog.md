@@ -2,6 +2,24 @@
 
 
 
+## QueryGantt v1.1.10
+
+### Fixed
+* When the state of work item was not showing correctly for the queries across projects.
+* Icon was not rendered when exporting to an image.
+* Checkbox for the selected work item should not be rendered when exporting to an image.
+
+### Changed
+* Toolbar for selected work item is displayed below the main toolbar.
+* The exported xlsx file now contains predefined weeks which will cover the whole year.
+
+### Added
+* Completed work items are now striked through.
+* Completed progress of child work items is shown on the bar.
+* Search box now contains suggestions for filtering.
+
+
+
 ## QueryGantt v1.1.9
 
 ### Fixed

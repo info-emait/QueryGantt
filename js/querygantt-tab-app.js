@@ -3,6 +3,7 @@ define([
     "require",
     "polyfills",
     "knockout",
+    "bindings",
     "sdk",
     "xlsx",
     "dom-to-image",
@@ -11,9 +12,10 @@ define([
     "my/components/count",
     "my/components/legend",
     "my/components/header",
+    "my/components/workitem",
     "my/components/timeline",
     "my/templates/gantt"
-], function (module, require, polyfills, ko, sdk, xlsx, domtoimage, api, witApi, Count, Legend, Header, Timeline, ganttTemplate) {
+], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, Count, Legend, Header, WorkItem, Timeline, ganttTemplate) {
     //#region [ Fields ]
 
     var global = (function () { return this; })();
@@ -49,6 +51,7 @@ define([
         this.isLoading = ko.observable(true);
         this.types = ko.observableArray([]);
         this.typesOther = ko.observableArray([]);
+        this.icons = ko.observable({});
         this.sortColumns = ko.observableArray([]);
         this.witIds = ko.observableArray([]);
         this.relations = ko.observableArray([]);
@@ -220,18 +223,36 @@ define([
                 if (projects.length) {
                     let xhrs = projects.map((p) => fetch(this.path + p + "/_apis/wit/workItemTypes", this._getFetchParams())
                         .then((response) => response.ok ? response.json() : null));
-                    Promise.all(xhrs).then((projectTypes) => {
+                    return Promise.all(xhrs).then((projectTypes) => {
                         this.typesOther(projectTypes.map((p,i) => ({ project: projects[i], types: p.value})));
-                        this.wits(wits);
+                        return this._markCompletedWits(wits);
                     });
-                    return;
                 }
 
                 // If there are not any other projects in the query we can display the items
-                this.wits(wits);
+                return this._markCompletedWits(wits);
+            })
+            .then((wits) => {
+                let icons = this.types().map((t) => t.icon.url);
+                let other = this.typesOther() || [];
+                if (other.length) {
+                    other.forEach((o) => icons = icons.concat(o.types.map((t) => t.icon.url)));
+                }
+                icons = [...new Set(icons)];
+                let xhr = icons.map((url) => fetch(url, this._getFetchParams()).then((response) => response.ok ? response.text() : null));
+                Promise.all(xhr).then((response) => {
+                    let tmp = {};
+                    response.forEach((svg, index) => {
+                        let node = (new DOMParser().parseFromString(svg, "text/html")).body.firstChild;
+                        node.classList.add("my-timeline-group__icon");
+                        tmp[icons[index]] = node.outerHTML; 
+                    });
+                    this.icons(tmp);
 
-                // Force to update share link
-                this._onSettingsChanged();
+                    this.wits(wits);
+                    // Force to update share link
+                    this._onSettingsChanged();
+                });
             });
     };
 
@@ -253,7 +274,12 @@ define([
     Model.prototype.downloadImage = function () {
         global.domtoimage
             .toBlob(doc.querySelector(".my-timeline"), { 
-                filter: (node) => (node.tagName || "").toLowerCase() !== "img",
+                filter: (node) => {
+                    if (typeof(node.hasAttribute) !== "function") {
+                        return true;
+                    }
+                    return !node.hasAttribute("data-noexport");
+                },
                 bgcolor: global.getComputedStyle(doc.body).getPropertyValue("--background-color")
             })
             .then((blob) => api.getClient(witApi.WorkItemTrackingRestClient).createAttachment(blob, this.project.id, `${this.query.name}_${(new Date()).toISOString().split(".").shift().replace(/(-|:)/gi,"")}.png`))
@@ -477,12 +503,32 @@ define([
      */
     Model.prototype._getStates = function () {
         var types = this.types();
+        var typesOther = this.typesOther();
         
         if(!types.length) {
             return [];
         }
+        
+        let states = [];
+        typesOther.reduce((a, b) => b.types.concat(a), types).forEach((t) => {
+            if (!states.length) {
+                states = JSON.parse(JSON.stringify(t.states));
+                return;
+            }
 
-        return (types.find((t) => t.name === "Task") || {}).states;
+            t.states.forEach((s) => {
+                let state = states.find((x) => x.color === s.color);
+
+                if (!state) {
+                    states.push(JSON.parse(JSON.stringify(s)));
+                    return;
+                }
+
+                state.name = [...new Set(state.name.split(", ").concat([s.name]))].join(", ");
+            });
+        });
+
+        return states;
     };
 
 
@@ -554,7 +600,6 @@ define([
 
         // Create funcion
         var lambda = Function("wit", "return " + predicates.join("") + ";");
-        console.warn("query: ", query, predicates);
 
         return wits.filter((w) => lambda(w));
     };
@@ -620,6 +665,41 @@ define([
                         service.setQueryParams(state);
                     });
             });
+    };
+
+
+    /**
+     * Traverses the work items and marks the commpleted ones.
+     *  
+     * @param {array} wits List of work items. 
+     */
+    Model.prototype._markCompletedWits = function(wits) {
+        var types = this.types();
+        var typesOther = this.typesOther();
+        
+        // Mark completed work items
+        wits.forEach((w) => {
+            var type = ((typesOther.find((t) => t.project === w.project) || {}).types || types).find((t) => t.name === w.type);
+            if (!type) {
+                throw new Error("QueryGanttTabApp : Unable to find work item's type.");
+            }
+
+            var state = type.states.find((s) => s.name === w.state);
+            if (!state) {
+                throw new Error("QueryGanttTabApp : Unable to find work item's state.");
+            }
+
+            w.isCompleted = state.category === "Completed";
+        });
+
+        // Get count of completed work items
+        wits.forEach((w) => {
+            let children = wits.filter((x) => x.parent === w.path);
+            w.childCount = children.length;
+            w.childCompletedCount = children.filter((x) => x.isCompleted).length;
+        });
+
+        return wits;
     };
 
     //#endregion

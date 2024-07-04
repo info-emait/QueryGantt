@@ -73,9 +73,9 @@ define([
             `<div class="my-legend" data-bind="class: classes">
                 <b data-bind="text: title"></b>
                 <!-- ko foreach: items -->
-                <div class="my-legend__item">
+                <div class="my-legend__item" data-bind="attr: { title: name }">
                     <i data-bind="style: { background: '#' + color }"></i>
-                    <span data-bind="text: name"></span>
+                    <span data-bind="text: name.split(', ')[0]"></span>
                 </div>
                 <!-- /ko -->
             </div>`

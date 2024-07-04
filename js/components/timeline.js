@@ -25,6 +25,7 @@ define([
         this.priorities = ko.isObservable(args.priorities) ? args.priorities : ko.observable(args.priorities || []);
         this.types = ko.isObservable(args.types) ? args.types : ko.observable(args.types || []);
         this.typesOther = ko.isObservable(args.typesOther) ? args.typesOther : ko.observable(args.typesOther || []);
+        this.icons = ko.isObservable(args.icons) ? args.icons : ko.observable(args.icons || []);
         this.showTags = ko.isObservable(args.showTags) ? args.showTags : ko.observable(args.showTags || false);
         this.showDates = ko.isObservable(args.showDates) ? args.showDates : ko.observable(args.showDates || false);
         this.showAssignedTo = ko.isObservable(args.showAssignedTo) ? args.showAssignedTo : ko.observable(args.showAssignedTo || false);
@@ -387,6 +388,7 @@ define([
         var priorities = this.priorities();
         var types = this.types();
         var typesOther = this.typesOther();
+        var icons = this.icons();
         var showTags = this.showTags();
         var showDates = this.showDates();
         var showAssignedTo = this.showAssignedTo();
@@ -439,7 +441,7 @@ define([
             horizontalScroll: true,
             verticalScroll: true,
             zoomKey: "ctrlKey",
-            groupTemplate: (record, element) => createGroupTemplate(this, record, element, states, priorities, types, typesOther, showTags, showDates, showAssignedTo)
+            groupTemplate: (record, element) => createGroupTemplate(this, record, element, states, priorities, types, typesOther, icons, showTags, showDates, showAssignedTo)
         };
 
         this.groups = new VisTimeline.DataSet(groups);
@@ -523,6 +525,9 @@ define([
         var group = {
             id: wit.id,
             project: wit.project,
+            isCompleted: wit.isCompleted,
+            childCount: wit.childCount,
+            childCompletedCount: wit.childCompletedCount,
             assignedTo: wit.assignedTo,
             url: wit.url,
             treeLevel: wit.level,
@@ -569,10 +574,13 @@ define([
         return {
             id: wit.id,
             assignedTo: wit.assignedTo,
+            isCompleted: wit.isCompleted,
+            childCount: wit.childCount,
+            childCompletedCount: wit.childCompletedCount,
             group: isMarker(wit) ? "markers" : wit.id,
             className: `my-timeline-item my-timeline-item--${wit.type.toLowerCase().replace(/\s+/g,"-")} my-timeline-item--${wit.project.toLowerCase().replace(/\s+/g,"")}-${wit.type.toLowerCase().replace(/\s+/g,"-")}`,
             title: wit.title + "<br/>(" + subtitle.join(", ") + ")",
-            content: isMarker(wit) ? wit.title : "&nbsp;",
+            content: isMarker(wit) ? wit.title : wit.childCount ? `${wit.childCompletedCount}/${wit.childCount}` : "&nbsp;",
             selectable: true,
             type: isMarker(wit) ? "box" : "range",
             start,
@@ -590,12 +598,13 @@ define([
      * @param {array} states List of supported states.
      * @param {array} priorities List of supported priorities.
      * @param {array} types List of supported types.
-     * @param {array} types List of supported types for other projects in the across project query.
+     * @param {array} typesOthers List of supported types for other projects in the across project query.
+     * @param {array} icons List of icons.
      * @param {boolean} showTags If set to true, tags will be rendered.
      * @param {boolean} showDates If set to true, dates will be rendered.
      * @param {boolean} showAssignedTo If set to true, assigned to will be rendered.
      */
-    let createGroupTemplate = function (vm, record, element, states, priorities, types, typesOther, showTags, showDates, showAssignedTo) {
+    let createGroupTemplate = function (vm, record, element, states, priorities, types, typesOther, icons, showTags, showDates, showAssignedTo) {
         // Do not create group label for markers group
         if (!record || (record.type === "markers")) {
             return "";
@@ -613,29 +622,29 @@ define([
         // Prepare assigned to
         var assignedTo = !showAssignedTo ? "" : record.assignedTo || "";
 
-        // Prepare state
-        var state = states.find((s) => s.name === record.state) || {};
-
         // Prepare priority
         var priority = priorities.find((p) => p.value === record.priority) || {};
 
         // Prepare type
         var type = ((typesOther.find((to) => to.project === record.project) || {}).types || types).find((t) => t.name === record.type) || {};
 
+        // Prepare state
+        var state = type.states.find((s) => s.name === record.state) || {};
+        
         // Create element
         let el = global.document.createElement("div");
         el.classList.add("my-timeline-group");
         el.innerHTML = 
-            `<img class="my-timeline-group__icon" src="${type.icon.url}" title="${type.name} - ${type.description}" />
-             <a class="my-timeline-group__title" data-id="${record.id}" title="${record.title}" href="${record.url.replace('/_apis/wit/workItems/', '/_workitems/edit/')}">${record.content}</a>
-             <div class="my-timeline-group__state" title="${state.name}" style="background-color: #${state.color}"></div>
+            `${icons[type.icon.url] || ""}
+             <a class="my-timeline-group__title ${record.isCompleted ? "my-timeline-group__title--completed" : ""}" data-id="${record.id}" title="${record.title}" href="${record.url.replace('/_apis/wit/workItems/', '/_workitems/edit/')}">${record.content}</a>
+             <div class="my-timeline-group__state" title="${record.state}" style="background-color: #${state.color}"></div>
              <div class="my-timeline-group__tags">${tags}</div>
              <div class="my-timeline-group__dividier"></div>
              <div class="my-timeline-group__assignedto">${assignedTo}</div>
              <div class="my-timeline-group__dates">${dates}</div>
              <div class="my-timeline-group__dates">${record.duration} day(s)</div>
              <div class="my-timeline-group__state my-timeline-group__state--square" title="${priority.name}" style="background-color: #${priority.color}"></div>
-             <div class="my-timeline-group__checkbox fluent-icons-enabled ${record.selected ? "my-timeline-group__checkbox--selected" : ""}" title="Select item" data-group-id="${record.id}">
+             <div class="my-timeline-group__checkbox fluent-icons-enabled ${record.selected ? "my-timeline-group__checkbox--selected" : ""}" title="Select item" data-group-id="${record.id}" data-noexport="true">
                 <span aria-hidden="true" class="flex-noshrink fabric-icon large"></span>
              </div>`;
 

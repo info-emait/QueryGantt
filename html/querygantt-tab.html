@@ -33,11 +33,17 @@
                                     zoomOut: zoomOut.bind($root),
                                     zoomIn: zoomIn.bind($root),
                                     zoomReset: zoomReset.bind($root),
+                                    refresh: refresh.bind($root)
+                               }"></my-header>
+            <my-workitem params="selectedItem: current,
+                               title: title,
+                               types: types,
+                               typesOther: typesOther,
+                               callbacks: {
                                     focus: focus.bind($root),
                                     close: close.bind($root),
-                                    refresh: refresh.bind($root),
                                     edit: edit.bind($root)
-                               }"></my-header>
+                               }"></my-workitem>
         </div>
         <div class="querygantt-tab__body" data-bind="if: filteredWits().length">
             <!-- ko if: current() -->
@@ -49,6 +55,7 @@
                                  priorities: priorities, 
                                  types: types, 
                                  typesOther: typesOther, 
+                                 icons: icons, 
                                  showTags: showTags,
                                  showDates: showDates,
                                  showAssignedTo: showAssignedTo,

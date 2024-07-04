@@ -6,6 +6,9 @@ require({
     }, {
         name: "polyfills",
         location: "./polyfills"
+    }, {
+        name: "bindings",
+        location: "./bindings"
     }],
     paths: {
         "knockout": "./libs/knockout",
