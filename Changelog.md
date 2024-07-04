@@ -2,7 +2,7 @@
 
 
 
-## QueryGantt v1.1.10
+## QueryGantt v1.1.11
 
 ### Fixed
 * When the state of work item was not showing correctly for the queries across projects.
