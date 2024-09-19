@@ -55,8 +55,11 @@ module.exports = function (grunt) {
                     "Components/Icon/FluentIcons.css",
                     "Components/Header/Header.css",
                     "Components/Button/Button.css",
+                    "Components/Button/ExpandableButton.css",
                     "Components/Spinner/Spinner.css",
                     "Components/TextField/TextField.css",
+                    "Components/Menu/Menu.css",
+                    "Components/Menu/MenuButton.css",
                     "!buildScripts/**",
                     "!node_modules/**",
                     "!**/*.min.js"

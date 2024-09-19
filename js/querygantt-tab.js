@@ -36,6 +36,23 @@ require({
                 name: "Could have", value: 3, color: "8dc54b"
             }, {
                 name: "Won't have", value: 4, color: "666666"
+            }],
+            fields: [{
+                name: "Area Path", value: "areaPath"
+            }, {
+                name: "Assigned To", value: "assignedTo"
+            }, {
+                name: "Iteration Path", value: "iterationPath"
+            }, {
+                name: "Dates", value: "dates"
+            }, {
+                name: "Duration", value: "duration"
+            }, {
+                name: "Parent", value: "parentTitle"
+            }, {
+                name: "Tags", value: "tags"
+            }, {
+                name: "Team Project", value: "project"
             }]
         }
     }

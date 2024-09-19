@@ -1,6 +1,14 @@
 define([
     "knockout"
 ], function (ko) {
+    //#region [ Fields ]
+    
+    const global = (function () { return this; })();
+    const doc = global.document;
+    
+    //#endregion
+
+
     //#region [ Constructors ]
     
     /**
@@ -11,15 +19,19 @@ define([
     let Header = function (args = {}) {
         console.debug("Header()");
 
+        this.element = args.element.firstElementChild;
         this.title = ko.isObservable(args.title) ? args.title : ko.observable(args.title || "");
         this.icon = ko.isObservable(args.icon) ? args.icon : ko.observable(args.icon || "");
         this.selectedItem = ko.isObservable(args.selectedItem) ? args.selectedItem : ko.observable(args.selectedItem || null);
-        this.showTags = ko.isObservable(args.showTags) ? args.showTags : ko.observable(args.showTags || false);
-        this.showDates = ko.isObservable(args.showDates) ? args.showDates : ko.observable(args.showDates || false);
-        this.showAssignedTo = ko.isObservable(args.showAssignedTo) ? args.showAssignedTo : ko.observable(args.showAssignedTo || false);
+        this.showFields = ko.isObservableArray(args.showFields) ? args.showFields : ko.observableArray(args.showFields || []);
         this.filter = ko.isObservable(args.filter) ? args.filter : ko.observable(args.filter || "");
         this.queryType = ko.isObservable(args.queryType) ? args.queryType : ko.observable(args.queryType || "");
         this.shareLink = ko.isObservable(args.shareLink) ? args.shareLink : ko.observable(args.shareLink || "");
+        this.fields = ko.isObservableArray(args.fields) ? args.fields : ko.observableArray(args.fields || []);
+
+        this.fieldsPopupTarget = ko.observable(null);
+        this.fieldsPopupTop = ko.observable("-9999px");
+        this.fieldsPopupLeft = ko.observable("-9999px");
 
         this.callbacks = args.callbacks;
     };
@@ -59,6 +71,34 @@ define([
         }
 
         this.callbacks[name](...args);
+    };
+
+
+    /**
+     *  Shows or hides the fields popup.
+     *  
+     * @param {object} component Current component.
+     * @param {object} e Event arguments. 
+     */
+    Header.prototype.showFieldsPopup = function (component, e) {
+        if (this.fieldsPopupTarget() != null) {
+            this.fieldsPopupTarget(null);
+            this.fieldsPopupTop("-9999px");
+            this.fieldsPopupLeft("-9999px");
+            return;
+        }
+
+        let target = e.target;
+
+        let top = Math.floor(target.getBoundingClientRect().top + doc.body.scrollTop)
+            - Math.floor(this.element.getBoundingClientRect().top + doc.body.scrollTop)
+            + target.offsetHeight;
+        let left = Math.floor(target.getBoundingClientRect().left + doc.body.scrollLeft)
+            - Math.floor(this.element.getBoundingClientRect().left + doc.body.scrollLeft);
+
+        this.fieldsPopupTop(top + "px");
+        this.fieldsPopupLeft(left + "px");
+        this.fieldsPopupTarget(target);
     };
 
 
@@ -111,30 +151,23 @@ define([
                         <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Remove medium"></span>
                     </span>
                 </button>
-                <button class="my-header__button my-header__button--icon my-header__button--toggle icon-only bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="3" type="button"
-                        data-bind="attr: { title: showAssignedTo() ? 'Hide assigned to' : 'Show assigned to'},
-                                   css: { 'my-header__button--toggle-on': showAssignedTo() },
-                                   click: () => showAssignedTo(!showAssignedTo())">
-                    <span class="fluent-icons-enabled">
-                        <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--People medium"></span>
-                    </span>
-                </button>                             
-                <button class="my-header__button my-header__button--icon my-header__button--toggle icon-only bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="4" type="button"
-                        data-bind="attr: { title: showDates() ? 'Hide dates' : 'Show dates'},
-                                   css: { 'my-header__button--toggle-on': showDates() },
-                                   click: () => showDates(!showDates())">
-                    <span class="fluent-icons-enabled">
-                        <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Calendar medium"></span>
-                    </span>
-                </button>                             
-                <button class="my-header__button my-header__button--icon my-header__button--toggle icon-only bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="5" type="button"
-                        data-bind="attr: { title: showTags() ? 'Hide tags' : 'Show tags'},
-                                   css: { 'my-header__button--toggle-on': showTags() },
-                                   click: () => showTags(!showTags())">
-                    <span class="fluent-icons-enabled">
-                        <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Tag medium"></span>
+                <button aria-haspopup="true" class="bolt-button bolt-expandable-button enabled bolt-focus-treatment" role="button" type="button"
+                        style="margin-left: 8px"
+                        data-bind="click: showFieldsPopup">
+                    <span class="bolt-button-text body-m" style="pointer-events: none">Fields&nbsp;&hellip;</span>
+                    <span class="fluent-icons-enabled" style="pointer-events: none">
+                        <span aria-hidden="true" class="icon-right font-weight-normal flex-noshrink fabric-icon ms-Icon--ChevronDownMed small" style="pointer-events: none"></span>
                     </span>
                 </button>
+                <div class="my-header__fields-popup bolt-contextual-menu flex-column depth-8 bolt-callout-content bolt-callout-shadow"
+                     data-bind="if: fieldsPopupTarget(), style: { top: fieldsPopupTop, left: fieldsPopupLeft }">
+                    <!-- ko foreach: fields -->
+                    <label>
+                        <input type="checkbox" data-bind="checkedValue: value, checked: $parent.showFields" />
+                        <span data-bind="text: name"></span>
+                    </label>
+                    <!-- /ko -->
+                </div>
                 <div class="bolt-header-content-area flex-row flex-grow flex-self-stretch">
                     <div class="bolt-header-icon m"
                          data-bind="visible: icon().length">
@@ -165,6 +198,7 @@ define([
                     <div class="flex-self-start bolt-header-commandbar bolt-button-group flex-row" role="menubar">
                         <div class="flex-self-start bolt-header-commandbar-button-group flex-row flex-center flex-grow scroll-hidden rhythm-horizontal-8">
                             <button aria-label="Refresh data" title="Refresh data" class="my-header__button my-header__button--icon icon-only bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="9" type="button"
+                                    style="margin-left: 8px"
                                     data-bind="click: () => callback('refresh')">
                                 <span class="fluent-icons-enabled">
                                     <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Refresh medium"></span>

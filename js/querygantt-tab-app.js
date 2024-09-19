@@ -43,9 +43,7 @@ define([
         this.token = null;
         this.path = null;
 
-        this.showTags = ko.observable(false);
-        this.showDates = ko.observable(false);
-        this.showAssignedTo = ko.observable(false);
+        this.showFields = ko.observableArray(["duration"]).extend({ rateLimit: { timeout: 1000, method: "notifyWhenChangesStop" } });
         this.shareLink = ko.observable("");
 
         this.isLoading = ko.observable(true);
@@ -60,6 +58,7 @@ define([
         
         this.states = ko.computed(this._getStates, this);
         this.priorities = ko.observableArray(args.priorities);
+        this.fields = ko.observableArray(args.fields);
         this.title = ko.computed(this._getTitle, this);
         this.filter = ko.observable("").extend({ rateLimit: { timeout: 500, method: "notifyWhenChangesStop" } });
         this.filteredWits = ko.computed(this._getFilteredWits, this);
@@ -98,19 +97,8 @@ define([
             })
             .then((service) => service.getQueryParams())
             .then((state) => {
-                if (state["showTags"]) {
-                    this.showTags((state["showTags"] === "true") ? true :
-                                  (state["showTags"] === "false") ? false : false);
-                }
-
-                if (state["showDates"]) {
-                    this.showDates((state["showDates"] === "true") ? true :
-                                   (state["showDates"] === "false") ? false : false);
-                }
-
-                if (state["showAssignedTo"]) {
-                    this.showAssignedTo((state["showAssignedTo"] === "true") ? true :
-                                   (state["showAssignedTo"] === "false") ? false : false);
+                if (state["showFields"]) {
+                    this.showFields(state["showFields"].split(","));
                 }
 
                 if(state["filter"]) {
@@ -171,6 +159,7 @@ define([
                 wits.forEach((wit) => {
                     var w = {
                         id: wit.fields["System.Id"],
+                        parentId: wit.fields["System.Parent"] || null,
                         rev: wit.fields["System.Rev"],
                         project: wit.fields["System.TeamProject"],
                         url: wit.url,
@@ -231,6 +220,32 @@ define([
 
                 // If there are not any other projects in the query we can display the items
                 return this._markCompletedWits(wits);
+            })
+            .then((wits) => {
+                // Get unique parent ids
+                let parentIds = [...new Set(wits.map((w) => w.parentId).filter((p) => p))];
+                if (!parentIds.length) {
+                    return wits;
+                }
+
+                // Split request into chunks
+                var xhrs = [];
+                var i;
+                var j;
+                var chunk = 200;
+                for (i = 0, j = parentIds.length; i < j; i += chunk) {
+                    xhrs.push(client.getWorkItems(parentIds.slice(i, i + chunk), this.project.id, null, null, "all"));
+                }
+
+                // Load parent and map ids to titles
+                return Promise.all(xhrs)
+                    .then((chunks) => Array.prototype.concat.apply([], chunks))
+                    .then((parents) => {
+                        let parentIdTitleMap = {};
+                        parents.forEach((p) => parentIdTitleMap[p.id] = p.fields["System.Title"]);
+                        wits.forEach((w) => w.parentTitle = parentIdTitleMap[w.parentId] || "");
+                        return wits;
+                    });
             })
             .then((wits) => {
                 let icons = this.types().map((t) => t.icon.url);
@@ -626,18 +641,14 @@ define([
      * Handles the change of settings and save them into the url.
      **/
     Model.prototype._onSettingsChanged = function () {
-        var showTags = this.showTags();
-        var showDates = this.showDates();
-        var showAssignedTo = this.showAssignedTo();
+        var showFields = this.showFields();
         var filter = this.filter();
 
         // Create share link
         sdk.getService(api.CommonServiceIds.HostNavigationService)
             .then((service) => service.getQueryParams())
             .then((state) => {
-                state.showTags = showTags;
-                state.showDates = showDates;
-                state.showAssignedTo = showAssignedTo;
+                state.showFields = showFields.join(",");
                 state.filter = filter;
 
                 var extension = sdk.getExtensionContext();
@@ -658,9 +669,7 @@ define([
             .then((service) => {
                 return service.getQueryParams()
                     .then((state) => {
-                        state.showTags = showTags;
-                        state.showDates = showDates;
-                        state.showAssignedTo = showAssignedTo;
+                        state.showFields = showFields.join(",");
                         state.filter = filter;
                         service.setQueryParams(state);
                     });
@@ -740,6 +749,7 @@ define([
                 var model = new Model({
                     version: cnf.version,
                     priorities: cnf.priorities,
+                    fields: cnf.fields,
                     user: sdk.getUser().displayName,
                     project: project,
                     query: sdk.getConfiguration().query

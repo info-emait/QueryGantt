@@ -2,6 +2,16 @@
 
 
 
+## QueryGantt v1.2.0
+
+### Changed
+* Visibility of fields can be now configured using **Fields ...** popup menu.
+* Share link now contains new `showFields` attribute instead of `showTags`, `showDates` and `showAssignedTo`.
+
+### Added
+* Additional fields can be now displayed in the timeline (Area Path, Iteration Path, Parent, Team Project).
+
+
 ## QueryGantt v1.1.11
 
 ### Fixed

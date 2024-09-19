@@ -26,9 +26,7 @@ define([
         this.types = ko.isObservable(args.types) ? args.types : ko.observable(args.types || []);
         this.typesOther = ko.isObservable(args.typesOther) ? args.typesOther : ko.observable(args.typesOther || []);
         this.icons = ko.isObservable(args.icons) ? args.icons : ko.observable(args.icons || []);
-        this.showTags = ko.isObservable(args.showTags) ? args.showTags : ko.observable(args.showTags || false);
-        this.showDates = ko.isObservable(args.showDates) ? args.showDates : ko.observable(args.showDates || false);
-        this.showAssignedTo = ko.isObservable(args.showAssignedTo) ? args.showAssignedTo : ko.observable(args.showAssignedTo || false);
+        this.showFields = ko.isObservableArray(args.showFields) ? args.showFields : ko.observableArray(args.showFields || []);
         this.selectedItem = ko.isObservable(args.selectedItem) ? args.selectedItem : ko.observable(args.selectedItem || null);
 
         this.selectedId = ko.observable(null);
@@ -389,9 +387,7 @@ define([
         var types = this.types();
         var typesOther = this.typesOther();
         var icons = this.icons();
-        var showTags = this.showTags();
-        var showDates = this.showDates();
-        var showAssignedTo = this.showAssignedTo();
+        var showFields = this.showFields();
         var now = new Date();
 
         this._createStyles(types, typesOther);
@@ -441,7 +437,7 @@ define([
             horizontalScroll: true,
             verticalScroll: true,
             zoomKey: "ctrlKey",
-            groupTemplate: (record, element) => createGroupTemplate(this, record, element, states, priorities, types, typesOther, icons, showTags, showDates, showAssignedTo)
+            groupTemplate: (record, element) => createGroupTemplate(this, record, element, states, priorities, types, typesOther, icons, showFields)
         };
 
         this.groups = new VisTimeline.DataSet(groups);
@@ -524,7 +520,11 @@ define([
     let createGroup = function (wit, items, now) {
         var group = {
             id: wit.id,
+            parentId: wit.parentId,
+            parentTitle: wit.parentTitle,
             project: wit.project,
+            areaPath: wit.areaPath,
+            iterationPath: wit.iterationPath,
             isCompleted: wit.isCompleted,
             childCount: wit.childCount,
             childCompletedCount: wit.childCompletedCount,
@@ -573,6 +573,8 @@ define([
 
         return {
             id: wit.id,
+            parentId: wit.parentId,
+            parentTitle: wit.parentTitle,
             assignedTo: wit.assignedTo,
             isCompleted: wit.isCompleted,
             childCount: wit.childCount,
@@ -600,37 +602,46 @@ define([
      * @param {array} types List of supported types.
      * @param {array} typesOthers List of supported types for other projects in the across project query.
      * @param {array} icons List of icons.
-     * @param {boolean} showTags If set to true, tags will be rendered.
-     * @param {boolean} showDates If set to true, dates will be rendered.
-     * @param {boolean} showAssignedTo If set to true, assigned to will be rendered.
+     * @param {array} showFields List of fields which should be rendered.
      */
-    let createGroupTemplate = function (vm, record, element, states, priorities, types, typesOther, icons, showTags, showDates, showAssignedTo) {
+    let createGroupTemplate = function (vm, record, element, states, priorities, types, typesOther, icons, showFields) {
         // Do not create group label for markers group
         if (!record || (record.type === "markers")) {
             return "";
         }
 
         // Prepare tags
-        var tags = !showTags || !record.tags.length ? "" : record.tags.map((t) => "<div>" + t + "</div>").join("");
+        var tags = !showFields.includes("tags") || !record.tags.length ? "" : record.tags.map((t) => "<div>" + t + "</div>").join("");
 
         // Prepare dates
-        var dates = !showDates ? "" : [
+        var dates = !showFields.includes("dates") ? "" : [
             getFormattedDate(record.startDate) || "×",
             getFormattedDate(record.endDate) || "×"
         ].filter((d) => d.length).join(" - ");
 
         // Prepare assigned to
-        var assignedTo = !showAssignedTo ? "" : record.assignedTo || "";
+        var assignedTo = !showFields.includes("assignedTo") ? "" : record.assignedTo || "";
 
         // Prepare priority
         var priority = priorities.find((p) => p.value === record.priority) || {};
-
+        
         // Prepare type
         var type = ((typesOther.find((to) => to.project === record.project) || {}).types || types).find((t) => t.name === record.type) || {};
 
         // Prepare state
         var state = type.states.find((s) => s.name === record.state) || {};
         
+        // Prepare parent title
+        var parentTitle = !showFields.includes("parentTitle") ? "" : record.parentTitle || "";
+        
+        // Prepare project
+        var project = !showFields.includes("project") ? "" : record.project || "";
+        var areaPath = !showFields.includes("areaPath") ? "" : record.areaPath || "";
+        var iterationPath = !showFields.includes("iterationPath") ? "" : record.iterationPath || "";
+        
+        // Prepare duration
+        var duration = !showFields.includes("duration") ? "" : `${record.duration} day(s)` || "";
+
         // Create element
         let el = global.document.createElement("div");
         el.classList.add("my-timeline-group");
@@ -641,8 +652,12 @@ define([
              <div class="my-timeline-group__tags">${tags}</div>
              <div class="my-timeline-group__dividier"></div>
              <div class="my-timeline-group__assignedto">${assignedTo}</div>
+             <div class="my-timeline-group__dates">${project}</div>
+             <div class="my-timeline-group__dates">${areaPath}</div>
+             <div class="my-timeline-group__dates">${iterationPath}</div>
+             <div class="my-timeline-group__dates">${parentTitle}</div>
              <div class="my-timeline-group__dates">${dates}</div>
-             <div class="my-timeline-group__dates">${record.duration} day(s)</div>
+             <div class="my-timeline-group__dates">${duration}</div>
              <div class="my-timeline-group__state my-timeline-group__state--square" title="${priority.name}" style="background-color: #${priority.color}"></div>
              <div class="my-timeline-group__checkbox fluent-icons-enabled ${record.selected ? "my-timeline-group__checkbox--selected" : ""}" title="Select item" data-group-id="${record.id}" data-noexport="true">
                 <span aria-hidden="true" class="flex-noshrink fabric-icon large"></span>

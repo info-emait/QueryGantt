@@ -39,4 +39,20 @@
         flex: 1;
         margin-left: rem(8px);
     }
+
+    &__fields-popup {
+        position: absolute;
+        background: var(--background-color);
+        border-radius: rem(3px);
+        z-index: 11;
+        width: rem(320px);
+        padding: rem(12px) 0;
+
+        > label {
+            height: rem(32px);
+            line-height: rem(32px);
+            padding: 0 rem(10px);
+            font-size: rem(14px);
+        }
+    }
 }

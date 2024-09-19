@@ -16,13 +16,12 @@
         <!-- ko if: !isLoading() -->
         <div class="querygantt-tab__header">
             <my-header params="selectedItem: current,
-                               showTags: showTags,
-                               showDates: showDates,
-                               showAssignedTo: showAssignedTo,
+                               showFields: showFields,
                                title: title,
                                filter: filter,
                                queryType: queryType,
                                shareLink: shareLink,
+                               fields: fields,
                                callbacks: {
                                     download: download.bind($root),
                                     downloadImage: downloadImage.bind($root),
@@ -56,9 +55,7 @@
                                  types: types, 
                                  typesOther: typesOther, 
                                  icons: icons, 
-                                 showTags: showTags,
-                                 showDates: showDates,
-                                 showAssignedTo: showAssignedTo,
+                                 showFields: showFields,
                                  callbacks: {
                                     openNewWindow: openNewWindow.bind($root)
                                  },
