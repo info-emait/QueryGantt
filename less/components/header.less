@@ -10,9 +10,10 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        height: 100%;
 
         &--border {
-            border-left-width: rem(12px);
+            border-left-width: rem(9px);
             border-left-style: solid;
         }
     }
@@ -53,6 +54,14 @@
             line-height: rem(32px);
             padding: 0 rem(10px);
             font-size: rem(14px);
+        }
+    }
+
+    &--workitem {
+        > .bolt-header-content-area {
+            background: var(--callout-background-color,rgb(255, 255, 255));
+            border-radius: rem(4px);
+            overflow: hidden;
         }
     }
 }

@@ -189,7 +189,8 @@ define([
                                                     'text: lorem // which title contains lorem',
                                                     'text: -(lorem) // which title does not contain lorem',
                                                     'state:todo // which state is set to To Do',
-                                                    'state:todo AND tag:customer // with multiple conditions'
+                                                    'state:todo AND tag:customer // with multiple conditions',
+                                                    'startdate:@today AND targetdate:2025-08-31  // filter by dates'
                                                   ],
                                                   event: { focus: (vm, e) => e.target.select() }" />
                             </div>

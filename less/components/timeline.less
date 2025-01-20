@@ -133,6 +133,22 @@
 
             .vis-text {
                 color: var(--text-secondary-color);
+
+                &.vis-saturday,
+                &.vis-sunday {
+                    color: var(--text-secondary-color);
+                }
+            }
+
+            .vis-grid {
+                &.vis-odd {
+                    background: var(--palette-black-alpha-4);
+                }
+
+                &.vis-saturday,
+                &.vis-sunday {
+                    background: rgba(var(--palette-accent1-light));
+                }
             }
         }
 
@@ -286,6 +302,11 @@
             &.vis-dot {
                 height: rem(4px);
                 border-radius: 50% !important;
+            }
+
+            &.vis-selected {
+                border-color: var(--component-grid-focus-border-color) !important;
+                border-width: 2px;
             }
         }
     }

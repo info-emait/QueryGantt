@@ -169,10 +169,11 @@ define([
                         state: wit.fields["System.State"],
                         priority: wit.fields["Microsoft.VSTS.Common.Priority"],
                         areaPath: wit.fields["System.AreaPath"],
+                        nodeName: wit.fields["System.NodeName"],
                         iterationPath: wit.fields["System.IterationPath"],
                         createdBy: wit.fields["System.CreatedBy"].displayName,
                         changedBy: wit.fields["System.ChangedBy"].displayName,
-                        assignedTo: (wit.fields["System.AssignedTo"] || {}).displayName || "",
+                        assignedTo: (wit.fields["System.AssignedTo"] || {}).displayName || wit.fields["System.AssignedTo"] || "",
                         createdDate: wit.fields["System.CreatedDate"],
                         changedDate: wit.fields["System.ChangedDate"],
                         startDate: wit.fields["Microsoft.VSTS.Scheduling.StartDate"],
@@ -606,6 +607,22 @@ define([
             if ("assignedto" === q.key) {
                 return `(wit.assignedTo.toLowerCase().toAccentInsensitive().replace(/\\s/g,'').indexOf("${q.value.toLowerCase().toAccentInsensitive()}".replace(/\\s/g,'')) !== -1)`;
             }
+            // Search by target date
+            if ("targetdate" === q.key) {
+                return `(wit.targetDate && wit.targetDate.toISOString().split("T")[0] <= "${q.value === '@today' ? (new Date()).toISOString().split("T")[0] : q.value}")`;
+            }
+            // Search by start date
+            if ("startdate" === q.key) {
+                return `(wit.startDate && wit.startDate.toISOString().split("T")[0] >= "${q.value === '@today' ? (new Date()).toISOString().split("T")[0] : q.value}")`;
+            }
+            // Search only by the parent
+            if ("parent" === q.key) {
+                return `(wit.parentTitle.toLowerCase().toAccentInsensitive().indexOf("${q.value.toLowerCase().toAccentInsensitive()}") !== -1)`;
+            }
+            // Search only by the node name
+            if ("nodename" === q.key) {
+                return `(wit.nodeName.toLowerCase().toAccentInsensitive().indexOf("${q.value.toLowerCase().toAccentInsensitive()}") !== -1)`;
+            }
         });
 
         // Remove the last logical operator
@@ -614,9 +631,16 @@ define([
         }
 
         // Create funcion
-        var lambda = Function("wit", "return " + predicates.join("") + ";");
+        let lambda = Function("wit", "return " + predicates.join("") + ";");
 
-        return wits.filter((w) => lambda(w));
+        try {
+            return wits.filter((w) => lambda(w));
+        } 
+        catch (err) {
+            console.warn(`App : _getFilteredWits() : Invalid filter has been entered.`);
+            console.warn(err);
+            return [];
+        }
     };
     
 

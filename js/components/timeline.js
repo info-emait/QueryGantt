@@ -273,7 +273,7 @@ define([
              }
              
              .my-timeline-item--${t.name.toLowerCase().replace(/\s+/g,"-")}.vis-selected {
-                background: #${darkenColor(t.color, 25)};
+                background: #${darkenColor(t.color, 55)};
              }`).join("\n\n");
 
         if(typesOther.length) {
@@ -284,7 +284,7 @@ define([
                  }
                     
                  .my-timeline-item--${to.project.toLowerCase().replace(/\s+/g,"")}-${t.name.toLowerCase().replace(/\s+/g,"-")}.vis-selected {
-                    background: #${darkenColor(t.color, 25)};
+                    background: #${darkenColor(t.color, 55)};
                  }`).join("\n\n")).join("\n\n");
         }
         global.document.head.appendChild(el);
@@ -524,6 +524,8 @@ define([
             parentTitle: wit.parentTitle,
             project: wit.project,
             areaPath: wit.areaPath,
+            nodeName: wit.nodeName,
+            remainingWork: wit.remainingWork,
             iterationPath: wit.iterationPath,
             isCompleted: wit.isCompleted,
             childCount: wit.childCount,
@@ -637,6 +639,8 @@ define([
         // Prepare project
         var project = !showFields.includes("project") ? "" : record.project || "";
         var areaPath = !showFields.includes("areaPath") ? "" : record.areaPath || "";
+        var nodeName = !showFields.includes("nodeName") ? "" : record.nodeName || "";
+        var remainingWork = !showFields.includes("remainingWork") ? "" : record.remainingWork + " h" || "";
         var iterationPath = !showFields.includes("iterationPath") ? "" : record.iterationPath || "";
         
         // Prepare duration
@@ -652,12 +656,14 @@ define([
              <div class="my-timeline-group__tags">${tags}</div>
              <div class="my-timeline-group__dividier"></div>
              <div class="my-timeline-group__assignedto">${assignedTo}</div>
-             <div class="my-timeline-group__dates">${project}</div>
-             <div class="my-timeline-group__dates">${areaPath}</div>
-             <div class="my-timeline-group__dates">${iterationPath}</div>
-             <div class="my-timeline-group__dates">${parentTitle}</div>
-             <div class="my-timeline-group__dates">${dates}</div>
-             <div class="my-timeline-group__dates">${duration}</div>
+             <div class="my-timeline-group__dates" title="Project">${project}</div>
+             <div class="my-timeline-group__dates" title="Area Path">${areaPath}</div>
+             <div class="my-timeline-group__dates" title="Node Name">${nodeName}</div>
+             <div class="my-timeline-group__dates" title="Remaining Work">${remainingWork}</div>
+             <div class="my-timeline-group__dates" title="Itteration Path">${iterationPath}</div>
+             <div class="my-timeline-group__dates" title="Parent">${parentTitle}</div>
+             <div class="my-timeline-group__dates" title="Dates">${dates}</div>
+             <div class="my-timeline-group__dates" title="Duration">${duration}</div>
              <div class="my-timeline-group__state my-timeline-group__state--square" title="${priority.name}" style="background-color: #${priority.color}"></div>
              <div class="my-timeline-group__checkbox fluent-icons-enabled ${record.selected ? "my-timeline-group__checkbox--selected" : ""}" title="Select item" data-group-id="${record.id}" data-noexport="true">
                 <span aria-hidden="true" class="flex-noshrink fabric-icon large"></span>

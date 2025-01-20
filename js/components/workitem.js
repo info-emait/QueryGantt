@@ -128,7 +128,7 @@ define([
         },
         template: 
             `<div class="my-header my-header--workitem bolt-header-with-commandbar bolt-header-with-back-button bolt-header flex-row flex-noshrink flex-start bolt-header-no-spacing-defined">
-                <div class="bolt-header-content-area flex-row flex-grow flex-self-stretch">
+                <div class="bolt-header-content-area flex-row flex-grow flex-self-stretch depth-8">
                     <div class="bolt-header-icon m"
                          data-bind="visible: icon().length">
                         <span class="fluent-icons-enabled">

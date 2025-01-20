@@ -18,10 +18,15 @@ Query Gantt is an extension for the Azure DevOps, which enables you to view the 
     * You can use multiple filter clauses and join them with logical operators *OR*/*AND*.
 
 # Quickfilter examples
-* Work items which title contains *"text"*: `text`
-* Work items which title does not contain *"text"*: `-(text)`
-* Work items which state is set to *"To Do"*: `state:todo`
-* Multiple condition: `state:todo AND tag:customer`
+* Work items which **Title** contains *"text"*: `text`
+* Work items which **Title** does not contain *"text"*: `-(text)`
+* Work items which **State** is set to *"To Do"*: `state:todo`
+* Work items which **Start Date** is set to the first of the february: `startdate:2025-02-01`
+* Work items which **Target Date** is set to today: `targetdate:@today`
+* Work items which parent's **Title** contains *"text"*: `parent:text`
+* Work items which **Node Name** contains *"text"*: `nodename:text`
+* Multiple condition with AND: `state:todo AND tag:customer`
+* Multiple condition with OR: `state:todo OR tag:customer`
 
 # Setup
 After installing the extension from the Marketplace, you need to enable it in the **Manage features**  section. In order to do so, follow the instructions [here](https://learn.microsoft.com/en-us/azure/devops/project/navigation/preview-features?view=azure-devops).

@@ -1,6 +1,15 @@
 # Changelog
 
 
+## QueryGantt v1.2.1
+
+### Changed
+* Improved visibility of the selected item.
+* Differentiate weekend days in the timeline [#19](https://github.com/info-emait/QueryGantt/issues/19).
+* Quick filter support for Start Date, Target Date, Parent's Title and Node Name [#16](https://github.com/info-emait/QueryGantt/issues/16).
+* Added Remaining Work in the list of selection fields [#15](https://github.com/info-emait/QueryGantt/issues/15).
+
+
 
 ## QueryGantt v1.2.0
 
@@ -10,6 +19,7 @@
 
 ### Added
 * Additional fields can be now displayed in the timeline (Area Path, Iteration Path, Parent, Team Project).
+
 
 
 ## QueryGantt v1.1.11

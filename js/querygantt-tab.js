@@ -48,7 +48,11 @@ require({
             }, {
                 name: "Duration", value: "duration"
             }, {
+                name: "Node Name", value: "nodeName"
+            }, {
                 name: "Parent", value: "parentTitle"
+            }, {
+                name: "Remaining Work", value: "remainingWork"
             }, {
                 name: "Tags", value: "tags"
             }, {
