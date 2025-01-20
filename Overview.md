@@ -3,7 +3,7 @@
 # About the extension
 Query Gantt is an extension for the Azure DevOps, which enables you to view the result of the selected query in the form of a Gantt chart using the [vis-timeline](https://visjs.github.io/vis-timeline/) and export it to the excel file using the [xlsx-populate](https://github.com/dtjohnson/xlsx-populate) parser/generator.
 
-![Query Gantt Example](img/screenshot3.png)
+![Query Gantt Example](img/screenshot4.png)
 
 # Features
 * Zoom in/out the timeline.
@@ -14,8 +14,9 @@ Query Gantt is an extension for the Azure DevOps, which enables you to view the 
 * Share the timeline via URL.
 * Quick filtering using the "gmail" like filter syntax:
     * To filter items by title just type any text.
-    * To filter by specific field use prefixes: *title:*, *tag:*, *state:*, *priority:*, *assignedto:*.
+    * To filter by specific field use prefixes: *title:*, *tag:*, *state:*, *priority:*, *assignedto:*, *targetdate:*, *startdate:*, *parent:*, *nodemane:*.
     * You can use multiple filter clauses and join them with logical operators *OR*/*AND*.
+* Visualisation of the Successor-Predecessor relations.
 
 # Quickfilter examples
 * Work items which **Title** contains *"text"*: `text`

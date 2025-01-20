@@ -21,6 +21,8 @@
         "path": "img/screenshot2.png"
     }, {
         "path": "img/screenshot3.png"
+    }, {
+        "path": "img/screenshot4.png"
     }],
     "tags": [
         "Query", "Gantt", "Chart", "Tab", "Results"
