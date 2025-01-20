@@ -1,6 +1,7 @@
 define([
     "knockout",
-    "vis-timeline"
+    "vis-timeline",
+    "vis-timeline-arrow"
 ], function (ko, VisTimeline) {
     //#region [ Fields ]
     
@@ -34,6 +35,7 @@ define([
         this.timeline = null;
         this.groups = null;
         this.records = null;
+        this.arrows = null;
 
         // Callbacks
         this.callbacks = args.callbacks;
@@ -448,9 +450,18 @@ define([
         this.groups = new VisTimeline.DataSet(groups);
         this.records = new VisTimeline.DataSet(records);
 
-        // Create a Timeline
+        // Create an Timeline
         this.timeline = new VisTimeline.Timeline(this.node, this.records, this.groups, options);
-
+        
+        // Create an Arrow
+        const dependencies = items
+            .filter((i) => i.dependencies.length)
+            .map((i) => i.dependencies.map((d) => ({ id: `${i.id}_${d}`, id_item_1: i.id, id_item_2: d })))
+            .flat(1);
+        if (dependencies.length) {
+            this.arrows = new VisTimelineArrow(this.timeline, dependencies, { color: "rgba(var(--palette-accent2), .8)" });
+        }
+        
         // Events
         this.timeline.on("select", this._onSelect.bind(this));        
     };

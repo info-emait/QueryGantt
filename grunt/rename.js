@@ -7,7 +7,8 @@ module.exports = function (grunt) {
                 { src: ["js/libs/SDK.min.js"], dest: "js/libs/sdk.js" },
                 { src: ["js/libs/knockout-latest.debug.js"], dest: "js/libs/knockout.js" },
                 { src: ["js/libs/fetch.umd.js"], dest: "js/libs/whatwg-fetch.js" },
-                { src: ["js/libs/vis-timeline-graph2d.js"], dest: "js/libs/vis-timeline.js" }
+                { src: ["js/libs/vis-timeline-graph2d.js"], dest: "js/libs/vis-timeline.js" },
+                { src: ["js/libs/arrow.js"], dest: "js/libs/vis-timeline-arrow.js" }
             ]
         },
         cssmin: {

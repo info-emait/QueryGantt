@@ -181,7 +181,8 @@ define([
                         completedWork: (wit.fields["Microsoft.VSTS.Scheduling.CompletedWork"] || 0).toFixed(2),
                         remainingWork: (wit.fields["Microsoft.VSTS.Scheduling.RemainingWork"] || 0).toFixed(2),
                         tags: (wit.fields["System.Tags"] || "").split("; ").filter((t) => (t || "").length),
-                        attachments: (wit.relations || []).filter((a) => a.rel === "AttachedFile")
+                        attachments: (wit.relations || []).filter((a) => a.rel === "AttachedFile"),
+                        dependencies: (wit.relations || []).filter((a) => (a.rel === "System.LinkTypes.Dependency-Forward") && ((a.attributes || {}).name === "Successor")).map((r) => parseInt(r.url.split("/").pop()))
                     };
 
                     // If there is the same item more than once in the result tree

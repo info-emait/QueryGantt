@@ -14,6 +14,7 @@ require({
         "knockout": "./libs/knockout",
         "text": "./libs/text",
         "vis-timeline": "./libs/vis-timeline",
+        "vis-timeline-arrow": "./libs/vis-timeline-arrow",
         "dom-to-image": "./libs/dom-to-image",
         "whatwg-fetch": "./libs/whatwg-fetch",
         "sdk": "./libs/sdk",

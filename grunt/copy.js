@@ -12,6 +12,8 @@ module.exports = function (grunt) {
                         case "azure-devops-ui/fabricicons.css":
                         case "azure-devops-ui/fluenticons.css":
                             return content.replace(/.\/fonts\//gi, "../fonts/");
+                        case "timeline-arrows/arrow.js":
+                            return content.replace("export default class Arrow", "class VisTimelineArrow");
                         default:
                             return content;
                     }
@@ -29,6 +31,7 @@ module.exports = function (grunt) {
                     "knockout/build/output/knockout-latest.debug.js",
                     "whatwg-fetch/dist/fetch.umd.js",
                     "vis-timeline/standalone/umd/vis-timeline-graph2d.js",
+                    "timeline-arrows/arrow.js",
                     "dom-to-image/src/dom-to-image.js",
                     "@eyeseetea/xlsx-populate/browser/xlsx-populate.js"
                 ],

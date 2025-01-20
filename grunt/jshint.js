@@ -17,7 +17,8 @@ module.exports = function (grunt) {
                 require: true,
                 self: true,
                 module: true,
-                Promise: true
+                Promise: true,
+                VisTimelineArrow: true
             }
         },
         src: [
