@@ -10,7 +10,8 @@
 ### Added
 * Quick filter support for Start Date, Target Date, Parent's Title and Node Name [#16](https://github.com/info-emait/QueryGantt/issues/16).
 * Added Remaining Work in the list of selection fields [#15](https://github.com/info-emait/QueryGantt/issues/15).
-* Added precentage progress indication [#15](https://github.com/info-emait/QueryGantt/issues/15).
+* Precentage progress indication [#15](https://github.com/info-emait/QueryGantt/issues/15).
+* Visualisation of the Successor-Predecessor relations for the work items.
 
 
 
