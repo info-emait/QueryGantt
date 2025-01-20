@@ -297,6 +297,18 @@
             &-content {
                 padding: 0 rem(5px) !important;
                 line-height: rem(22px);
+                z-index: 1;
+            }
+
+            &-visible-frame {
+                height: 100%;
+
+                &__progress {
+                    height: 100%;
+                    position: relative;
+                    top: -100%;
+                    background: var(--palette-black-alpha-20);
+                }
             }
             
             &.vis-dot {

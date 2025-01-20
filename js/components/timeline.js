@@ -432,12 +432,17 @@ define([
             //     }
             // },
             // locale: "sk",
+            xss: {
+                disabled: true
+            },
             groupHeightMode: "fixed",
             orientation: "both",
             horizontalScroll: true,
             verticalScroll: true,
             zoomKey: "ctrlKey",
-            groupTemplate: (record, element) => createGroupTemplate(this, record, element, states, priorities, types, typesOther, icons, showFields)
+            groupTemplate: (record, element) => createGroupTemplate(this, record, element, states, priorities, types, typesOther, icons, showFields),
+            visibleFrameTemplate: (record, element) => createVisibleFrameTemplate(this, record, element)
+            //template: function (item, element, data) { return '<h1>' + item.header + data.moving?' '+ data.start:'' + '</h1><p>' + item.description + '</p>'; }
         };
 
         this.groups = new VisTimeline.DataSet(groups);
@@ -584,12 +589,14 @@ define([
             group: isMarker(wit) ? "markers" : wit.id,
             className: `my-timeline-item my-timeline-item--${wit.type.toLowerCase().replace(/\s+/g,"-")} my-timeline-item--${wit.project.toLowerCase().replace(/\s+/g,"")}-${wit.type.toLowerCase().replace(/\s+/g,"-")}`,
             title: wit.title + "<br/>(" + subtitle.join(", ") + ")",
-            content: isMarker(wit) ? wit.title : wit.childCount ? `${wit.childCompletedCount}/${wit.childCount}` : "&nbsp;",
+            content: isMarker(wit) ? wit.title : wit.childCount ? `${wit.childCompletedCount}/${wit.childCount} (${Math.ceil((wit.childCompletedCount/wit.childCount) * 100)}%)` : "&nbsp;",
             selectable: true,
             type: isMarker(wit) ? "box" : "range",
             start,
             end: isMarker(wit) ? start : end
         };
+
+        
     };
 
 
@@ -672,6 +679,20 @@ define([
         el.querySelector(".my-timeline-group__title").addEventListener("pointerdown", vm._onGroupTitleSelect.bind(vm), false);
         el.querySelector(".my-timeline-group__checkbox").addEventListener("pointerdown", vm._onGroupSelect.bind(vm), false);
 
+        return el;
+    };
+
+    /**
+     * Creates template for the visible frame.
+     * 
+     * @param {object} vm View model.
+     * @param {object} record Current record.
+     * @param {HTMLElement} element Parent element.
+     */
+    let createVisibleFrameTemplate = function (vm, record, element) {
+        let el = global.document.createElement("div");
+        el.classList.add("vis-item-visible-frame__progress");
+        el.style.width = (record.childCount ? Math.ceil((record.childCompletedCount/record.childCount) * 100) : 0) + "%";
         return el;
     };
 
