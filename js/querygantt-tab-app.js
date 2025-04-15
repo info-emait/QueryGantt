@@ -15,7 +15,7 @@ define([
     "my/components/workitem",
     "my/components/timeline",
     "my/templates/gantt",
-    "text!img/icon_list.svg"
+    "text!img/icon_list.txt"
 ], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, Count, Legend, Header, WorkItem, Timeline, ganttTemplate, icon_list) {
     //#region [ Fields ]
 
