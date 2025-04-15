@@ -117,7 +117,12 @@ define([
             })
             .then((types) => {
                 this.types(types.value);
-                return client.queryById(this.query.id, this.project.id);
+
+                if (this.query.id !== "00000000-0000-0000-0000-000000000000") {
+                    return client.queryById(this.query.id, this.project.id);
+                }
+
+                return client.queryByWiql({ query: this.query.wiql }, this.project.id);
             })
             .then((data) => {
                 this.sortColumns(data.sortColumns || []);
