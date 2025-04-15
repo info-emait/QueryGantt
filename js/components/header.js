@@ -197,22 +197,22 @@ define([
                                     <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Refresh medium"></span>
                                 </span>
                             </button>
-                            <button aria-label="Zoom in" title="Zoom in" class="my-header__button my-header__button--icon icon-only bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="10" type="button"
-                                    data-bind="click: () => callback('zoomIn')">
-                                <span class="fluent-icons-enabled">
-                                    <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--ZoomIn medium"></span>
-                                </span>
-                            </button>
                             <button aria-label="Zoom out" title="Zoom out" class="my-header__button my-header__button--icon icon-only bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="11" type="button"
                                     data-bind="click: () => callback('zoomOut')">
                                 <span class="fluent-icons-enabled">
-                                    <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--ZoomOut medium"></span>
+                                    <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--CircleMinus medium"></span>
                                 </span>
                             </button>
                             <button aria-label="Reset zoom" title="Reset zoom" class="my-header__button my-header__button--icon icon-only bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="12" type="button"
                                     data-bind="click: () => callback('zoomReset')">
                                 <span class="fluent-icons-enabled">
-                                    <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--BackToWindow medium"></span>
+                                    <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--CircleDisc medium"></span>
+                                </span>
+                            </button>
+                            <button aria-label="Zoom in" title="Zoom in" class="my-header__button my-header__button--icon icon-only bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="10" type="button"
+                                    data-bind="click: () => callback('zoomIn')">
+                                <span class="fluent-icons-enabled">
+                                    <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--CirclePlus medium"></span>
                                 </span>
                             </button>                            
                             <button aria-label="Move left" title="Move left" class="my-header__button my-header__button--icon icon-only bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="13" type="button"

@@ -456,6 +456,18 @@ define([
      */
     Model.prototype.focus = function () {
         this.action("_timeline_focusAction");
+        
+        let wit = this.current();
+        if (!wit) {
+            return;
+        }
+
+        let target = doc.querySelector(`[data-id='${wit.id}']`);
+        if (!target || !target.scrollIntoView) {
+            return;
+        }
+        
+        target.scrollIntoView();
     };
     
     

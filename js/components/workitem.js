@@ -158,7 +158,7 @@ define([
                             <button aria-label="Focus the selected work item" title="Focus the selected work item" class="my-header__button my-header__button--icon my-header__button--for-item icon-only bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="7" type="button"
                                     data-bind="click: () => callback('focus'), visible: selectedItem()">
                                 <span class="fluent-icons-enabled">
-                                    <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Pin medium"></span>
+                                    <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Resize medium"></span>
                                 </span>
                             </button>
                             <button aria-label="Close the selected work item" title="Close the selected work item" class="my-header__button my-header__button--icon my-header__button--for-item icon-only bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="8" type="button"

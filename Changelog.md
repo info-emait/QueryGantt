@@ -11,10 +11,12 @@
 
 ### Changed
 * Removed obtrusive placeholder animation.
+* Changed zoom icons in the toolbar.
 
 ### Added
 * Show error message when then download of the Gantt chart ends up with an error.
 * Added text-overflow to the completed progress of child work items in the bar.
+* After focus the selected item is also scrolled into the view.
 
 
 
