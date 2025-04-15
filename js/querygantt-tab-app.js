@@ -665,7 +665,7 @@ define([
             return [id + ""];
         }
 
-        return itm.map((i) => this._getPaths(relations, i.source.id).map((p) => p + "/" + id));
+        return itm.filter((i) => i.source).map((i) => this._getPaths(relations, i.source.id).map((p) => p + "/" + id));
     };
 
 

@@ -4,6 +4,9 @@
 
 ## QueryGantt v1.2.2
 
+### Fixed
+* When the query contains circular relations the Gantt did not render.
+
 ### Changed
 * Removed obtrusive placeholder animation.
 
