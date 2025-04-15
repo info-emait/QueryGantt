@@ -1,6 +1,14 @@
 # Changelog
 
 
+
+## QueryGantt v1.2.2
+
+### Changed
+* Removed obtrusive placeholder animation.
+
+
+
 ## QueryGantt v1.2.1
 
 ### Changed

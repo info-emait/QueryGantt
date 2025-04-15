@@ -184,14 +184,6 @@ define([
                                 </span>
                                 <input autocomplete="off" aria-label="Search items" class="bolt-textfield-input flex-grow bolt-textfield-input-with-prefix" placeholder="Search items" tabindex="0"
                                        data-bind="textInput: filter,
-                                                  placeholder: [
-                                                    'Search items',
-                                                    'text: lorem // which title contains lorem',
-                                                    'text: -(lorem) // which title does not contain lorem',
-                                                    'state:todo // which state is set to To Do',
-                                                    'state:todo AND tag:customer // with multiple conditions',
-                                                    'startdate:@today AND targetdate:2025-08-31  // filter by dates'
-                                                  ],
                                                   event: { focus: (vm, e) => e.target.select() }" />
                             </div>
                         </div>
