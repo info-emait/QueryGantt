@@ -9,6 +9,9 @@ require({
     }, {
         name: "bindings",
         location: "./bindings"
+    }, {
+        name: "img",
+        location: "../img"
     }],
     paths: {
         "knockout": "./libs/knockout",

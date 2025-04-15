@@ -14,8 +14,9 @@ define([
     "my/components/header",
     "my/components/workitem",
     "my/components/timeline",
-    "my/templates/gantt"
-], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, Count, Legend, Header, WorkItem, Timeline, ganttTemplate) {
+    "my/templates/gantt",
+    "text!img/icon_list.svg"
+], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, Count, Legend, Header, WorkItem, Timeline, ganttTemplate, icon_list) {
     //#region [ Fields ]
 
     var global = (function () { return this; })();
@@ -258,7 +259,7 @@ define([
                     other.forEach((o) => icons = icons.concat(o.types.map((t) => t.icon.url)));
                 }
                 icons = [...new Set(icons)];
-                let xhr = icons.map((url) => fetch(url, this._getFetchParams()).then((response) => response.ok ? response.text() : null));
+                let xhr = icons.map((url) => fetch(url, this._getFetchParams()).then((response) => response.ok ? response.text() : null).catch((error) => icon_list));
                 Promise.all(xhr).then((response) => {
                     let tmp = {};
                     response.forEach((svg, index) => {

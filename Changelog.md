@@ -6,6 +6,7 @@
 
 ### Fixed
 * When the query contains circular relations the Gantt did not render.
+* Fixed when rendering failed due to the CORS policy violation while fetching the icons [#18](https://github.com/info-emait/QueryGantt/issues/18).
 
 ### Changed
 * Removed obtrusive placeholder animation.
