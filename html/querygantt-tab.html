@@ -14,6 +14,38 @@
         </div>
         <!-- /ko -->
         <!-- ko if: !isLoading() -->
+        <div class="flex-row margin-top-16" style="display: none"
+             data-bind="visible: message().length">
+            <div class="flex-self-stretch bolt-messagecard bolt-card flex-column depth-8 bolt-card-white"
+                    style="width: 100%">
+                <div class="bolt-messagebar severity-error">
+                    <div class="bolt-breakpoint relative">
+                        <div class="bolt-breakpoint-container absolute-fill scroll-hidden">
+                            <div class="bolt-breakpoint-observation absolute"></div>
+                        </div>
+                    </div>
+                    <div class="bolt-messagebar-content flex-grow flex-row">
+                        <div class="flex-row">
+                            <div class="bolt-messagebar-icons flex-row">
+                                <span class="fluent-icons-enabled">
+                                    <span aria-hidden="true" class="bolt-messagebar-icon medium flex-noshrink fabric-icon ms-Icon--Error"></span>
+                                </span>
+                            </div>
+                            <div class="bolt-messagebar-message flex-row flex-wrap flex-grow flex-shrink flex-center body-m word-break"
+                                    data-bind="html: message"></div>
+                        </div>
+                        <div class="bolt-messagebar-buttons flex-noshrink flex-row flex-center flex-self-stretch">
+                            <button class="bolt-messagebar-close-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="0" type="button"
+                                    data-bind="click: function() { this.message('') }">
+                                <span class="fluent-icons-enabled">
+                                    <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Cancel medium"></span>
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
         <div class="querygantt-tab__header">
             <my-header params="selectedItem: current,
                                showFields: showFields,

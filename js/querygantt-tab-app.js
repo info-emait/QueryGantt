@@ -65,6 +65,8 @@ define([
 
         this.queryType = ko.observable("");
 
+        this.message = ko.observable("");
+
         this._timeline_expandAction = ko.observable();
         this._timeline_collapseAction = ko.observable();
         this._timeline_moveLeftAction = ko.observable();
@@ -300,7 +302,12 @@ define([
                 bgcolor: global.getComputedStyle(doc.body).getPropertyValue("--background-color")
             })
             .then((blob) => api.getClient(witApi.WorkItemTrackingRestClient).createAttachment(blob, this.project.id, `${this.query.name}_${(new Date()).toISOString().split(".").shift().replace(/(-|:)/gi,"")}.png`))
-            .then((response) => sdk.getService(api.CommonServiceIds.HostNavigationService).then((service) => service.openNewWindow(response.url)));
+            .then((response) => sdk.getService(api.CommonServiceIds.HostNavigationService).then((service) => service.openNewWindow(response.url)))
+            .catch(error => {
+                this.message("Unable to download the Gantt chart as an image.");
+                console.warn(`App : downloadImage() : Unable to download the Gantt chart as an image.`);
+                console.warn(error);
+            });
     };
 
 

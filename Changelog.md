@@ -7,6 +7,9 @@
 ### Changed
 * Removed obtrusive placeholder animation.
 
+### Added
+* Show error message when then download of the Gantt chart ends up with an error.
+
 
 
 ## QueryGantt v1.2.1

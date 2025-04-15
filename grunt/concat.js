@@ -13,6 +13,8 @@ module.exports = function (grunt) {
                 "js/libs/ui/Components/Button/ExpandableButton.css",
                 "js/libs/ui/Components/Spinner/Spinner.css",
                 "js/libs/ui/Components/TextField/TextField.css",
+                "js/libs/ui/Components/MessageBar/MessageBar.css",
+                "js/libs/ui/Components/MessageCard/MessageCard.css",
                 "js/libs/ui/Components/Menu/Menu.css",
                 "js/libs/ui/Components/Menu/MenuButton.css"
             ],

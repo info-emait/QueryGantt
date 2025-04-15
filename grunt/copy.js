@@ -61,6 +61,8 @@ module.exports = function (grunt) {
                     "Components/Button/ExpandableButton.css",
                     "Components/Spinner/Spinner.css",
                     "Components/TextField/TextField.css",
+                    "Components/MessageBar/MessageBar.css",
+                    "Components/MessageCard/MessageCard.css",
                     "Components/Menu/Menu.css",
                     "Components/Menu/MenuButton.css",
                     "!buildScripts/**",
