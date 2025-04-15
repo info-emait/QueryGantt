@@ -2,7 +2,7 @@
 
 
 
-## QueryGantt v1.2.2
+## QueryGantt v1.2.3
 
 ### Fixed
 * When the query contains circular relations the Gantt did not render.
