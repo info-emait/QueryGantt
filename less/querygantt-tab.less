@@ -46,26 +46,11 @@ html, body {
         bottom: 0;
         z-index: 1;
         background-color: var(--background-color);
-
-        > div + div {
-            &:before {
-                content: "\00a0\00a0|\00a0\00a0";
-                color: var(--text-disabled-color);
-                position: relative;
-                top: rem(-1px);
-            }
-        }
+        gap: 0 rem(42px);
 
         .tablet({
             flex-direction: column;
-
-            > div + div {
-                padding-top: rem(8px);
-
-                &:before {
-                    display: none;
-                }
-            }
+            gap: rem(16px) 0;
         });
     }
 }

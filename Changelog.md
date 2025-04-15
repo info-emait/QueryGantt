@@ -12,6 +12,7 @@
 ### Changed
 * Removed obtrusive placeholder animation.
 * Changed zoom icons in the toolbar.
+* Changed position of the components in the footer.
 
 ### Added
 * Show error message when then download of the Gantt chart ends up with an error.
