@@ -467,7 +467,7 @@ define([
             return;
         }
         
-        target.scrollIntoView();
+        target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
     };
     
     

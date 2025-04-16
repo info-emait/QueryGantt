@@ -2,6 +2,12 @@
 
 
 
+## QueryGantt v1.2.4
+
+### Fixed
+* After focus the selected item was not entirely scrolled into the view.
+
+
 ## QueryGantt v1.2.3
 
 ### Fixed
