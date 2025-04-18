@@ -1,7 +1,6 @@
 # Changelog
 
 
-
 ## QueryGantt v1.3.0
 
 ### Added
