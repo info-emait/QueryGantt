@@ -2,7 +2,10 @@
 
 
 
-## QueryGantt v1.2.4
+## QueryGantt v1.3.0
+
+### Added
+* Start and Target date can be now edited via the timeline.
 
 ### Fixed
 * After focus the selected item was not entirely scrolled into the view.

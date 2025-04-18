@@ -89,7 +89,8 @@
                                  icons: icons, 
                                  showFields: showFields,
                                  callbacks: {
-                                    openNewWindow: openNewWindow.bind($root)
+                                    openNewWindow: openNewWindow.bind($root),
+                                    updateWit: updateWit.bind($root)
                                  },
                                  actions: {
                                     expand: _timeline_expandAction,

@@ -294,6 +294,59 @@ define([
 
 
     /**
+     * Updates the work item.
+     * 
+     * @param {object} record The item being manipulated.
+     */
+    Model.prototype.updateWit = function (record) {
+        const patch = [];
+
+        // Start date
+        const obj1 = {
+            "op": record.start ? "replace" : "remove",
+            "path": "/fields/Microsoft.VSTS.Scheduling.StartDate"
+        };
+        if (record.start) {
+            obj1["value"] = record.start.toISOString();
+        }
+
+        // Target date
+        const obj2 = {
+            "op": record.end ? "replace" : "remove",
+            "path": "/fields/Microsoft.VSTS.Scheduling.TargetDate"
+        };
+        if (record.end) {
+            let end = new Date(record.end.getTime());
+            end.setDate(end.getDate() - 1);
+            obj2["value"] = end.toISOString();
+        }
+
+        // Milestone
+        if (record.start && record.end && (record.start.getTime() === record.end.getTime())) {
+            delete obj1["value"];
+            obj1["op"] = "remove";
+            obj2["value"] = record.end.toISOString();
+        }
+
+        patch.push(obj1);
+        patch.push(obj2);
+
+        const client = api.getClient(witApi.WorkItemTrackingRestClient);
+        const id = record.id;
+
+        return client
+            .updateWorkItem(patch, id, false, false)
+            .then(() => record)
+            .catch((error) => {
+                this.message(`Unable to update wor item #${id}.`);
+                console.warn(`App : updateWit() : Unable to update wor item #${id}.`);
+                console.warn(error);
+                return null;
+            });
+    };
+
+
+    /**
      * Downloads the timeline as an png image.
      */
     Model.prototype.downloadImage = function () {

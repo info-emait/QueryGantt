@@ -231,7 +231,7 @@ define([
             return;
         }
 
-        this.callbacks[name](...args);
+        return this.callbacks[name](...args);
     };
 
 
@@ -442,8 +442,14 @@ define([
             horizontalScroll: true,
             verticalScroll: true,
             zoomKey: "ctrlKey",
+            editable: {
+                remove: false,
+                updateGroup: false,
+                updateTime: true
+            },
             groupTemplate: (record, element) => createGroupTemplate(this, record, element, states, priorities, types, typesOther, icons, showFields),
-            visibleFrameTemplate: (record, element) => createVisibleFrameTemplate(this, record, element)
+            visibleFrameTemplate: (record, element) => createVisibleFrameTemplate(this, record, element),
+            onMove: (record, callback) => updateWit(this, record, callback)
             //template: function (item, element, data) { return '<h1>' + item.header + data.moving?' '+ data.start:'' + '</h1><p>' + item.description + '</p>'; }
         };
 
@@ -463,7 +469,7 @@ define([
         }
         
         // Events
-        this.timeline.on("select", this._onSelect.bind(this));        
+        this.timeline.on("select", this._onSelect.bind(this));
     };
 
 
@@ -606,8 +612,6 @@ define([
             start,
             end: isMarker(wit) ? start : end
         };
-
-        
     };
 
 
@@ -705,6 +709,18 @@ define([
         el.classList.add("vis-item-visible-frame__progress");
         el.style.width = (record.childCount ? Math.ceil((record.childCompletedCount/record.childCount) * 100) : 0) + "%";
         return el;
+    };
+
+
+    /**
+     * Fired when an item has been moved.
+     * 
+     * @param {object} vm View model.
+     * @param {object} record The item being manipulated.
+     * @param {function} callback A callback function which must be invoked to report back. The callback must be invoked as callback(item) or callback(null).
+     */
+    let updateWit = function (vm, record, callback) {
+        vm.callback.call(vm, "updateWit", record).then((result) => callback(result));
     };
 
 
