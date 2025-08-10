@@ -32,7 +32,8 @@ module.exports = function (grunt) {
         },
         src: {
             files: {
-                "wwwroot/css/querygantt-tab.css": "less/querygantt-tab.less"
+                "wwwroot/css/querygantt-tab.css": "less/querygantt-tab.less",
+                "wwwroot/css/querygantt-configuration.css": "less/querygantt-configuration.less"
             }
         }
     });

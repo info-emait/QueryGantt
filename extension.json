@@ -81,6 +81,13 @@
                 "featureId": "#{Extension.Publisher}#.#{Extension.Id}#.#{Extension.Id}#-feature"
             }
         }]
+    }, {
+        "id": "#{Extension.Id}#-configuration",
+        "type": "ms.vss-web.external-content",
+        "description": "Configuration panel for Query Gantt",
+        "properties": {
+            "uri": "html/#{Extension.Id}#-configuration.html?v=#{Project.AssemblyInfo.Version}#"
+        }
     }],
     "files": [
         { "path": "html", "addressable": true },
@@ -90,8 +97,8 @@
         { "path": "xlsx", "addressable": true },
         { "path": "fonts/AzDevMDL2.woff", "addressable": true },
         { "path": "fonts/fabric-icons.woff", "addressable": true },
-        { "path": "fonts/fluent-filled-v1.1.201.woff2", "addressable": true, "contentType": "application/x-font-woff2" },
-        { "path": "fonts/fluent-regular-v1.1.201.woff2", "addressable": true, "contentType": "application/x-font-woff2" }
+        { "path": "fonts/fluent-filled-v1.1.293.woff2", "addressable": true, "contentType": "application/x-font-woff2" },
+        { "path": "fonts/fluent-regular-v1.1.293.woff2", "addressable": true, "contentType": "application/x-font-woff2" }
     ],
     "scopes":[
         "vso.work",

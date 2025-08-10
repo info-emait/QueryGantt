@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <link href="../css/azure-devops-ui.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
+        <link href="../css/#{Extension.Id}#-configuration.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
+    </head>
+    <body class="querygantt-configuration flex-column">
+        <div class="flex-row flex-grow v-scroll-auto">
+            <div class="flex-column full-width">
+                <label class="bolt-formitem-label body-m">Fields:</label>
+                <!-- ko foreach: fields -->
+                <label class="bolt-checkbox bolt-formitem-label body-m flex-row">
+                    <input type="checkbox" data-bind="checkedValue: value, checked: $parent.fieldsValue" />
+                    <span data-bind="text: name"></span>
+                </label>
+                <!-- /ko -->
+                <span class="bolt-formitem-message body-xs">Select which fields should be visible</span>
+            </div>
+        </div>
+        <div class="flex-wrap bolt-button-group flex-row margin-top-16 margin-bottom-16 justify-end">
+            <button class="bolt-button enabled primary bolt-focus-treatment" role="button" tabindex="0" type="button"
+                    data-bind="click: save">
+                <span class="bolt-button-text body-m">Save</span>
+            </button>
+            <button class="bolt-button enabled bolt-focus-treatment" role="button" tabindex="0" type="button"
+                    data-bind="click: close">
+                <span class="bolt-button-text body-m">Close</span>
+            </button>            
+        </div>        
+        <script data-main="../js/#{Extension.Id}#-configuration.js?v=#{Project.AssemblyInfo.Version}#" src="../js/libs/require.js"></script>
+    </body>
+</html>
