@@ -42,6 +42,8 @@ require({
                 name: "Won't have", value: 4, color: "666666"
             }],
             fields: [{
+                name: "Id", value: "id"
+            }, {
                 name: "Area Path", value: "areaPath"
             }, {
                 name: "Assigned To", value: "assignedTo"
