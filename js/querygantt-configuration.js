@@ -3,6 +3,9 @@ require({
     packages: [{
         name: "my",
         location: "./"
+    }, {
+        name: "services",
+        location: "./services"
     }],
     paths: {
         "knockout": "./libs/knockout",

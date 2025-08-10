@@ -12,6 +12,9 @@ require({
     }, {
         name: "img",
         location: "../img"
+    }, {
+        name: "services",
+        location: "./services"
     }],
     paths: {
         "knockout": "./libs/knockout",
