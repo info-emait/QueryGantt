@@ -11,7 +11,7 @@
             <div class="page-content flex-column flex-grow">
                 <my-spinner params="isVisible: isLoading"></my-spinner>
                 <my-message params="text: message"></my-message>
-                <div class="flex-row margin-top-16" style="display: none" data-bind="visible: wits().length">
+                <div class="flex-row margin-top-16" style="display: none; position: sticky; top: 0; z-index: 3" data-bind="visible: wits().length">
                     <my-filter params="value: filter,
                                        assignees: assigneesFilter,
                                        states: statesFilter,
