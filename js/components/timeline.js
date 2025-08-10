@@ -634,62 +634,70 @@ define([
             return "";
         }
 
-        // Prepare tags
-        var tags = !showFields.includes("tags") || !record.tags.length ? "" : record.tags.map((t) => "<div>" + t + "</div>").join("");
+        const type = ((typesOther.find((to) => to.project === record.project) || {}).types || types).find((t) => t.name === record.type) || {};
+        const state = type.states.find((s) => s.name === record.state) || {};
 
-        // Prepare dates
-        var dates = !showFields.includes("dates") ? "" : [
-            getFormattedDate(record.startDate) || "×",
-            getFormattedDate(record.endDate) || "×"
-        ].filter((d) => d.length).join(" - ");
+        const result = [
+            `${icons[type.icon.url] || ""}`,
+            `<a class="my-timeline-group__title ${record.isCompleted ? "my-timeline-group__title--completed" : ""}" data-id="${record.id}" title="${record.title}" href="${record.url.replace('/_apis/wit/workItems/', '/_workitems/edit/')}">${showFields.includes("id") ? "<span class='font-weight-semibold'>#" + record.id + "</span>&nbsp" : ""}${record.content}</a>`,
+            `<div class="my-timeline-group__state" title="${record.state}" style="background-color: #${state.color}"></div>`
+        ];
 
-        // Prepare assigned to
-        var assignedTo = !showFields.includes("assignedTo") ? "" : record.assignedTo || "";
+        if (showFields.includes("tags")) {
+            const tags = record.tags.length ? record.tags.map((t) => `<div>${t}</div>`).join("") : "";
+            result.push(`<div class="my-timeline-group__tags">${tags}</div>`);
+        }
 
-        // Prepare priority
-        var priority = priorities.find((p) => p.value === record.priority) || {};
-        
-        // Prepare type
-        var type = ((typesOther.find((to) => to.project === record.project) || {}).types || types).find((t) => t.name === record.type) || {};
+        result.push(`<div class="my-timeline-group__dividier"></div>`);
 
-        // Prepare state
-        var state = type.states.find((s) => s.name === record.state) || {};
+        if (showFields.includes("assignedTo")) {
+            result.push(`<div class="my-timeline-group__content my-timeline-group__content--assignedto text-left text-ellipsis margin-left-8">${record.assignedTo || ""}</div>`);
+        }
         
-        // Prepare parent title
-        var parentTitle = !showFields.includes("parentTitle") ? "" : record.parentTitle || "";
+        if (showFields.includes("project")) {
+            result.push(`<div class="my-timeline-group__content my-timeline-group__content--project text-left text-ellipsis margin-left-8" title="Project">${record.project}</div>`);
+        }
         
-        // Prepare project
-        var project = !showFields.includes("project") ? "" : record.project || "";
-        var areaPath = !showFields.includes("areaPath") ? "" : record.areaPath || "";
-        var nodeName = !showFields.includes("nodeName") ? "" : record.nodeName || "";
-        var remainingWork = !showFields.includes("remainingWork") ? "" : record.remainingWork + " h" || "";
-        var iterationPath = !showFields.includes("iterationPath") ? "" : record.iterationPath || "";
+        if (showFields.includes("areaPath")) {
+            result.push(`<div class="my-timeline-group__content my-timeline-group__content--areapath text-left text-ellipsis margin-left-8" title="Area Path">${record.areaPath}</div>`);
+        }
         
-        // Prepare duration
-        var duration = !showFields.includes("duration") ? "" : `${record.duration} day(s)` || "";
+        if (showFields.includes("nodeName")) {
+            result.push(`<div class="my-timeline-group__content my-timeline-group__content--nodename text-left text-ellipsis margin-left-8" title="Node Name">${record.nodeName}</div>`);
+        }
+
+        if (showFields.includes("iterationPath")) {
+            result.push(`<div class="my-timeline-group__content my-timeline-group__content--iterationpath text-left text-ellipsis margin-left-8" title="Iteration Path">${record.iterationPath}</div>`);
+        }
+        
+        if (showFields.includes("parentTitle")) {
+            result.push(`<div class="my-timeline-group__content my-timeline-group__content--parent text-left text-ellipsis margin-left-8" title="Parent">${record.parentTitle || ""}</div>`);
+        }
+
+        if (showFields.includes("remainingWork")) {
+            result.push(`<div class="my-timeline-group__content my-timeline-group__content--remainingwork text-right margin-left-8" title="Remaining Work">${record.remainingWork + " h" || ""}</div>`);
+        }
+
+        if (showFields.includes("dates")) {
+            result.push(`<div class="my-timeline-group__content my-timeline-group__content--dates text-right margin-left-8" title="Dates">${getFormattedDate(record.startDate) || "×"} - ${getFormattedDate(record.endDate) || "×"}</div>`);
+        }
+
+        if (showFields.includes("duration")) {
+            result.push(`<div class="my-timeline-group__content my-timeline-group__content--duration text-right margin-left-8" title="Duration">${record.duration} day(s)</div>`);
+        }
+
+        const priority = priorities.find((p) => p.value === record.priority) || {};
+        result.push(`<div class="my-timeline-group__state my-timeline-group__state--square" title="${priority.name}" style="background-color: #${priority.color}"></div>`);
+
+        result.push(
+            `<div class="my-timeline-group__checkbox fluent-icons-enabled ${record.selected ? "my-timeline-group__checkbox--selected" : ""}" title="Select item" data-group-id="${record.id}" data-noexport="true">
+                <span aria-hidden="true" class="flex-noshrink fabric-icon large"></span>
+             </div>`);
 
         // Create element
         let el = global.document.createElement("div");
         el.classList.add("my-timeline-group");
-        el.innerHTML = 
-            `${icons[type.icon.url] || ""}
-             <a class="my-timeline-group__title ${record.isCompleted ? "my-timeline-group__title--completed" : ""}" data-id="${record.id}" title="${record.title}" href="${record.url.replace('/_apis/wit/workItems/', '/_workitems/edit/')}">${record.content}</a>
-             <div class="my-timeline-group__state" title="${record.state}" style="background-color: #${state.color}"></div>
-             <div class="my-timeline-group__tags">${tags}</div>
-             <div class="my-timeline-group__dividier"></div>
-             <div class="my-timeline-group__assignedto">${assignedTo}</div>
-             <div class="my-timeline-group__dates" title="Project">${project}</div>
-             <div class="my-timeline-group__dates" title="Area Path">${areaPath}</div>
-             <div class="my-timeline-group__dates" title="Node Name">${nodeName}</div>
-             <div class="my-timeline-group__dates" title="Remaining Work">${remainingWork}</div>
-             <div class="my-timeline-group__dates" title="Itteration Path">${iterationPath}</div>
-             <div class="my-timeline-group__dates" title="Parent">${parentTitle}</div>
-             <div class="my-timeline-group__dates" title="Dates">${dates}</div>
-             <div class="my-timeline-group__dates" title="Duration">${duration}</div>
-             <div class="my-timeline-group__state my-timeline-group__state--square" title="${priority.name}" style="background-color: #${priority.color}"></div>
-             <div class="my-timeline-group__checkbox fluent-icons-enabled ${record.selected ? "my-timeline-group__checkbox--selected" : ""}" title="Select item" data-group-id="${record.id}" data-noexport="true">
-                <span aria-hidden="true" class="flex-noshrink fabric-icon large"></span>
-             </div>`;
+        el.innerHTML = result.join("");
 
         el.querySelector(".my-timeline-group__title").addEventListener("pointerdown", vm._onGroupTitleSelect.bind(vm), false);
         el.querySelector(".my-timeline-group__checkbox").addEventListener("pointerdown", vm._onGroupSelect.bind(vm), false);
@@ -762,11 +770,15 @@ define([
      * @param {Date} d Date object.
      */
     let getFormattedDate = function (d) {
-        if (!d || ((d + "") === "Invalid Date")) {
+        if (!(d instanceof Date) || isNaN(d)) {
             return "";
         }
-
-        return [d.getMonth() + 1, d.getDate(), d.getFullYear()].join("/");
+        
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear();
+        
+        return `${day}/${month}/${year}`;
     };
 
 

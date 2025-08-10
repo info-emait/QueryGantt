@@ -7,110 +7,172 @@
         <link href="../css/#{Extension.Id}#-tab.css?v=#{Project.AssemblyInfo.Version}#" rel="stylesheet" type="text/css" />
     </head>
     <body class="querygantt-tab" data-bind="attr: { 'data-version': 'v' + version }">
-        <!-- ko if: isLoading -->
-        <div class="querygantt-tab__spinner bolt-spinner flex-column text-center rhythm-vertical-8">
-            <div class="bolt-spinner-circle medium"></div>
-            <div class="bolt-spinner-label">... loading</div>
-        </div>
-        <!-- /ko -->
-        <!-- ko if: !isLoading() -->
-        <div class="flex-row margin-top-16" style="display: none"
-             data-bind="visible: message().length">
-            <div class="flex-self-stretch bolt-messagecard bolt-card flex-column depth-8 bolt-card-white"
-                    style="width: 100%">
-                <div class="bolt-messagebar severity-error">
-                    <div class="bolt-breakpoint relative">
-                        <div class="bolt-breakpoint-container absolute-fill scroll-hidden">
-                            <div class="bolt-breakpoint-observation absolute"></div>
-                        </div>
-                    </div>
-                    <div class="bolt-messagebar-content flex-grow flex-row">
-                        <div class="flex-row">
-                            <div class="bolt-messagebar-icons flex-row">
+        <div class="querygantt-tab__page bolt-page v-scroll-auto flex-column">
+            <div class="page-content flex-column flex-grow">
+                <my-spinner params="isVisible: isLoading"></my-spinner>
+                <my-message params="text: message"></my-message>
+                <div class="flex-row margin-top-16" style="display: none" data-bind="visible: wits().length">
+                    <my-filter params="value: filter,
+                                       assignees: assigneesFilter,
+                                       states: statesFilter,
+                                       tags: tagsFilter,
+                                       areas: areasFilter,
+                                       parents: parentsFilter,
+                                       priorities: prioritiesFilter"></my-filter>
+                </div>
+                <div data-bind="with: zero">
+                    <my-zero-data params="title: title, text: text"></my-zero-data>
+                </div>
+                <div class="flex-row margin-top-16" style="display: none" data-bind="ifnot: isLoading, visible: filteredWits().length">
+                    <div class="flex-grow bolt-table-card bolt-card-with-header bolt-card flex-column depth-8 bolt-card-white">
+                        <div class="bolt-card-header bolt-header bolt-header-with-commandbar bolt-header-with-back-button flex-row flex-noshrink flex-start bolt-default-horizontal-spacing bolt-header-default">
+                            <button class="bolt-header-back-button justify-end bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="0" type="button" title="Expand all"
+                                    data-bind="click: expand, css: { disabled: queryType() === 'flat' }">
                                 <span class="fluent-icons-enabled">
-                                    <span aria-hidden="true" class="bolt-messagebar-icon medium flex-noshrink fabric-icon ms-Icon--Error"></span>
-                                </span>
-                            </div>
-                            <div class="bolt-messagebar-message flex-row flex-wrap flex-grow flex-shrink flex-center body-m word-break"
-                                    data-bind="html: message"></div>
-                        </div>
-                        <div class="bolt-messagebar-buttons flex-noshrink flex-row flex-center flex-self-stretch">
-                            <button class="bolt-messagebar-close-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="0" type="button"
-                                    data-bind="click: function() { this.message('') }">
-                                <span class="fluent-icons-enabled">
-                                    <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Cancel medium"></span>
+                                    <span class="left-icon flex-noshrink fabric-icon ms-Icon--Add"></span>
                                 </span>
                             </button>
+                            <button class="bolt-header-back-button justify-end bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="0" type="button" title="Collapse all"
+                                    data-bind="click: collapse, css: { disabled: queryType() === 'flat' }">
+                                <span class="fluent-icons-enabled">
+                                    <span class="left-icon flex-noshrink fabric-icon ms-Icon--Remove"></span>
+                                </span>
+                            </button>                            
+                            <div class="bolt-header-content-area flex-row flex-grow flex-self-stretch">
+                                <div class="bolt-header-title-area flex-column flex-grow scroll-hidden">
+                                    <div class="bolt-header-title-row flex-row flex-baseline">
+                                        <div class="bolt-header-title body-xl m" role="heading" data-bind="text: query.name + ' (' + filteredWits().length + ')'"></div>
+                                    </div>
+                                </div>
+                                <div class="bolt-header-commandbar bolt-button-group flex-row justify-end">
+                                    <div class="bolt-header-commandbar-button-group flex-row flex-center scroll-hidden">
+                                        <button class="bolt-header-command-item-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment margin-left-8" tabindex="0" type="button" title="Refresh data"
+                                                data-bind="click: refresh">
+                                            <span class="fluent-icons-enabled">
+                                                <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Refresh medium"></span>
+                                            </span>
+                                        </button>
+                                        <button class="bolt-header-command-item-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment margin-left-8" tabindex="0" type="button" title="Zoom out"
+                                                data-bind="click: zoomOut">
+                                            <span class="fluent-icons-enabled">
+                                                <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--CircleMinus medium"></span>
+                                            </span>
+                                        </button>
+                                        <button class="bolt-header-command-item-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment margin-left-8" tabindex="0" type="button" title="Reset zoom"
+                                                data-bind="click: zoomReset">
+                                            <span class="fluent-icons-enabled">
+                                                <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--CircleDisc medium"></span>
+                                            </span>
+                                        </button>
+                                        <button class="bolt-header-command-item-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment margin-left-8" tabindex="0" type="button" title="Zoom in"
+                                                data-bind="click: zoomIn">
+                                            <span class="fluent-icons-enabled">
+                                                <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--CirclePlus medium"></span>
+                                            </span>
+                                        </button>
+                                        <button class="bolt-header-command-item-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment margin-left-8" tabindex="0" type="button" title="Move left"
+                                                data-bind="click: moveLeft">
+                                            <span class="fluent-icons-enabled">
+                                                <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--ChevronLeft medium"></span>
+                                            </span>
+                                        </button>
+                                        <button class="bolt-header-command-item-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment margin-left-8" tabindex="0" type="button" title="Move right"
+                                                data-bind="click: moveRight">
+                                            <span class="fluent-icons-enabled">
+                                                <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--ChevronRight medium"></span>
+                                            </span>
+                                        </button>
+                                        <button class="bolt-header-command-item-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment margin-left-8" tabindex="0" type="button" title="Open configuration"
+                                                data-bind="click: openSettings">
+                                            <span class="fluent-icons-enabled">
+                                                <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Settings medium"></span>
+                                            </span>
+                                        </button>
+                                        <button class="bolt-header-command-item-button bolt-button bolt-icon-button enabled bolt-focus-treatment margin-left-8" tabindex="0" type="button"
+                                                data-bind="click: download">
+                                            <span class="fluent-icons-enabled">
+                                                <span class="left-icon flex-noshrink fabric-icon ms-Icon--Download medium"></span>
+                                            </span>
+                                            <span class="bolt-button-text body-m">XLSX</span>
+                                        </button>                                        
+                                        <button class="bolt-header-command-item-button bolt-button bolt-icon-button enabled bolt-focus-treatment margin-left-8" tabindex="0" type="button"
+                                                data-bind="click: downloadImage">
+                                            <span class="fluent-icons-enabled">
+                                                <span class="left-icon flex-noshrink fabric-icon ms-Icon--Download medium"></span>
+                                            </span>
+                                            <span class="bolt-button-text body-m">PNG</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bolt-card-content flex-row flex-grow">
+                            <div class="h-scroll-auto bolt-table-container flex-grow" data-bind="if: filteredWits().length">
+                                <my-timeline params="items: filteredWits,
+                                                    selectedItem: current,
+                                                    states: states, 
+                                                    priorities: priorities, 
+                                                    types: types, 
+                                                    typesOther: typesOther, 
+                                                    icons: icons, 
+                                                    showFields: showFields,
+                                                    callbacks: {
+                                                        openNewWindow: openNewWindow.bind($root),
+                                                        updateWit: updateWit.bind($root)
+                                                    },
+                                                    actions: {
+                                                        expand: _timeline_expandAction,
+                                                        collapse: _timeline_collapseAction,
+                                                        moveLeft: _timeline_moveLeftAction,
+                                                        moveRight: _timeline_moveRightAction,
+                                                        zoomOut: _timeline_zoomOutAction,
+                                                        zoomIn: _timeline_zoomInAction,
+                                                        zoomReset: _timeline_zoomResetAction,
+                                                        focus: _timeline_focusAction,
+                                                        close: _timeline_closeAction,
+                                                        refresh: _timeline_refreshAction
+                                                    }"></my-timeline>
+                            </div>
                         </div>
                     </div>
                 </div>
+
+                <!-- ko if: !isLoading() -->
+                <div class="querygantt-tab__header">
+                    <my-header params="selectedItem: current,
+                                    showFields: showFields,
+                                    title: title,
+                                    queryType: queryType,
+                                    fields: fields,
+                                    callbacks: {
+                                            download: download.bind($root),
+                                            downloadImage: downloadImage.bind($root),
+                                            expand: expand.bind($root),
+                                            collapse: collapse.bind($root),
+                                            moveLeft: moveLeft.bind($root),
+                                            moveRight: moveRight.bind($root),
+                                            zoomOut: zoomOut.bind($root),
+                                            zoomIn: zoomIn.bind($root),
+                                            zoomReset: zoomReset.bind($root),
+                                            refresh: refresh.bind($root)
+                                    }"></my-header>
+                    <my-workitem params="selectedItem: current,
+                                    title: title,
+                                    types: types,
+                                    typesOther: typesOther,
+                                    callbacks: {
+                                            focus: focus.bind($root),
+                                            close: close.bind($root),
+                                            edit: edit.bind($root)
+                                    }"></my-workitem>
+                </div>
+                <div class="querygantt-tab__footer flex-row flex-wrap padding-top-16 justify-space-around">
+                    <my-legend params="items: states, title: 'States:'"></my-legend>
+                    <my-legend params="items: priorities, title: 'Priorities:', classes: 'my-legend--square'"></my-legend>
+                </div>
+                <!-- /ko -->
             </div>
         </div>
-        <div class="querygantt-tab__header">
-            <my-header params="selectedItem: current,
-                               showFields: showFields,
-                               title: title,
-                               filter: filter,
-                               queryType: queryType,
-                               shareLink: shareLink,
-                               fields: fields,
-                               callbacks: {
-                                    download: download.bind($root),
-                                    downloadImage: downloadImage.bind($root),
-                                    expand: expand.bind($root),
-                                    collapse: collapse.bind($root),
-                                    moveLeft: moveLeft.bind($root),
-                                    moveRight: moveRight.bind($root),
-                                    zoomOut: zoomOut.bind($root),
-                                    zoomIn: zoomIn.bind($root),
-                                    zoomReset: zoomReset.bind($root),
-                                    refresh: refresh.bind($root)
-                               }"></my-header>
-            <my-workitem params="selectedItem: current,
-                               title: title,
-                               types: types,
-                               typesOther: typesOther,
-                               callbacks: {
-                                    focus: focus.bind($root),
-                                    close: close.bind($root),
-                                    edit: edit.bind($root)
-                               }"></my-workitem>
-        </div>
-        <div class="querygantt-tab__body" data-bind="if: filteredWits().length">
-            <!-- ko if: current() -->
-            <span data-bind="text: JSON.stringify(current())" style="display: none"></span>
-            <!-- /ko -->
-            <my-timeline params="items: filteredWits,
-                                 selectedItem: current,
-                                 states: states, 
-                                 priorities: priorities, 
-                                 types: types, 
-                                 typesOther: typesOther, 
-                                 icons: icons, 
-                                 showFields: showFields,
-                                 callbacks: {
-                                    openNewWindow: openNewWindow.bind($root),
-                                    updateWit: updateWit.bind($root)
-                                 },
-                                 actions: {
-                                    expand: _timeline_expandAction,
-                                    collapse: _timeline_collapseAction,
-                                    moveLeft: _timeline_moveLeftAction,
-                                    moveRight: _timeline_moveRightAction,
-                                    zoomOut: _timeline_zoomOutAction,
-                                    zoomIn: _timeline_zoomInAction,
-                                    zoomReset: _timeline_zoomResetAction,
-                                    focus: _timeline_focusAction,
-                                    close: _timeline_closeAction,
-                                    refresh: _timeline_refreshAction
-                                 }"></my-timeline>
-        </div>
-        <div class="querygantt-tab__footer justify-space-around">
-            <my-count params="items: filteredWits"></my-count>
-            <my-legend params="items: states, title: 'States:'"></my-legend>
-            <my-legend params="items: priorities, title: 'Priorities:', classes: 'my-legend--square'"></my-legend>
-        </div>
-        <!-- /ko -->
         <script data-main="../js/#{Extension.Id}#-tab.js?v=#{Project.AssemblyInfo.Version}#" src="../js/libs/require.js"></script>
     </body>
 </html>

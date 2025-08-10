@@ -26,7 +26,6 @@ define([
         this.showFields = ko.isObservableArray(args.showFields) ? args.showFields : ko.observableArray(args.showFields || []);
         this.filter = ko.isObservable(args.filter) ? args.filter : ko.observable(args.filter || "");
         this.queryType = ko.isObservable(args.queryType) ? args.queryType : ko.observable(args.queryType || "");
-        this.shareLink = ko.isObservable(args.shareLink) ? args.shareLink : ko.observable(args.shareLink || "");
         this.fields = ko.isObservableArray(args.fields) ? args.fields : ko.observableArray(args.fields || []);
 
         this.fieldsPopupTarget = ko.observable(null);
@@ -242,16 +241,7 @@ define([
                                     <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Download medium"></span>
                                 </span>
                                 <span class="bolt-button-text body-m">PNG</span>
-                            </button>
-                            <a aria-roledescription="button" class="bolt-header-command-item-button bolt-button bolt-icon-button enabled bolt-focus-treatment" role="menuitem" tabindex="16"
-                                    title="Shares the Gantt chart using default email client" target="_blank"
-                                    style="text-decoration: none"
-                                    data-bind="attr: { href: shareLink }">
-                                <span class="fluent-icons-enabled">
-                                    <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Share medium"></span>
-                                </span>
-                                <span class="bolt-button-text body-m">Share</span>
-                            </a>                               
+                            </button>                             
                         </div>
                     </div>
                 </div>

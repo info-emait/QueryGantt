@@ -9,19 +9,22 @@ define([
     "dom-to-image",
     "api/index",
     "api/WorkItemTracking/index",
-    "my/components/count",
+    "my/templates/gantt",
+    "text!img/icon_list.txt",
     "my/components/legend",
     "my/components/header",
     "my/components/workitem",
     "my/components/timeline",
-    "my/templates/gantt",
-    "text!img/icon_list.txt"
-], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, Count, Legend, Header, WorkItem, Timeline, ganttTemplate, icon_list) {
+    "my/components/spinner",
+    "my/components/message",
+    "my/components/filter",
+    "my/components/zerodata"
+], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, ganttTemplate, icon_list) {
     //#region [ Fields ]
 
-    var global = (function () { return this; })();
-    var doc = global.document;
-    var cnf = module.config();
+    const global = (function () { return this; })();
+    const doc = global.document;
+    const cnf = module.config();
 
     //#endregion
 
@@ -33,7 +36,7 @@ define([
      * 
      * @param {object} args Arguments.
      */
-    var Model = function (args) {
+    const Model = function (args) {
         console.debug("QueryGanttTabApp()");
 
         this.version = args.version;
@@ -44,8 +47,9 @@ define([
         this.token = null;
         this.path = null;
 
-        this.showFields = ko.observableArray(["duration"]).extend({ rateLimit: { timeout: 1000, method: "notifyWhenChangesStop" } });
-        this.shareLink = ko.observable("");
+        this.zero = ko.observable(null);
+
+        this.showFields = ko.observableArray(Array.isArray(args.showFields) ? args.showFields : ["duration"]).extend({ rateLimit: { timeout: 1000, method: "notifyWhenChangesStop" } });
 
         this.isLoading = ko.observable(true);
         this.types = ko.observableArray([]);
@@ -61,7 +65,15 @@ define([
         this.priorities = ko.observableArray(args.priorities);
         this.fields = ko.observableArray(args.fields);
         this.title = ko.computed(this._getTitle, this);
-        this.filter = ko.observable("").extend({ rateLimit: { timeout: 500, method: "notifyWhenChangesStop" } });
+
+        this.assigneesFilter = ko.observableArray();
+        this.statesFilter = ko.observableArray();
+        this.tagsFilter = ko.observableArray();
+        this.areasFilter = ko.observableArray();
+        this.parentsFilter = ko.observableArray();
+        this.prioritiesFilter = ko.observableArray(["1 - Must have", "2 - Should have", "3 - Could have", "4 - Won't have"]);
+
+        this.filter = ko.observable({});
         this.filteredWits = ko.computed(this._getFilteredWits, this);
 
         this.queryType = ko.observable("");
@@ -79,8 +91,13 @@ define([
         this._timeline_closeAction = ko.observable();
         this._timeline_refreshAction = ko.observable();
 
-        // Subscribes
-        this._onSettingsChangedSubscribe = ko.computed(this._onSettingsChanged, this).extend({ deferred: true });
+        this.updateQueryString = ko.computed(this._updateQueryString, this).extend({ deferred: true });
+
+        this.getAssigneesFilter = ko.computed(this._getAssigneesFilter, this);
+        this.getStatesFilter = ko.computed(this._getStatesFilter, this);
+        this.getTagsFilter = ko.computed(this._getTagsFilter, this);
+        this.getAreasFilter = ko.computed(this._getAreasFilter, this);
+        this.getParentsFilter = ko.computed(this._getParentsFilter, this);
     };
 
     //#endregion
@@ -92,22 +109,10 @@ define([
      * Initialize the application.
      */
     Model.prototype.init = function () {
-        var client = api.getClient(witApi.WorkItemTrackingRestClient);
-        
+        const client = api.getClient(witApi.WorkItemTrackingRestClient);
+
         return client._options.rootPath.then((path) => {
                 this.path = path;
-                return sdk.getService(api.CommonServiceIds.HostNavigationService);
-            })
-            .then((service) => service.getQueryParams())
-            .then((state) => {
-                if (state["showFields"]) {
-                    this.showFields(state["showFields"].split(","));
-                }
-
-                if(state["filter"]) {
-                    this.filter(state["filter"]);
-                }
-
                 return sdk.getAccessToken();
             })
             .then((token) => {
@@ -275,8 +280,6 @@ define([
                     this.icons(tmp);
 
                     this.wits(wits);
-                    // Force to update share link
-                    this._onSettingsChanged();
                 });
             });
     };
@@ -398,38 +401,7 @@ define([
             })
             .then((blob) => api.getClient(witApi.WorkItemTrackingRestClient).createAttachment(blob, this.project.id, `${this.query.name}_${(new Date()).toISOString().split(".").shift().replace(/(-|:)/gi,"")}.xlsx`))
             .then((response) => sdk.getService(api.CommonServiceIds.HostNavigationService).then((service) => service.navigate(response.url)));
-        /*
-        var extension = sdk.getExtensionContext();
-        var baseUri = (function() {return this;})().location.href.split("/_apis/")[0];
-        var uri = [ baseUri, "/_apis/public/gallery/publisher/", extension.publisherId, "/extension/", extension.extensionId, "/", this.version, "/assetbyname/xlsx/gantt.xlsx" ].join("");
-        */
     };
-
-
-    // /**
-    //  * Shares the Gantt chart.
-    //  */
-    // Model.prototype.share = function () {
-    //     this._onSettingsChanged()
-    //         .then(() => sdk.getService(api.CommonServiceIds.HostNavigationService))
-    //         .then((service) => Promise.all([service.getPageRoute(), service.getQueryParams()]))
-    //         .then((response) => {
-    //             var extension = sdk.getExtensionContext();
-    //             var query = response[1];
-    //             var uri = this.path + this.project.name + "/_queries/" + extension.id + "." + extension.extensionId + "-tab" + "/" + this.query.id + "/?" + new URLSearchParams(query).toString();
-
-    //             var link = doc.createElement("a");
-    //             link.style.opacity = "0";
-    //             doc.body.append(link);
-    //             link.href = "mailto:?subject=" 
-    //                 + encodeURIComponent("ddd") 
-    //                 + "&body="
-    //                 + encodeURIComponent(uri)
-    //                 + "\n";
-    //             link.click();
-    //             link.remove();
-    //         });
-    // };
 
 
     /**
@@ -438,7 +410,7 @@ define([
      * @param {string} name Name of the observable which holds the action.
      */
     Model.prototype.action = function (name) {
-        var action = ko.isObservable(this[name]) && this[name]();
+        const action = ko.isObservable(this[name]) && this[name]();
         if (typeof (action) !== "function") {
             console.warn(`App : action() : Action ${name} is not defined.`);
             return;
@@ -550,6 +522,31 @@ define([
 
 
     /**
+     * Opens settings panel.
+     */
+    Model.prototype.openSettings = function () {
+        const fields = this.fields();
+        const fieldsValue = this.showFields();
+
+        sdk.getService(api.CommonServiceIds.HostPageLayoutService).then((host) => {
+            host.openPanel(`${sdk.getExtensionContext().id}.#{Extension.Id}#-configuration`, {
+                title: "Gantt Configuration",
+                lightDismiss: false,
+                configuration: {
+                    fields,
+                    fieldsValue
+                },
+                onClose: (result = {}) => {
+                    if (Array.isArray(result.fieldsValue)) {
+                        this.showFields(result.fieldsValue);
+                    }
+                }
+            });
+        });
+    };
+
+
+    /**
      * Edits the selected work item.
      */
     Model.prototype.edit = function () {
@@ -572,7 +569,12 @@ define([
         this.states.dispose();
         this.title.dispose();
         this.filteredWits.dispose();
-        this._onSettingsChangedSubscribe.dispose();
+        this.updateQueryString.dispose();
+        this.getAssigneesFilter.dispose();
+        this.getStatesFilter.dispose();
+        this.getTagsFilter.dispose();
+        this.getAreasFilter.dispose();
+        this.getParentsFilter.dispose();
     };
 
     //#endregion
@@ -642,84 +644,145 @@ define([
 
 
     /**
+     * Gets list of assignees.
+     */
+    Model.prototype._getAssigneesFilter = function () {
+        const wits = this.wits();
+
+        if (!wits.length) {
+            this.assigneesFilter([]);
+            return;
+        }
+        
+        this.assigneesFilter([...new Set(wits.filter((w) => (w.assignedTo || "").length).map((w) => w.assignedTo))].sort());
+    };
+
+
+    /**
+     * Gets list of states.
+     */
+    Model.prototype._getStatesFilter = function () {
+        const wits = this.wits();
+
+        if (!wits.length) {
+            this.statesFilter([]);
+            return;
+        }
+        
+        this.statesFilter([...new Set(wits.map((w) => w.state))].sort());
+    };
+
+
+    /**
+     * Gets list of tags.
+     */
+    Model.prototype._getTagsFilter = function () {
+        const wits = this.wits();
+
+        if (!wits.length) {
+            this.tagsFilter([]);
+            return;
+        }
+        
+        this.tagsFilter([...new Set(wits.map((w) => w.tags.filter((t) => t.length)).filter((a) => a.length).flat(1))].sort());
+    };
+
+
+    /**
+     * Gets list of areas.
+     */
+    Model.prototype._getAreasFilter = function () {
+        const wits = this.wits();
+
+        if (!wits.length) {
+            this.areasFilter([]);
+            return;
+        }
+        
+        this.areasFilter([...new Set(wits.map((w) => w.nodeName))].sort());
+    };
+
+
+    /**
+     * Gets list of parents.
+     */
+    Model.prototype._getParentsFilter = function () {
+        const wits = this.wits();
+
+        if (!wits.length) {
+            this.parentsFilter([]);
+            return;
+        }
+        
+        this.parentsFilter([...new Set(wits.map((w) => w.parentTitle))].sort());
+    };
+
+
+    /**
      * Gets the work items filtered by the quick filter.
      */
     Model.prototype._getFilteredWits = function () {
-        //var filter = (this.filter() || "").toLowerCase().toAccentInsensitive();
-        var filter = this.filter() || "";
-        var wits = this.wits();
+        const wits = this.wits();
+        const filter = this.filter();
         
-        if (!filter.length) {
-            return wits;
+        let items = wits;
+
+        if (filter.keywords) {
+            const id = Number(filter.keywords);
+            if (Number.isInteger(id) && (filter.keywords !== "")) {
+                items = items.filter((i) => i.id === id);
+            }
+            else {
+                items = items.filter((i) => i.title.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().includes(filter.keywords));
+            }
         }
 
-        let query = filter.parseFilter();
-        let predicates = query.map((q) => {
-            // Joining operators
-            if (q.operator) {
-                return q.operator === "OR" ? " || " :
-                       q.operator === "AND" ? " && " : " && ";
-            }
-
-            // For basic match we search within the title attribute
-            if ("match" === q.key) {
-                return q.accept ? `(wit.title.toLowerCase().toAccentInsensitive().indexOf("${q.accept.toLowerCase().toAccentInsensitive()}") !== -1)` : 
-                                  `(wit.title.toLowerCase().toAccentInsensitive().indexOf("${q.reject.toLowerCase().toAccentInsensitive()}") === -1)`;
-            }
-            // Search only by the title
-            if ("title" === q.key) {
-                return `(wit.title.toLowerCase().toAccentInsensitive().indexOf("${q.value.toLowerCase().toAccentInsensitive()}") !== -1)`;
-            }
-            // Search by tags
-            if ("tag" === q.key) {
-                return `((wit.tags || []).map((t) => t.toLowerCase().toAccentInsensitive()).includes("${q.value.toLowerCase().toAccentInsensitive()}"))`;
-            }
-            // Search by state
-            if ("state" === q.key) {
-                return `(wit.state.toLowerCase().toAccentInsensitive().replace(/\\s/g,'') === "${q.value.toLowerCase().toAccentInsensitive()}".replace(/\\s/g,''))`;
-            }
-            // Search by priority
-            if ("priority" === q.key) {
-                return `(wit.priority == ${q.value})`;
-            }
-            // Search by assigned to
-            if ("assignedto" === q.key) {
-                return `(wit.assignedTo.toLowerCase().toAccentInsensitive().replace(/\\s/g,'').indexOf("${q.value.toLowerCase().toAccentInsensitive()}".replace(/\\s/g,'')) !== -1)`;
-            }
-            // Search by target date
-            if ("targetdate" === q.key) {
-                return `(wit.targetDate && wit.targetDate.toISOString().split("T")[0] <= "${q.value === '@today' ? (new Date()).toISOString().split("T")[0] : q.value}")`;
-            }
-            // Search by start date
-            if ("startdate" === q.key) {
-                return `(wit.startDate && wit.startDate.toISOString().split("T")[0] >= "${q.value === '@today' ? (new Date()).toISOString().split("T")[0] : q.value}")`;
-            }
-            // Search only by the parent
-            if ("parent" === q.key) {
-                return `(wit.parentTitle.toLowerCase().toAccentInsensitive().indexOf("${q.value.toLowerCase().toAccentInsensitive()}") !== -1)`;
-            }
-            // Search only by the node name
-            if ("nodename" === q.key) {
-                return `(wit.nodeName.toLowerCase().toAccentInsensitive().indexOf("${q.value.toLowerCase().toAccentInsensitive()}") !== -1)`;
-            }
-        });
-
-        // Remove the last logical operator
-        if ((predicates[predicates.length - 1] === " && ") || (predicates[predicates.length - 1] === " || ")) {
-            predicates.pop();
+        if (Array.isArray(filter.assignees) && filter.assignees.length) {
+            items = items.filter((i) => i.assignedTo && filter.assignees.includes(i.assignedTo));
         }
 
-        // Create funcion
-        let lambda = Function("wit", "return " + predicates.join("") + ";");
-
-        try {
-            return wits.filter((w) => lambda(w));
-        } 
-        catch (err) {
-            console.warn(`App : _getFilteredWits() : Invalid filter has been entered.`);
-            console.warn(err);
-            return [];
+        if (Array.isArray(filter.states) && filter.states.length) {
+            items = items.filter((i) => filter.states.includes(i.state));
         }
+
+        if (Array.isArray(filter.tags) && filter.tags.length) {
+            items = items.filter((i) => {
+                const tags = i.tags.filter((a) => a.length);
+                if (!tags.length) {
+                    return false;
+                }
+
+                return tags.some((t) => filter.tags.includes(t));
+            });
+        }
+
+        if (Array.isArray(filter.areas) && filter.areas.length) {
+            items = items.filter((i) => filter.areas.includes(i.nodeName));
+        }
+
+        if (Array.isArray(filter.parents) && filter.parents.length) {
+            items = items.filter((i) => filter.parents.includes(i.parentTitle));
+        }
+
+        if (Array.isArray(filter.priorities) && filter.priorities.length) {
+            items = items.filter((i) => filter.priorities.includes(i.priority));
+        }
+
+        if (filter.period) {
+            if (filter.period.from) {
+                items = items.filter((i) => (i.startDate instanceof Date) && i.startDate.getTime() >= filter.period.from.getTime());
+            }
+            if (filter.period.to) {
+                const endOfDay = new Date(filter.period.to);
+                endOfDay.setHours(23, 59, 59, 999);
+
+                items = items.filter((i) => (i.targetDate instanceof Date) && i.targetDate.getTime() <= endOfDay);
+            }
+        }
+
+        this.zero(wits.length && !items.length ? { title: "No results match the query", text: "Please change the filtering criteria." } : null);
+
+        return items;
     };
     
 
@@ -738,44 +801,30 @@ define([
 
         return itm.filter((i) => i.source).map((i) => this._getPaths(relations, i.source.id).map((p) => p + "/" + id));
     };
-
+    
 
     /**
-     * Handles the change of settings and save them into the url.
-     **/
-    Model.prototype._onSettingsChanged = function () {
-        var showFields = this.showFields();
-        var filter = this.filter();
-
-        // Create share link
-        sdk.getService(api.CommonServiceIds.HostNavigationService)
-            .then((service) => service.getQueryParams())
-            .then((state) => {
-                state.showFields = showFields.join(",");
-                state.filter = filter;
-
-                var extension = sdk.getExtensionContext();
-                var uri = this.path + this.project.name + "/_queries/" + extension.id + "." + extension.extensionId + "-tab" + "/" + this.query.id + "/?" + new URLSearchParams(state).toString();
-
-                this.shareLink("mailto:?subject=" 
-                    + encodeURIComponent(this.query.name) 
-                    + "&body="
-                    + encodeURIComponent(uri)
-                    + "\n");
-            });
-
+     * Updates query string to the actual values.
+     */
+    Model.prototype._updateQueryString = function() {
+        const showFields = this.showFields();
+        
         if (ko.computedContext.isInitial()) {
             return;
         }
-     
-        return sdk.getService(api.CommonServiceIds.HostNavigationService)
-            .then((service) => {
-                return service.getQueryParams()
-                    .then((state) => {
-                        state.showFields = showFields.join(",");
-                        state.filter = filter;
-                        service.setQueryParams(state);
-                    });
+
+        sdk.getService(api.CommonServiceIds.HostNavigationService)
+            .then((host) => Promise.all([
+                host, 
+                host.getQueryParams()
+            ]))
+            .then((response) => ({ 
+                host: response[0], 
+                state: response[1]
+            }))
+            .then(({ host, state }) => {
+                state.showFields = showFields.join(",");
+                host.setQueryParams(state);
             });
     };
 
@@ -845,40 +894,48 @@ define([
         });
 
         sdk.ready()
-            .then(() => sdk.getService(api.CommonServiceIds.ProjectPageService))
-            .then((service) => service.getProject())
-            .then((project) => {
+            .then(() => Promise.all([
+                sdk.getService(api.CommonServiceIds.ProjectPageService),
+                sdk.getService(api.CommonServiceIds.HostNavigationService)
+            ]))
+            .then((response) => ({ project: response[0], host: response[1] }))
+            .then(({ project, host }) => Promise.all([
+                project.getProject(),
+                host.getQueryParams()
+            ]))
+            .then((response) => ({ project: response[0], state: response[1] }))
+            .then(({ project, state }) => {
+                let showFields = null;
+                
+                // Read some initial data from query string
+                if (state["showFields"]) {
+                    showFields = state["showFields"].split(",").filter((f) => f.length > 0);
+                }
+
                 // Create application model
-                var model = new Model({
+                const model = new Model({
                     version: cnf.version,
                     priorities: cnf.priorities,
                     fields: cnf.fields,
                     user: sdk.getUser().displayName,
                     project: project,
-                    query: sdk.getConfiguration().query
+                    query: sdk.getConfiguration().query,
+                    showFields
                 });
-                console.debug(model);
+                console.debug("QueryGanttTabApp : ready() : %o", model);
                 
                 // Register tab
-                sdk.register("#{Extension.Id}#-tab", function () {                
-                    return model;
-                });
+                sdk.register("#{Extension.Id}#-tab", () => model);
 
                 // Start application and init application
                 ko.applyBindings(model, doc.body);
                 sdk.notifyLoadSucceeded();
-                model.init().then(() => model.isLoading(false));
+                model.init().then(() => {
+                    model.isLoading(false);
+                    console.debug("QueryGanttTabApp is running.");
+                });
         });
     });
 
     //#endregion
 });
-
-/**
- * Custom Section
- * 
- * "type": "ms.vss-releaseManagement-web.release-summary-section",
- * "targets": [
- *     "ms.vss-releaseManagement-web.release-details-summary-tab"
- * ],
- */
