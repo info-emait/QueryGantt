@@ -21,13 +21,13 @@
         "requirejs": "2.3.7",
         "requirejs-text": "2.0.16",
         "knockout": "3.5.1",
-        "vis-timeline": "7.7.3",
+        "vis-timeline": "8.2.1",
         "timeline-arrows": "4.6.0",
         "dom-to-image": "2.6.0",
         "moment": "2.30.1",
         "@eyeseetea/xlsx-populate": "4.3.1",
         "azure-devops-extension-sdk": "4.0.2",
-        "azure-devops-extension-api": "4.250.0",
-        "azure-devops-ui": "2.254.1"
+        "azure-devops-extension-api": "4.258.0",
+        "azure-devops-ui": "2.259.0"
     }
 }
