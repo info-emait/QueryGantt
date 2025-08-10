@@ -1,0 +1,23 @@
+.bolt-filterbar {
+    margin: 0;
+    position: relative;
+    overflow: visible;
+    z-index: 3;
+
+    &__item {
+        height: rem(30px);
+        line-height: rem(30px);
+        padding: 0 rem(10px);
+        font-size: rem(14px);
+
+        &--checkbox {
+            input {
+                margin: rem(2px) rem(8px) 0 0;
+            }
+        }
+
+        &:hover {
+            background-color: var(--component-grid-row-hover-color,rgba(0, 0, 0, .02));
+        }
+    }
+}

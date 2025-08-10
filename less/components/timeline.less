@@ -22,9 +22,6 @@
         &__title {
             cursor: pointer;
             white-space: nowrap;
-            // max-width: rem(400px);
-            // overflow: hidden;
-            // text-overflow: ellipsis;
             text-decoration: none;
 
             &--completed {
@@ -44,11 +41,13 @@
 
             > div {
                 font-size: rem(12px);
-                padding: rem(2px) rem(6px);
-                color: var(--text-secondary-color);
-                background-color: rgba(var(--palette-primary-tint-40,239, 246, 252), 1);
+                padding: rem(2px) rem(8px);
+                background-color: rgba(var(--palette-primary-tint-30, 222, 236, 249), 1);
+                color: var(--text-primary-color, rgba(0, 0, 0, .9));
                 line-height: rem(16px);
                 white-space: nowrap;
+                border-radius: rem(10px);
+                margin-top: rem(4px);
 
                 + div {
                     margin-left: rem(8px);
@@ -69,17 +68,52 @@
             }
         }
 
-        &__dates,
-        &__assignedto {
+        &__content {
             color: var(--text-secondary-color);
             white-space: nowrap;
-            margin-left: rem(10px);
+
+            &--duration {
+                width: rem(70px);
+            }
+            
+            &--dates {
+                width: rem(150px);
+            }
+
+            &--parent {
+                width: rem(300px);
+            }
+            
+            &--iterationpath {
+                width: rem(180px);
+            }
+                        
+            &--remainingwork {
+                width: rem(50px);
+            }
+
+            &--nodename {
+                width: rem(180px);
+            }
+            
+            &--areapath {
+                width: rem(300px);
+            }
+            
+            &--project {
+                width: rem(130px);
+            }
+            
+            &--assignedto {
+                width: rem(125px);
+            }
         }
 
         &__checkbox {
             width: rem(24px);
             height: rem(24px);
-            color: var(--communication-foreground);
+            //color: var(--communication-foreground);
+            color: var(--communication-background, rgba(0, 120, 212, 1));
             visibility: hidden;
             cursor: pointer;
 
@@ -106,7 +140,7 @@
 
                 > span {
                     &:before {
-                        font-family: "FluentFilled";
+                        font-family: @font-family-icons-filled;
                         content: "\f27c";
                     }
                 }
@@ -126,6 +160,7 @@
     .vis {
         &-timeline {
             border-radius: rem(3px);
+            border: 1px solid transparent;
         }
 
         &-time-axis {
@@ -148,6 +183,11 @@
                 &.vis-saturday,
                 &.vis-sunday {
                     background: rgba(var(--palette-accent1-light));
+                }
+
+                &.vis-minor,
+                &.vis-major {
+                    border-color: var(--component-grid-cell-bottom-border-color, rgba(234, 234, 234, 1));
                 }
             }
         }
@@ -323,6 +363,28 @@
             &.vis-selected {
                 border-color: var(--component-grid-focus-border-color) !important;
                 border-width: 2px;
+            }
+        }
+
+        &-labelset {
+            .vis-label {
+                border-bottom: 1px solid var(--component-grid-cell-bottom-border-color, rgba(234, 234, 234, 1));
+            }
+        }
+
+        &-foreground {
+            .vis-group {
+                border-bottom: 1px solid var(--component-grid-cell-bottom-border-color, rgba(234, 234, 234, 1));
+            }
+        }
+
+        &-panel {
+            &.vis-center, 
+            &.vis-left, 
+            &.vis-right, 
+            &.vis-top, 
+            &.vis-bottom {
+                border: 1px var(--component-grid-cell-bottom-border-color, rgba(234, 234, 234, 1));
             }
         }
     }

@@ -1,0 +1,43 @@
+@import "_variables.less";
+
+.bolt-checkbox {
+    margin-bottom: 0;
+    line-height: rem(30px);
+    cursor: pointer;
+
+    > input {
+        margin-left: 0;
+        display: none;
+
+        + span {
+            &:before {
+                font-family: @font-family-icons-regular;
+                content: "\e7eb";
+                font-size: rem(24px);
+                position: relative;
+                top: rem(6px);
+                margin-right: 8px;
+            }
+        }
+
+        &:checked {
+            + span {
+                &:before {
+                    color: var(--communication-background, rgba(0, 120, 212, 1));
+                    font-family: @font-family-icons-filled;
+                    content: "\f27c";
+                }
+            }
+        }
+    }
+
+    &:hover {
+        > input {
+            + span {
+                &:before {
+                    color: var(--communication-background, rgba(0, 120, 212, 1));
+                }
+            }
+        }
+    }
+}

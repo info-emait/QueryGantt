@@ -11,10 +11,16 @@ html, body {
 }
 
 .querygantt-tab {
-    display: flex;
-    flex-direction: column;
     background: var(--background-color);
-    padding: 0 rem(20px) rem(20px) rem(20px);
+
+    &__page {
+        width: 100%;
+
+        .page-content {
+            padding-left: 4px;
+            padding-right: 4px;
+        }   
+    }
 
     b {
         font-weight: 600;
@@ -36,11 +42,7 @@ html, body {
     }
 
     &__footer {
-        display: flex;
-        flex-direction: row;
-        flex-wrap: wrap;
         line-height: rem(24px);
-        padding-top: rem(16px);
         font-size: rem(14px);
         position: sticky;
         bottom: 0;
@@ -56,7 +58,9 @@ html, body {
 }
 
 @import "icons.less";
-@import "components/count.less";
+@import "bolt-filterbar.less";
+@import "bolt-filterbar.less";
 @import "components/legend.less";
+@import "components/zerodata.less";
 @import "components/header.less";
 @import "components/timeline.less";
