@@ -271,7 +271,8 @@ define([
         el.setAttribute("data-mytimeline-styles", "true");
         el.innerHTML = types.map((t) => 
             `.my-timeline-item--${t.name.toLowerCase().replace(/\s+/g,"-")} { 
-                background-color: #${t.color}; 
+                background-color: #${t.color};
+                color: #${textColorForBackground(t.color)};
              }
              
              .my-timeline-item--${t.name.toLowerCase().replace(/\s+/g,"-")}.vis-selected {
@@ -282,7 +283,8 @@ define([
             el.innerHTML += "\n\n";
             el.innerHTML += typesOther.map((to) => to.types.map((t) => 
                 `.my-timeline-item--${to.project.toLowerCase().replace(/\s+/g,"")}-${t.name.toLowerCase().replace(/\s+/g,"-")} { 
-                   background-color: #${t.color}; 
+                   background-color: #${t.color};
+                   color: #${textColorForBackground(t.color)};
                  }
                     
                  .my-timeline-item--${to.project.toLowerCase().replace(/\s+/g,"")}-${t.name.toLowerCase().replace(/\s+/g,"-")}.vis-selected {
@@ -789,31 +791,61 @@ define([
      * @param {number} amt Amount. 
      * @returns String representing the new color.
      */
-    var darkenColor = function (col, amt) {
-        var usePound = false;
+    const darkenColor = function (col, amt) {
+        let usePound = false;
         if (col[0] == "#") {
             col = col.slice(1);
             usePound = true;
         }
     
-        var num = parseInt(col,16);
+        const num = parseInt(col,16);
     
-        var r = (num >> 16) + amt;
+        let r = (num >> 16) + amt;
     
         if ( r > 255 ) r = 255;
         else if  (r < 0) r = 0;
     
-        var b = ((num >> 8) & 0x00FF) + amt;
+        let b = ((num >> 8) & 0x00FF) + amt;
     
         if ( b > 255 ) b = 255;
         else if  (b < 0) b = 0;
         
-        var g = (num & 0x0000FF) + amt;
+        let g = (num & 0x0000FF) + amt;
     
         if ( g > 255 ) g = 255;
         else if  ( g < 0 ) g = 0;
     
-        return (usePound?"#":"") + (g | (b << 8) | (r << 16)).toString(16);
+        return (usePound ? "#" : "") + (g | (b << 8) | (r << 16)).toString(16);
+    };
+
+
+    /**
+     * Gets the right text color according to the background color.
+     * 
+     * @param {string} col Color of the background.
+     */
+    const textColorForBackground = function (col) {
+        let usePound = false;
+        if (col[0] == "#") {
+            col = col.slice(1);
+            usePound = true;
+        }
+
+        // Make the color 6 character long
+        if (col.length === 3) {
+            col = col.split("").map(c => c + c).join("");
+        }
+
+        // Convert to RGB
+        const r = parseInt(col.substr(0, 2), 16);
+        const g = parseInt(col.substr(2, 2), 16);
+        const b = parseInt(col.substr(4, 2), 16);
+
+        // Calculate the brightnes accroding to  W3C
+        const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+
+        // Threshold value ~128
+        return (usePound ? "#" : "") + (brightness > 128 ? "000" : "fff");
     };
     
     //#endregion
