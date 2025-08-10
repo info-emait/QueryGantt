@@ -4,8 +4,8 @@ define([
     "knockout",
     "sdk",
     "api/index",
-    "api/WorkItemTracking/index"
-], (module, require, ko, sdk, api, witApi) => {
+    "services/data"
+], (module, require, ko, sdk, api, dataService) => {
     //#region [ Fields ]
 
     const global = (function () { return this; })();
@@ -25,7 +25,8 @@ define([
     const Model = function (args = {}) {
         console.debug("QueryGanttConfigurationApp()");
 
-        this.type = "#{Extension.Id}#-configuration-app";
+        this.version = args.version;
+        this.project = args.project;
         this.fields = ko.isObservable(args.fields) ? args.fields : ko.observableArray(args.fields || []);
         this.fieldsValue = ko.isObservable(args.fieldsValue) ? args.fieldsValue : ko.observableArray(args.fieldsValue || []);
         this.panel = args.panel;
@@ -57,9 +58,13 @@ define([
      */
     Model.prototype.save = function() {
         const fieldsValue = this.fieldsValue();
+        const settings = {
+            showFields: fieldsValue
+        };
 
-        this.panel.close({
-            fieldsValue
+        dataService.getManager().then((manager) => {
+            manager.setValue(`gantt_${this.project.id}`, JSON.stringify(settings), { scopeType: "User" });
+            this.panel.close({ fieldsValue });
         });
     };
 
@@ -110,6 +115,7 @@ define([
                 // Create application model
                 const model = new Model({
                     version: cnf.version,
+                    project: project,
                     fields: config.fields,
                     fieldsValue: config.fieldsValue,
                     panel: config.panel
