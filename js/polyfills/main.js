@@ -1,7 +1,5 @@
 ﻿define([
-    "polyfills/string.truncate",
-    "polyfills/string.toAccentInsensitive",
-    "polyfills/string.parseFilter"
+    "polyfills/string.truncate"
 ], function () {
     return;
 });
