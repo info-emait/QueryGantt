@@ -9,6 +9,7 @@ define([
     "dom-to-image",
     "api/index",
     "api/WorkItemTracking/index",
+    "services/data",
     "my/templates/gantt",
     "text!img/icon_list.txt",
     "my/components/legend",
@@ -19,7 +20,7 @@ define([
     "my/components/message",
     "my/components/filter",
     "my/components/zerodata"
-], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, ganttTemplate, icon_list) {
+], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, dataService, ganttTemplate, icon_list) {
     //#region [ Fields ]
 
     const global = (function () { return this; })();
@@ -896,17 +897,31 @@ define([
         sdk.ready()
             .then(() => Promise.all([
                 sdk.getService(api.CommonServiceIds.ProjectPageService),
-                sdk.getService(api.CommonServiceIds.HostNavigationService)
+                sdk.getService(api.CommonServiceIds.HostNavigationService),
+                dataService.getManager()
             ]))
-            .then((response) => ({ project: response[0], host: response[1] }))
-            .then(({ project, host }) => Promise.all([
+            .then((response) => ({ project: response[0], host: response[1], manager: response[2] }))
+            .then(({ project, host, manager }) => Promise.all([
                 project.getProject(),
-                host.getQueryParams()
+                host.getQueryParams(),
+                project.getProject().then((p) => manager.getValue(`gantt_${p.id}`, { scopeType: "User" }))
             ]))
-            .then((response) => ({ project: response[0], state: response[1] }))
-            .then(({ project, state }) => {
+            .then((response) => ({ project: response[0], state: response[1], settings: response[2] }))
+            .then(({ project, state, settings }) => {
                 let showFields = null;
                 
+                // Read some initial data from settings first
+                if (settings) {
+                    try {
+                        const parsedSettings = JSON.parse(settings);
+                        if (parsedSettings.showFields) {
+                            showFields = parsedSettings.showFields;
+                        }
+                    } 
+                    catch (error) {
+                    }
+                }
+
                 // Read some initial data from query string
                 if (state["showFields"]) {
                     showFields = state["showFields"].split(",").filter((f) => f.length > 0);
