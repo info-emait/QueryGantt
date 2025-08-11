@@ -7,27 +7,12 @@ Query Gantt is an extension for the Azure DevOps, which enables you to view the 
 
 # Features
 * Zoom in/out the timeline.
-* View tags, priority, state, assigned to, dates and number of days between the Start Date and Target Date.
-* A single click on the work item displays the title.
-* Zoom to fit the currently selected work item.
+* View tags, priority, state, assigned to, dates, number of days between the Start Date and Target Date, iteration and area path, team project, parent work item.
+* A single click on the work item displays the work item details including description.
 * Download the timeline in the xlsx or png format.
-* Share the timeline via URL.
-* Quick filtering using the "gmail" like filter syntax:
-    * To filter items by title just type any text.
-    * To filter by specific field use prefixes: *title:*, *tag:*, *state:*, *priority:*, *assignedto:*, *targetdate:*, *startdate:*, *parent:*, *nodemane:*.
-    * You can use multiple filter clauses and join them with logical operators *OR*/*AND*.
+* Share the timeline via URL (user needs to copy the URL address in the browser address bar).
+* Filtering by Id, Title, Period, Assigned To, State, Priority, Tags, Area and Parent work item.
 * Visualisation of the Successor-Predecessor relations.
-
-# Quickfilter examples
-* Work items which **Title** contains *"text"*: `text`
-* Work items which **Title** does not contain *"text"*: `-(text)`
-* Work items which **State** is set to *"To Do"*: `state:todo`
-* Work items which **Start Date** is set to the first of the february: `startdate:2025-02-01`
-* Work items which **Target Date** is set to today: `targetdate:@today`
-* Work items which parent's **Title** contains *"text"*: `parent:text`
-* Work items which **Node Name** contains *"text"*: `nodename:text`
-* Multiple condition with AND: `state:todo AND tag:customer`
-* Multiple condition with OR: `state:todo OR tag:customer`
 
 # Setup
 After installing the extension from the Marketplace, you need to enable it in the **Manage features**  section. In order to do so, follow the instructions [here](https://learn.microsoft.com/en-us/azure/devops/project/navigation/preview-features?view=azure-devops).
