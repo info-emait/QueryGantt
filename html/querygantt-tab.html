@@ -136,36 +136,7 @@
                         </div>
                     </div>
                 </div>
-
                 <!-- ko if: !isLoading() -->
-                <div class="querygantt-tab__header">
-                    <my-header params="selectedItem: current,
-                                    showFields: showFields,
-                                    title: title,
-                                    queryType: queryType,
-                                    fields: fields,
-                                    callbacks: {
-                                            download: download.bind($root),
-                                            downloadImage: downloadImage.bind($root),
-                                            expand: expand.bind($root),
-                                            collapse: collapse.bind($root),
-                                            moveLeft: moveLeft.bind($root),
-                                            moveRight: moveRight.bind($root),
-                                            zoomOut: zoomOut.bind($root),
-                                            zoomIn: zoomIn.bind($root),
-                                            zoomReset: zoomReset.bind($root),
-                                            refresh: refresh.bind($root)
-                                    }"></my-header>
-                    <my-workitem params="selectedItem: current,
-                                    title: title,
-                                    types: types,
-                                    typesOther: typesOther,
-                                    callbacks: {
-                                            focus: focus.bind($root),
-                                            close: close.bind($root),
-                                            edit: edit.bind($root)
-                                    }"></my-workitem>
-                </div>
                 <div class="querygantt-tab__footer flex-row flex-wrap padding-top-16 justify-space-around">
                     <my-legend params="items: states, title: 'States:'"></my-legend>
                     <my-legend params="items: priorities, title: 'Priorities:', classes: 'my-legend--square'"></my-legend>

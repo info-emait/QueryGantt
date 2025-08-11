@@ -13,8 +13,6 @@ define([
     "my/templates/gantt",
     "text!img/icon_list.txt",
     "my/components/legend",
-    "my/components/header",
-    "my/components/workitem",
     "my/components/timeline",
     "my/components/spinner",
     "my/components/message",
@@ -99,6 +97,7 @@ define([
         this.getTagsFilter = ko.computed(this._getTagsFilter, this);
         this.getAreasFilter = ko.computed(this._getAreasFilter, this);
         this.getParentsFilter = ko.computed(this._getParentsFilter, this);
+        this.showDetail = ko.computed(this._showDetail, this);
     };
 
     //#endregion
@@ -576,6 +575,7 @@ define([
         this.getTagsFilter.dispose();
         this.getAreasFilter.dispose();
         this.getParentsFilter.dispose();
+        this.showDetail.dispose();
     };
 
     //#endregion
@@ -716,6 +716,35 @@ define([
         }
         
         this.parentsFilter([...new Set(wits.map((w) => w.parentTitle))].sort());
+    };
+
+
+    /**
+     * Shows detail of the currently selected work item.
+     */
+    Model.prototype._showDetail = function() {
+        const current = this.current();
+        const types = this.types();
+        const typesOther = this.typesOther();
+
+        if (ko.computedContext.isInitial() || !current) {
+            return;
+        }
+
+        sdk.getService(api.CommonServiceIds.HostPageLayoutService).then((host) => {
+            host.openPanel(`${sdk.getExtensionContext().id}.#{Extension.Id}#-detail`, {
+                title: `${current.title}`,
+                lightDismiss: false,
+                configuration: {
+                    item: current,
+                    types,
+                    typesOther
+                },
+                onClose: (result = {}) => {
+                    //this.close();
+                }
+            });
+        });
     };
 
 
