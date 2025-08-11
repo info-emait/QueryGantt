@@ -1,6 +1,34 @@
 # Changelog
 
 
+## QueryGantt v1.4.0
+
+### Added
+* The details of the selected work item are displayed in a separate panel.
+* An ID attribute has been added to the list of displayed fields.
+* A fixed column width has been set for the displayed fields for better readability.
+* The visibility of fields can now be configured in a separate configuration panel.
+* The fields visibility configuration is saved and loaded from the settings of the currently logged-in user.
+* A separate filtering toolbar has been added, allowing filtering by:
+    * work item ID,
+    * work item Title,
+    * period (Start Date, Target Date),
+    * Assigned To,
+    * State,
+    * Priority,
+    * Tags,
+    * Area (Node Name),
+    * Parent work item.
+* An informational message was added if no work items meet the selected filtering criteria.
+* The text color that indicates the percentage of completeness adapts to the background color of the individual work items.
+
+### Changed
+* The libraries in use have been updated to the latest versions.
+* The button for sharing the Gantt chart via a URL has been removed, while sharing the Gantt chart through a URL still remains.
+* The text field for quick filtering using the "gmail" like filter syntax has been removed.
+* The information about the number of displayed work items was moved from the footer to the header of the Gantt chart.
+
+
 ## QueryGantt v1.3.0
 
 ### Added
