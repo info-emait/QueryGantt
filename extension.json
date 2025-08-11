@@ -88,6 +88,13 @@
         "properties": {
             "uri": "html/#{Extension.Id}#-configuration.html?v=#{Project.AssemblyInfo.Version}#"
         }
+    }, {
+        "id": "#{Extension.Id}#-detail",
+        "type": "ms.vss-web.external-content",
+        "description": "Detail panel for Query Gantt",
+        "properties": {
+            "uri": "html/#{Extension.Id}#-detail.html?v=#{Project.AssemblyInfo.Version}#"
+        }
     }],
     "files": [
         { "path": "html", "addressable": true },
