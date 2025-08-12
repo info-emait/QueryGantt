@@ -57,6 +57,8 @@ require({
             }, {
                 name: "Duration", value: "duration"
             }, {
+                name: "Effort", value: "effort"
+            }, {
                 name: "Node Name", value: "nodeName"
             }, {
                 name: "Parent", value: "parentTitle"

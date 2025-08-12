@@ -192,8 +192,9 @@ define([
                         changedDate: wit.fields["System.ChangedDate"],
                         startDate: wit.fields["Microsoft.VSTS.Scheduling.StartDate"],
                         targetDate: wit.fields["Microsoft.VSTS.Scheduling.TargetDate"],
-                        completedWork: (wit.fields["Microsoft.VSTS.Scheduling.CompletedWork"] || 0).toFixed(2),
-                        remainingWork: (wit.fields["Microsoft.VSTS.Scheduling.RemainingWork"] || 0).toFixed(2),
+                        completedWork: (wit.fields["Microsoft.VSTS.Scheduling.CompletedWork"] || 0),
+                        remainingWork: (wit.fields["Microsoft.VSTS.Scheduling.RemainingWork"] || 0),
+                        effort: (wit.fields["Microsoft.VSTS.Scheduling.Effort"] || 0),
                         tags: (wit.fields["System.Tags"] || "").split("; ").filter((t) => (t || "").length),
                         attachments: (wit.relations || []).filter((a) => a.rel === "AttachedFile"),
                         dependencies: (wit.relations || []).filter((a) => (a.rel === "System.LinkTypes.Dependency-Forward") && ((a.attributes || {}).name === "Successor")).map((r) => parseInt(r.url.split("/").pop()))

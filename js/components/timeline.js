@@ -592,6 +592,7 @@ define([
             areaPath: wit.areaPath,
             nodeName: wit.nodeName,
             remainingWork: wit.remainingWork,
+            effort: wit.effort,
             iterationPath: wit.iterationPath,
             isCompleted: wit.isCompleted,
             childCount: wit.childCount,
@@ -720,6 +721,10 @@ define([
 
         if (showFields.includes("remainingWork")) {
             result.push(`<div class="my-timeline-group__content my-timeline-group__content--remainingwork text-right margin-left-8" title="Remaining Work">${record.remainingWork + " h" || ""}</div>`);
+        }
+
+        if (showFields.includes("effort")) {
+            result.push(`<div class="my-timeline-group__content my-timeline-group__content--effort text-right margin-left-8" title="Effort">${record.effort + " h" || ""}</div>`);
         }
 
         if (showFields.includes("dates")) {
