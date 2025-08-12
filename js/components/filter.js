@@ -54,16 +54,6 @@ define([
     //#region [ Methods : Public ]
 
     /**
-     * Updates filter.
-     * 
-     * @param {object} obj Filter object.
-     */
-    Filter.prototype.update = function (obj) {
-        console.warn("update filter: ", obj);
-    };
-
-
-    /**
      * Shows or hide popup.
      * 
      * @param {object} component Component instance.
