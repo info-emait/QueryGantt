@@ -217,6 +217,25 @@ define([
 
 
     /**
+     * Updates the timeline record.
+     * 
+     * @param {number} id Record id. 
+     * @param {object} data Data to update.
+     */
+    Timeline.prototype.update = function(id, data) {
+        const item = this.timeline.itemSet.items[id];
+
+        if (!item || !data) {
+            return;
+        }
+        
+        const d = item.data;
+        Object.entries(data).forEach(([key, value]) => d[key] = value);
+        this.timeline.itemsData.update(d);
+    };
+
+
+    /**
      * Executes the callback.
      * 
      * @param {string} name The name of the callback.

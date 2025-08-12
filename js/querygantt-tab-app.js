@@ -89,6 +89,7 @@ define([
         this._timeline_focusAction = ko.observable();
         this._timeline_closeAction = ko.observable();
         this._timeline_refreshAction = ko.observable();
+        this._timeline_updateAction = ko.observable();
 
         this.updateQueryString = ko.computed(this._updateQueryString, this).extend({ deferred: true });
 
@@ -477,6 +478,22 @@ define([
 
 
     /**
+     * Updates the timeline record.
+     * 
+     * @param {number} id Record id. 
+     * @param {object} data Data to update.
+     */
+    Model.prototype.updateRecord = function(id, data) {
+        const action = this._timeline_updateAction();
+        if (typeof (action) !== "function") {
+            return;
+        }
+
+        action(id, data);
+    };
+
+
+    /**
      * Zooms the current timeline's selection.
      */
     Model.prototype.focus = function () {
@@ -720,11 +737,13 @@ define([
 
         sdk.getService(api.CommonServiceIds.HostPageLayoutService).then((host) => {
             host.openPanel(`${sdk.getExtensionContext().id}.#{Extension.Id}#-detail`, {
-                title: `${current.title}`,
+                title: `#${current.id}: ${current.title}`,
                 lightDismiss: false,
                 configuration: {
                     item: current,
                     id: currentId,
+                    updateWitCallback: this.updateWit.bind(this),
+                    updateRecordCallback: this.updateRecord.bind(this),
                     types,
                     typesOther
                 },

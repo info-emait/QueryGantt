@@ -7,22 +7,8 @@
     </head>
     <body class="querygantt-detail flex-column">
         <div class="flex-column flex-grow v-scroll-auto">
-            <div class="flex-row">
-                <div class="flex-row flex-center">
-                    <img class="margin-right-8" style="width: 20px" data-bind="attr: { src: $root._getIcon(item) }" />
-                    <div class="font-weight-semibold" data-bind="text: item.id"></div>
-                </div>
-                <div class="flex-row flex-center margin-left-16">
-                    <svg width="24" height="24" viewBox="0 0 24 24" class="margin-right-8" style="color: var(--icon-folder-color)">
-                        <path fill="currentColor" d="M5.616 21q-.691 0-1.153-.462T4 19.385V6.615q0-.69.463-1.152T5.616 5h1.769V2.77h1.077V5h7.154V2.77h1V5h1.769q.69 0 1.153.463T20 6.616v12.769q0 .69-.462 1.153T18.384 21zm0-1h12.769q.23 0 .423-.192t.192-.424v-8.768H5v8.769q0 .23.192.423t.423.192M5 9.615h14v-3q0-.23-.192-.423T18.384 6H5.616q-.231 0-.424.192T5 6.616zm0 0V6zm7 4.539q-.31 0-.54-.23t-.23-.54t.23-.539t.54-.23t.54.23t.23.54t-.23.539t-.54.23m-4 0q-.31 0-.54-.23t-.23-.54t.23-.539t.54-.23t.54.23t.23.54t-.23.539t-.54.23m8 0q-.31 0-.54-.23t-.23-.54t.23-.539t.54-.23t.54.23t.23.54t-.23.539t-.54.23M12 18q-.31 0-.54-.23t-.23-.54t.23-.539t.54-.23t.54.23t.23.54t-.23.54T12 18m-4 0q-.31 0-.54-.23t-.23-.54t.23-.539t.54-.23t.54.23t.23.54t-.23.54T8 18m8 0q-.31 0-.54-.23t-.23-.54t.23-.539t.54-.23t.54.23t.23.54t-.23.54T16 18"></path>
-                    </svg>
-                    <div>
-                        <span data-bind="text: $root._getFormattedDate(item.startDate)"></span>&nbsp;-&nbsp;<span data-bind="text: $root._getFormattedDate(item.targetDate)"></span>
-                    </div>
-                </div>
-            </div>
             <!-- ko if: Array.isArray(item.tags) && item.tags.length -->
-            <div class="flex-row flex-noshrink bolt-pill-group margin-top-16">
+            <div class="flex-row flex-noshrink bolt-pill-group margin-bottom-16">
                 <div class="bolt-pill-group-inner flex-row" data-bind="foreach: item.tags">
                     <div class="bolt-pill themed-standard flex-row flex-center standard regular">
                         <div class="bolt-pill-content text-ellipsis" role="presentation" data-bind="text: $data"></div>
@@ -30,9 +16,29 @@
                 </div>
             </div>
             <!-- /ko -->
+            <div class="flex-row">
+                <div class="flex-column">
+                    <label class="bolt-formitem-label body-m">Start Date:</label>
+                    <div class="bolt-textfield flex-row flex-center focus-treatment">
+                        <input autocomplete="off" class="bolt-textfield-input flex-grow" type="date" tabindex="0"
+                               data-bind="value: start" />
+                    </div>
+                </div>
+                <div class="flex-column margin-left-8">
+                    <label class="bolt-formitem-label body-m">Target Date:</label>
+                    <div class="bolt-textfield flex-row flex-center focus-treatment">
+                        <input autocomplete="off" class="bolt-textfield-input flex-grow" type="date" tabindex="0"
+                               data-bind="value: target" />
+                    </div>
+                </div>
+            </div>             
             <div class="flex-column margin-top-16 h-scroll-auto querygantt-detail__description" data-bind="html: item.description"></div>
         </div>
         <div class="flex-wrap bolt-button-group flex-row margin-top-16 margin-bottom-16 justify-end">
+            <button class="bolt-button enabled primary bolt-focus-treatment" role="button" tabindex="0" type="button"
+                    data-bind="click: save">
+                <span class="bolt-button-text body-m">Save</span>
+            </button>
             <button class="bolt-button enabled bolt-focus-treatment" role="button" tabindex="0" type="button"
                     data-bind="click: close">
                 <span class="bolt-button-text body-m">Close</span>
