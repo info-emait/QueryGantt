@@ -738,7 +738,7 @@ define([
                 <span aria-hidden="true" class="flex-noshrink fabric-icon large"></span>
              </div>`);
         result.push(
-            `<div class="my-timeline-group__button my-timeline-group__button--edit fluent-icons-enabled text-center" title="Edit item" data-group-id="${record.id}" data-noexport="true">
+            `<div class="my-timeline-group__button my-timeline-group__button--edit fluent-icons-enabled text-center ${record.selected ? "my-timeline-group__button--selected" : ""}" title="Edit item" data-group-id="${record.id}" data-noexport="true">
                 <span aria-hidden="true" class="flex-noshrink fabric-icon large"></span>
              </div>`);
 
