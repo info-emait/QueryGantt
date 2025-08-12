@@ -109,28 +109,45 @@
             }
         }
 
-        &__checkbox {
+        &__button {
             width: rem(24px);
             height: rem(24px);
-            //color: var(--communication-foreground);
-            color: var(--communication-background, rgba(0, 120, 212, 1));
+            color: var(--text-secondary-color);
             visibility: hidden;
             cursor: pointer;
+            margin-top: rem(2px);
 
             > span {
                 pointer-events: none;
 
                 &:before {
+                    //font-family: @font-family-icons-filled;
                     font-family: @font-family-icons-regular;
-                    content: "\e7eb";
+                    font-size: rem(16px);
                 }
             }
 
-            &:hover {
+            &--checkbox {
                 > span {
                     &:before {
-                        font-family: @font-family-icons-filled;
-                        content: "\f27c";
+                        //content: "\f290";
+                        content: "\eb74";
+                    }
+                }
+
+                &:hover {
+                    > span {
+                        &:before {
+                            content: "\f27c";
+                        }
+                    }
+                }
+            }
+
+            &--edit {
+                > span {
+                    &:before {
+                        content: "\f3dc";
                     }
                 }
             }
@@ -138,17 +155,22 @@
             &--selected {
                 visibility: visible;
 
-                > span {
-                    &:before {
-                        font-family: @font-family-icons-filled;
-                        content: "\f27c";
+                &.my-timeline-group__button--checkbox {
+                    > span {
+                        &:before {
+                            content: "\f27c";
+                        }
                     }
                 }
+            }
+
+            &:hover {
+                background-color: var(--palette-black-alpha-6,rgba(0, 0, 0, 0.06));
             }
         }
 
         &:hover {
-            .my-timeline-group__checkbox {
+            .my-timeline-group__button {
                 visibility: visible;
             }
         }

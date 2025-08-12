@@ -29,6 +29,7 @@ define([
         this.icons = ko.isObservable(args.icons) ? args.icons : ko.observable(args.icons || []);
         this.showFields = ko.isObservableArray(args.showFields) ? args.showFields : ko.observableArray(args.showFields || []);
         this.selectedItem = ko.isObservable(args.selectedItem) ? args.selectedItem : ko.observable(args.selectedItem || null);
+        this.selectedItemId = ko.isObservable(args.selectedItemId) ? args.selectedItemId : ko.observable(args.selectedItemId || null);
 
         this.selectedId = ko.observable(null);
         
@@ -335,7 +336,7 @@ define([
         e.stopPropagation();
         e.preventDefault();
 
-        var id = parseInt(e.target.getAttribute("data-group-id"));
+        const id = parseInt(e.target.getAttribute("data-group-id"));
         if (isNaN(id)) {
             return;
         }
@@ -352,6 +353,28 @@ define([
         this._onSelect({
             items: [id]
         });
+    };
+
+
+    /**
+     * Handles the group edit click event.
+     * 
+     * @param {object} e Argumenty.
+     **/
+    Timeline.prototype._onGroupEdit = function (e) {
+        e.stopPropagation();
+        e.preventDefault();
+
+        const id = parseInt(e.target.getAttribute("data-group-id"));
+        if (isNaN(id)) {
+            return;
+        }
+
+        this.timeline.setSelection([ id ], { focus: false });
+        this._onSelect({
+            items: [id]
+        });
+        this.selectedItemId(id);
     };
 
 
@@ -692,7 +715,11 @@ define([
         result.push(`<div class="my-timeline-group__state my-timeline-group__state--square" title="${priority.name}" style="background-color: #${priority.color}"></div>`);
 
         result.push(
-            `<div class="my-timeline-group__checkbox fluent-icons-enabled ${record.selected ? "my-timeline-group__checkbox--selected" : ""}" title="Select item" data-group-id="${record.id}" data-noexport="true">
+            `<div class="my-timeline-group__button my-timeline-group__button--checkbox fluent-icons-enabled text-center ${record.selected ? "my-timeline-group__button--selected" : ""}" title="Select item" data-group-id="${record.id}" data-noexport="true">
+                <span aria-hidden="true" class="flex-noshrink fabric-icon large"></span>
+             </div>`);
+        result.push(
+            `<div class="my-timeline-group__button my-timeline-group__button--edit fluent-icons-enabled text-center" title="Edit item" data-group-id="${record.id}" data-noexport="true">
                 <span aria-hidden="true" class="flex-noshrink fabric-icon large"></span>
              </div>`);
 
@@ -702,7 +729,8 @@ define([
         el.innerHTML = result.join("");
 
         el.querySelector(".my-timeline-group__title").addEventListener("pointerdown", vm._onGroupTitleSelect.bind(vm), false);
-        el.querySelector(".my-timeline-group__checkbox").addEventListener("pointerdown", vm._onGroupSelect.bind(vm), false);
+        el.querySelector(".my-timeline-group__button--checkbox").addEventListener("pointerdown", vm._onGroupSelect.bind(vm), false);
+        el.querySelector(".my-timeline-group__button--edit").addEventListener("pointerdown", vm._onGroupEdit.bind(vm), false);
 
         return el;
     };

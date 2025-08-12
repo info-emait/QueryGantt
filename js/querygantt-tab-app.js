@@ -59,11 +59,11 @@ define([
         this.relations = ko.observableArray([]);
         this.wits = ko.observableArray([]);
         this.current = ko.observable(null);
+        this.currentId = ko.observable(null);
         
         this.states = ko.computed(this._getStates, this);
         this.priorities = ko.observableArray(args.priorities);
         this.fields = ko.observableArray(args.fields);
-        this.title = ko.computed(this._getTitle, this);
 
         this.assigneesFilter = ko.observableArray();
         this.statesFilter = ko.observableArray();
@@ -511,6 +511,7 @@ define([
         this.isLoading(true);
         this.action("_timeline_refreshAction");
         this.current(null);
+        this.currentId(null);
         this.wits([]);
         this.relations([]);
         this.witIds([]);
@@ -567,7 +568,6 @@ define([
         console.log("~QueryGanttTabApp()");
 
         this.states.dispose();
-        this.title.dispose();
         this.filteredWits.dispose();
         this.updateQueryString.dispose();
         this.getAssigneesFilter.dispose();
@@ -627,20 +627,6 @@ define([
         });
 
         return states;
-    };
-
-
-    /**
-     * Gets title for the current item.
-     */
-    Model.prototype._getTitle = function () {
-        var current = this.current();
-        
-        if(!current) {
-            return "";
-        }
-
-        return current.title;
     };
 
 
@@ -724,10 +710,11 @@ define([
      */
     Model.prototype._showDetail = function() {
         const current = this.current();
+        const currentId = this.currentId();
         const types = this.types();
         const typesOther = this.typesOther();
 
-        if (ko.computedContext.isInitial() || !current) {
+        if (ko.computedContext.isInitial() || !current || !currentId) {
             return;
         }
 
@@ -737,11 +724,12 @@ define([
                 lightDismiss: false,
                 configuration: {
                     item: current,
+                    id: currentId,
                     types,
                     typesOther
                 },
                 onClose: (result = {}) => {
-                    //this.close();
+                    this.currentId(null);
                 }
             });
         });

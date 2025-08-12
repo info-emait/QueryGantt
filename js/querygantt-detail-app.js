@@ -27,6 +27,7 @@ define([
         this.version = args.version;
         this.project = args.project;
         this.item = args.item;
+        this.id = args.id;
         this.types = args.types;
         this.typesOther = args.typesOther;
         this.panel = args.panel;
@@ -138,6 +139,7 @@ define([
                     version: cnf.version,
                     project: project,
                     item: config.item,
+                    id: config.id,
                     types: config.types,
                     typesOther: config.typesOther,
                     panel: config.panel
