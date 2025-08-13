@@ -53,6 +53,8 @@ require({
             }, {
                 name: "Iteration Path", value: "iterationPath"
             }, {
+                name: "Completed Work", value: "completedWork"
+            }, {
                 name: "Dates", value: "dates"
             }, {
                 name: "Duration", value: "duration"

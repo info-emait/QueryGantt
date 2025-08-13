@@ -142,6 +142,7 @@
                 <div class="querygantt-tab__footer flex-row flex-wrap padding-top-16 justify-space-around">
                     <my-legend params="items: filteredWits, title: 'Total Effort:', reduce: (a, b) => a + b.effort || 0, format: (a) => `${a} hour(s)`, isVisible: isTotalEffortVisible"></my-legend>
                     <my-legend params="items: filteredWits, title: 'Total Remaining Work:', reduce: (a, b) => a + b.remainingWork || 0, format: (a) => `${a} hour(s)`, isVisible: isTotalRemainingWorkVisible"></my-legend>
+                    <my-legend params="items: filteredWits, title: 'Total Completed Work:', reduce: (a, b) => a + b.completedWork || 0, format: (a) => `${a} hour(s)`, isVisible: isTotalCompletedWorkVisible"></my-legend>
                     <my-legend params="items: states, title: 'States:', itemsToInclude: statesFilter"></my-legend>
                     <my-legend params="items: priorities, title: 'Priorities:', classes: 'my-legend--square'"></my-legend>
                 </div>

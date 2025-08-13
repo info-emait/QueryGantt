@@ -592,6 +592,7 @@ define([
             areaPath: wit.areaPath,
             nodeName: wit.nodeName,
             remainingWork: wit.remainingWork,
+            completedWork: wit.completedWork,
             effort: wit.effort,
             iterationPath: wit.iterationPath,
             isCompleted: wit.isCompleted,
@@ -719,12 +720,16 @@ define([
             result.push(`<div class="my-timeline-group__content my-timeline-group__content--parent text-left text-ellipsis margin-left-8" title="Parent">${record.parentTitle || ""}</div>`);
         }
 
+        if (showFields.includes("effort")) {
+            result.push(`<div class="my-timeline-group__content my-timeline-group__content--effort text-right margin-left-8" title="Effort">${record.effort + " h" || ""}</div>`);
+        }
+
         if (showFields.includes("remainingWork")) {
             result.push(`<div class="my-timeline-group__content my-timeline-group__content--remainingwork text-right margin-left-8" title="Remaining Work">${record.remainingWork + " h" || ""}</div>`);
         }
 
-        if (showFields.includes("effort")) {
-            result.push(`<div class="my-timeline-group__content my-timeline-group__content--effort text-right margin-left-8" title="Effort">${record.effort + " h" || ""}</div>`);
+        if (showFields.includes("completedWork")) {
+            result.push(`<div class="my-timeline-group__content my-timeline-group__content--completedwork text-right margin-left-8" title="Completed Work">${record.completedWork + " h" || ""}</div>`);
         }
 
         if (showFields.includes("dates")) {
