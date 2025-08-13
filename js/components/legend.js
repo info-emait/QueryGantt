@@ -14,12 +14,15 @@ define([
         this.classes = ko.isObservable(args.classes) ? args.classes : ko.observable(args.classes || "");
         this.title = ko.isObservable(args.title) ? args.title : ko.observable(args.title || "");
         this.items = ko.isObservable(args.items) ? args.items : ko.observable(args.items || []);
+        this.itemsToInclude = ko.isObservable(args.itemsToInclude) ? args.itemsToInclude : ko.observable(args.itemsToInclude || []);
+        this.itemsVisible = ko.observable([]);
         this.isVisible = ko.isObservable(args.isVisible) ? args.isVisible : ko.observable(typeof(args.isVisible) === "boolean" ? args.isVisible : true);
         this.total = ko.observable(null);
         this.format = args.format || ((val) => `${val}`);
         this.reduce = args.reduce;
 
         this.getTotal = ko.computed(this._getTotal, this);
+        this.getItemsVisible = ko.computed(this._getItemsVisible, this);
     };
 
     //#endregion
@@ -46,6 +49,7 @@ define([
         console.log("~Legend()");
 
         this.getTotal.dispose();
+        this.getItemsVisible.dispose();
     };
 
     //#endregion
@@ -67,6 +71,22 @@ define([
         this.total(items.reduce(this.reduce, 0));
     };
 
+
+    /**
+     * Gets filtered items.
+     */
+    Legend.prototype._getItemsVisible = function () {
+        const items = this.items();
+        const includes = this.itemsToInclude();
+
+        if (!includes.length) {
+            this.itemsVisible(items);
+            return;
+        }
+
+        const tmp = items.filter((itm) => itm.name.split(", ").some((n) => includes.includes(n)));
+        this.itemsVisible(tmp);
+    };
 
     //#endregion
 
@@ -105,7 +125,7 @@ define([
                     </div>
                 <!-- /ko -->
                 <!-- ko ifnot: typeof(reduce) === "function" -->
-                    <!-- ko foreach: items -->
+                    <!-- ko foreach: itemsVisible -->
                     <div class="my-legend__item" data-bind="attr: { title: name }">
                         <i data-bind="style: { background: '#' + color }"></i>
                         <span data-bind="text: name.split(', ')[0]"></span>
