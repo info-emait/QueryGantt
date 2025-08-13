@@ -721,15 +721,30 @@ define([
         }
 
         if (showFields.includes("effort")) {
-            result.push(`<div class="my-timeline-group__content my-timeline-group__content--effort text-right margin-left-8" title="Effort">${record.effort + " h" || ""}</div>`);
+            result.push(`<div class="my-timeline-group__content my-timeline-group__content--effort justify-end margin-left-8 flex-row flex-center" title="Effort">
+                            ${record.effort + " h" || ""}
+                            <div class="bolt-pill bolt-pill--timeline flex-row flex-center outlined compact margin-left-4">
+                                <div class="bolt-pill-content text-ellipsis" role="presentation">EFF</div>
+                            </div>
+                        </div>`);
         }
 
         if (showFields.includes("remainingWork")) {
-            result.push(`<div class="my-timeline-group__content my-timeline-group__content--remainingwork text-right margin-left-8" title="Remaining Work">${record.remainingWork + " h" || ""}</div>`);
+            result.push(`<div class="my-timeline-group__content my-timeline-group__content--remainingwork justify-end margin-left-8 flex-row flex-center" title="Remaining Work">
+                            ${record.remainingWork + " h" || ""}
+                            <div class="bolt-pill bolt-pill--timeline flex-row flex-center outlined compact margin-left-4">
+                                <div class="bolt-pill-content text-ellipsis" role="presentation">RW</div>
+                            </div>
+                        </div>`);
         }
 
         if (showFields.includes("completedWork")) {
-            result.push(`<div class="my-timeline-group__content my-timeline-group__content--completedwork text-right margin-left-8" title="Completed Work">${record.completedWork + " h" || ""}</div>`);
+            result.push(`<div class="my-timeline-group__content my-timeline-group__content--completedwork justify-end margin-left-8 flex-row flex-center" title="Completed Work">
+                            <div>${record.completedWork + " h" || "×"}</div>
+                            <div class="bolt-pill bolt-pill--timeline flex-row flex-center outlined compact margin-left-4">
+                                <div class="bolt-pill-content text-ellipsis" role="presentation">CW</div>
+                            </div>
+                        </div>`);
         }
 
         if (showFields.includes("dates")) {
