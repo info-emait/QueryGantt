@@ -120,13 +120,13 @@ define([
             `<div class="my-legend" style="display: none" data-bind="class: classes, visible: isVisible">
                 <b data-bind="text: title"></b>
                 <!-- ko if: typeof(reduce) === "function" -->
-                    <div class="my-legend__item">
+                    <div class="my-legend__item my-legend__item--order-0">
                         <span data-bind="text: format(total())"></span>
                     </div>
                 <!-- /ko -->
                 <!-- ko ifnot: typeof(reduce) === "function" -->
                     <!-- ko foreach: itemsVisible -->
-                    <div class="my-legend__item" data-bind="attr: { title: name }">
+                    <div class="my-legend__item" data-bind="attr: { title: name }, class: 'my-legend__item--order-' + $index()">
                         <i data-bind="style: { background: '#' + color }"></i>
                         <span data-bind="text: name.split(', ')[0]"></span>
                     </div>
