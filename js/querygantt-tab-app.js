@@ -76,6 +76,7 @@ define([
         this.filteredWits = ko.computed(this._getFilteredWits, this);
 
         this.isTotalEffortVisible = ko.computed(() => this.showFields().includes("effort"));  
+        this.isTotalRemainingWorkVisible = ko.computed(() => this.showFields().includes("remainingWork"));  
 
         this.queryType = ko.observable("");
 
@@ -597,6 +598,7 @@ define([
         this.getParentsFilter.dispose();
         this.showDetail.dispose();
         this.isTotalEffortVisible.dispose();
+        this.isTotalRemainingWorkVisible.dispose();
     };
 
     //#endregion
