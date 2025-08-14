@@ -55,9 +55,9 @@ define([
                 <div class="bolt-dropdown-container no-outline" style="width: 210px">
                     <div class="bolt-dropdown-list-box-container bolt-table-container flex-grow v-scroll-auto">
                         <div class="flex-column" data-bind="foreach: items">
-                            <label class="bolt-filterbar__item bolt-filterbar__item--checkbox flex-row">
+                            <label class="bolt-filterbar__item bolt-filterbar__item--checkbox flex-row flex-start">
                                 <input type="checkbox" data-bind="checkedValue: $data, checked: $component.values" />
-                                <span class="white-space-nowrap text-ellipsis" data-bind="text: $data"></span>
+                                <span data-bind="text: $data"></span>
                             </label>
                         </div>
                     </div>
