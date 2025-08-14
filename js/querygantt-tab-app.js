@@ -401,6 +401,10 @@ define([
                     sheet.cell(`I${i + 8}`).value(wit.tags.join(";"));
                     sheet.cell(`J${i + 8}`).value(wit.startDate || wit.targetDate);
                     sheet.cell(`K${i + 8}`).value(wit.targetDate);
+                    sheet.cell(`M${i + 8}`).value(wit.effort);
+                    sheet.cell(`N${i + 8}`).value(wit.remainingWork);
+                    sheet.cell(`O${i + 8}`).value(wit.completedWork);
+                    sheet.cell(`P${i + 8}`).value(wit.nodeName);
                 });
                 
                 return workbook.outputAsync();
