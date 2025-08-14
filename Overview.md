@@ -7,7 +7,7 @@ Query Gantt is an extension for the Azure DevOps, which enables you to view the 
 
 # Features
 * Zoom in/out the timeline.
-* View tags, priority, state, assigned to, dates, number of days between the Start Date and Target Date, iteration and area path, team project, parent work item.
+* View tags, priority, state, assigned to, dates, number of days between the Start Date and Target Date, iteration and area path, team project, parent work item, effort, remaining work, completed work.
 * A single click on the work item displays the work item details including description.
 * Download the timeline in the xlsx or png format.
 * Share the timeline via URL (user needs to copy the URL address in the browser address bar).
