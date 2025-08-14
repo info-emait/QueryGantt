@@ -226,7 +226,7 @@ define([
                     <my-filter-item-list params="id: 'priorities-popup', label: 'Priorities', popupId: popupId, open: popup.bind($component), values: prioritiesValue"></my-filter-item-list>
                     <my-filter-item-list params="id: 'tags-popup', label: 'Tags', popupId: popupId, open: popup.bind($component), values: tagsValue"></my-filter-item-list>
                     <my-filter-item-list params="id: 'areas-popup', label: 'Areas', popupId: popupId, open: popup.bind($component), values: areasValue"></my-filter-item-list>
-                    <my-filter-item-list params="id: 'parents-popup', label: 'Parents', popupId: popupId, open: popup.bind($component), values: parentsValue"></my-filter-item-list>
+                    <my-filter-item-list params="id: 'parents-popup', label: 'Parents', popupId: popupId, open: popup.bind($component), values: parentsValue, empty: '@Without parent'"></my-filter-item-list>
                     <div class="vss-FilterBar--right-items">
                         <div class="vss-FilterBar--action vss-FilterBar--action-clear">
                             <button class="filter-bar-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="-1" type="button"
@@ -244,7 +244,7 @@ define([
                 <my-filter-popup-list params="id: 'priorities-popup', popupId: popupId, top: popupTop, left: popupLeft, items: priorities, values: prioritiesValue"></my-filter-popup-list>
                 <my-filter-popup-list params="id: 'tags-popup', popupId: popupId, top: popupTop, left: popupLeft, items: tags, values: tagsValue"></my-filter-popup-list>
                 <my-filter-popup-list params="id: 'areas-popup', popupId: popupId, top: popupTop, left: popupLeft, items: areas, values: areasValue"></my-filter-popup-list>
-                <my-filter-popup-list params="id: 'parents-popup', popupId: popupId, top: popupTop, left: popupLeft, items: parents, values: parentsValue"></my-filter-popup-list>
+                <my-filter-popup-list params="id: 'parents-popup', popupId: popupId, top: popupTop, left: popupLeft, items: parents, values: parentsValue, empty: '@Without parent'"></my-filter-popup-list>
             </div>`
     });
 

@@ -15,6 +15,7 @@ define([
         this.left = ko.isObservable(args.left) ? args.left : ko.observable(args.left || "-9999px");
         this.items = ko.isObservable(args.items) ? args.items : ko.observableArray(args.items || []);
         this.values = ko.isObservable(args.values) ? args.values : ko.observableArray(args.values || []);
+        this.empty = ko.isObservable(args.empty) ? args.empty : ko.observable(args.empty || "");
     };
 
     //#endregion
@@ -57,7 +58,7 @@ define([
                         <div class="flex-column" data-bind="foreach: items">
                             <label class="bolt-filterbar__item bolt-filterbar__item--checkbox flex-row flex-start">
                                 <input type="checkbox" data-bind="checkedValue: $data, checked: $component.values" />
-                                <span data-bind="text: $data"></span>
+                                <span data-bind="text: ($data === '') ? $component.empty() : $data"></span>
                             </label>
                         </div>
                     </div>

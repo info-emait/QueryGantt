@@ -14,6 +14,7 @@ define([
         this.popupId = ko.isObservable(args.popupId) ? args.popupId : ko.observable(args.popupId || "");
         this.open = typeof(args.open) === "function" ? args.open : function() {};
         this.values = ko.isObservable(args.values) ? args.values : ko.observableArray(args.values || []);
+        this.empty = ko.isObservable(args.empty) ? args.empty : ko.observable(args.empty || "");
     };
 
     //#endregion
@@ -38,7 +39,7 @@ define([
             return r.join(", ");
         }
 
-        return (o.length === 1) ? o[0] : o[0] + ' (+' + (o.length - 1) + ')';
+        return (o.length === 1) ? (o[0] || this.empty()) : (o[0] || this.empty()) + ' (+' + (o.length - 1) + ')';
     };
 
 
