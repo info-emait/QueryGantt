@@ -1,6 +1,27 @@
 # Changelog
 
 
+## QueryGantt v1.4.1
+
+### Added
+* Added **Edit** button to open the side detail panel.
+* Start and Target date can now be edited in the side detail panel.
+* Attributes **Effort** and **Completed Work** have been added to the list of attributes for display.
+* The footer now displays the total **Effort**, **Remaining Work** and **Completed Work**.
+* On the timeline view, a pill is displayed for **Effort**, **Remaining Work** and **Completed Work** for better distinction.
+
+### Changed
+* Clicking the checkbox on the timeline no longer opens the side detail panel.
+* In the footer, the States legend now only shows states that exist in the list of displayed work items.
+
+### Fixed
+* The shadow at the bottom of the timeline was not displayed.
+* Long names of Parent work items were not shown in the filter.
+* Instead of showing an empty label for filtering items without a parent, **@Without parent** is displayed.
+* Instead of showing an empty space for an empty **Assigned To** or **Tags** filter list, a zero-data message is displayed.
+
+
+
 ## QueryGantt v1.4.0
 
 ### Added
