@@ -23,7 +23,7 @@
                 <div data-bind="with: zero">
                     <my-zero-data params="title: title, text: text"></my-zero-data>
                 </div>
-                <div class="flex-row margin-top-16" style="display: none" data-bind="ifnot: isLoading, visible: filteredWits().length">
+                <div class="flex-row margin-top-16 margin-bottom-16" style="display: none" data-bind="ifnot: isLoading, visible: filteredWits().length">
                     <div class="flex-grow bolt-table-card bolt-card-with-header bolt-card flex-column depth-8 bolt-card-white">
                         <div class="bolt-card-header bolt-header bolt-header-with-commandbar bolt-header-with-back-button flex-row flex-noshrink flex-start bolt-default-horizontal-spacing bolt-header-default">
                             <button class="bolt-header-back-button justify-end bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="0" type="button" title="Expand all"
@@ -139,7 +139,7 @@
                     </div>
                 </div>
                 <!-- ko if: !isLoading() -->
-                <div class="querygantt-tab__footer flex-row flex-wrap padding-top-16 justify-space-around">
+                <div class="querygantt-tab__footer flex-row flex-wrap justify-space-around">
                     <my-legend params="items: filteredWits, title: 'Total Effort:', reduce: (a, b) => a + b.effort || 0, format: (a) => `${a} hour(s)`, isVisible: isTotalEffortVisible"></my-legend>
                     <my-legend params="items: filteredWits, title: 'Total Remaining Work:', reduce: (a, b) => a + b.remainingWork || 0, format: (a) => `${a} hour(s)`, isVisible: isTotalRemainingWorkVisible"></my-legend>
                     <my-legend params="items: filteredWits, title: 'Total Completed Work:', reduce: (a, b) => a + b.completedWork || 0, format: (a) => `${a} hour(s)`, isVisible: isTotalCompletedWorkVisible"></my-legend>
