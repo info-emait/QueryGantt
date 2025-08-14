@@ -239,10 +239,10 @@ define([
                     </div>
                 </div>
                 <my-filter-popup-date params="id: 'period-popup', popupId: popupId, top: popupTop, left: popupLeft, values: periodValue"></my-filter-popup-date>
-                <my-filter-popup-list params="id: 'assignees-popup', popupId: popupId, top: popupTop, left: popupLeft, items: assignees, values: assigneesValue"></my-filter-popup-list>
+                <my-filter-popup-list params="id: 'assignees-popup', popupId: popupId, top: popupTop, left: popupLeft, items: assignees, values: assigneesValue, zeroText: 'There are not any work items that would be assigned to the user'"></my-filter-popup-list>
                 <my-filter-popup-list params="id: 'states-popup', popupId: popupId, top: popupTop, left: popupLeft, items: states, values: statesValue"></my-filter-popup-list>
                 <my-filter-popup-list params="id: 'priorities-popup', popupId: popupId, top: popupTop, left: popupLeft, items: priorities, values: prioritiesValue"></my-filter-popup-list>
-                <my-filter-popup-list params="id: 'tags-popup', popupId: popupId, top: popupTop, left: popupLeft, items: tags, values: tagsValue"></my-filter-popup-list>
+                <my-filter-popup-list params="id: 'tags-popup', popupId: popupId, top: popupTop, left: popupLeft, items: tags, values: tagsValue, zeroText: 'There are not any work items that would be tagged'"></my-filter-popup-list>
                 <my-filter-popup-list params="id: 'areas-popup', popupId: popupId, top: popupTop, left: popupLeft, items: areas, values: areasValue"></my-filter-popup-list>
                 <my-filter-popup-list params="id: 'parents-popup', popupId: popupId, top: popupTop, left: popupLeft, items: parents, values: parentsValue, empty: '@Without parent'"></my-filter-popup-list>
             </div>`

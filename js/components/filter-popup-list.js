@@ -1,5 +1,6 @@
 define([
-    "knockout"
+    "knockout",
+    "my/components/zerodata"
 ], (ko) => {
     //#region [ Constructors ]
     
@@ -16,6 +17,7 @@ define([
         this.items = ko.isObservable(args.items) ? args.items : ko.observableArray(args.items || []);
         this.values = ko.isObservable(args.values) ? args.values : ko.observableArray(args.values || []);
         this.empty = ko.isObservable(args.empty) ? args.empty : ko.observable(args.empty || "");
+        this.zeroText = ko.isObservable(args.zeroText) ? args.zeroText : ko.observable(args.zeroText || "");
     };
 
     //#endregion
@@ -55,12 +57,19 @@ define([
             <div class="bolt-dropdown flex-column custom-scrollbar v-scroll-auto h-scroll-hidden bolt-callout-content bolt-callout-shadow bolt-callout-auto" role="presentation">
                 <div class="bolt-dropdown-container no-outline" style="width: 210px">
                     <div class="bolt-dropdown-list-box-container bolt-table-container flex-grow v-scroll-auto">
+                        <!-- ko ifnot: items().length -->
+                            <div class="margin-bottom-16">
+                                <my-zero-data params="title: '', text: zeroText"></my-zero-data>
+                            </div>
+                        <!-- /ko -->
+                        <!-- ko if: items().length -->
                         <div class="flex-column" data-bind="foreach: items">
                             <label class="bolt-filterbar__item bolt-filterbar__item--checkbox flex-row flex-start">
                                 <input type="checkbox" data-bind="checkedValue: $data, checked: $component.values" />
                                 <span data-bind="text: ($data === '') ? $component.empty() : $data"></span>
                             </label>
                         </div>
+                        <!-- /ko -->
                     </div>
                     <div class="bolt-actions-container flex-column">
                         <button class="bolt-button bolt-icon-button subtle bolt-focus-treatment flex-self-end" role="button" tabindex="-1" type="button"

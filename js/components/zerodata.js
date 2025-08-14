@@ -50,7 +50,7 @@ define([
                 <svg class="vss-ZeroDataItem--image vss-ZeroDataItem--svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
                     <path fill="currentColor" d="M2 21v-2h20v2zm1-3v-7h3v7zm5 0V6h3v12zm5 0V9h3v9zm5 0V3h3v15z"></path>
                 </svg>
-                <div class="vss-ZeroDataItem--primary margin-horizontal-16 title-l" data-bind="text: title"></div>
+                <div class="vss-ZeroDataItem--primary margin-horizontal-16 title-l" data-bind="text: title, visible: title().length"></div>
                 <div class="vss-ZeroDataItem--secondary margin-horizontal-16">
                     <span data-bind="html: text"></span>
                 </div>
