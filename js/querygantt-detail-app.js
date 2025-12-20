@@ -35,6 +35,7 @@ define([
 
         this.start = ko.observable(args.start || null);
         this.target = ko.observable(args.target || null);
+        this.state = ko.observable(args.state || null);
 
         this.updateWit = args.updateWitCallback;
         this.updateRecord = args.updateRecordCallback;
@@ -89,6 +90,8 @@ define([
                 if (target instanceof Date) {
                     this.target(`${target.getFullYear()}-${((target.getMonth() + 1) + "").padStart(2, "0")}-${(target.getDate() + "").padStart(2, "0")}`);
                 }
+
+                this.state(wit.fields["System.State"]);
             });
     };
 
@@ -118,17 +121,19 @@ define([
         const start = date(this.start());
         const target = date(this.target());
         target.setDate(target.getDate() + 1);
+        const state = this.state();
 
         this.updateWit({
             id: this.id,
             start: start,
-            end: target
+            end: target,
+            state
         }).then((response) => {
             if (!response) {
                 return;
             }
 
-            this.updateRecord(this.id, { start, end: target });
+            this.updateRecord(this.id, { start, end: target, state });
         });
     };
 

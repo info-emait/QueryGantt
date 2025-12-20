@@ -16,22 +16,34 @@
                 </div>
             </div>
             <!-- /ko -->
-            <div class="flex-row">
-                <div class="flex-column">
+            <div class="flex-row" style="gap: 16px">
+                <div class="flex-column flex-grow">
                     <label class="bolt-formitem-label body-m">Start Date:</label>
                     <div class="bolt-textfield flex-row flex-center focus-treatment">
                         <input autocomplete="off" class="bolt-textfield-input flex-grow" type="date" tabindex="0"
                                data-bind="value: start" />
                     </div>
                 </div>
-                <div class="flex-column margin-left-8">
+                <div class="flex-column flex-grow">
                     <label class="bolt-formitem-label body-m">Target Date:</label>
                     <div class="bolt-textfield flex-row flex-center focus-treatment">
-                        <input autocomplete="off" class="bolt-textfield-input flex-grow" type="date" tabindex="0"
+                        <input autocomplete="off" class="bolt-textfield-input flex-grow" type="date" tabindex="1"
                                data-bind="value: target" />
                     </div>
                 </div>
-            </div>             
+            </div>
+            <div class="flex-row margin-top-16">
+                <div class="flex-column flex-grow">
+                    <label class="bolt-formitem-label body-m">State:</label>
+                    <div class="bolt-textfield bolt-textfield--select flex-row flex-center focus-treatment">
+                        <select class="bolt-textfield-input flex-grow" tabindex="2"
+                                data-bind="options: (types.find(t => t.name === item.type) || {}).states || [],
+                                   optionsText: 'name',
+                                   optionsValue: 'name',
+                                   value: state"></select>
+                    </div>
+                </div>
+            </div>            
             <div class="flex-column margin-top-16 h-scroll-auto querygantt-detail__description" data-bind="html: item.description"></div>
         </div>
         <div class="flex-wrap bolt-button-group flex-row margin-top-16 margin-bottom-16 justify-end">

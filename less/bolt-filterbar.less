@@ -24,4 +24,15 @@
     .bolt-dropdown-list-box-container {
         max-height: rem(300px);
     }
+
+    .bolt-dropdown-filter-bar-item {
+        &--disabled {
+            cursor: not-allowed;
+
+            > .bolt-button {
+                color: var(--text-disabled-color,rgba(0, 0, 0, .38));
+                pointer-events: none;
+            }
+        }
+    }
 }

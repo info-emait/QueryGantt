@@ -2,7 +2,8 @@ define([
     "knockout",
     "my/components/filter-item-list",
     "my/components/filter-popup-list",
-    "my/components/filter-popup-date"
+    "my/components/filter-popup-date",
+    "my/components/filter-popup-single-date"
 ], function (ko) {
     //#region [ Fields ]
     
@@ -24,7 +25,11 @@ define([
 
         this.element = args.element.firstElementChild;
         this.value = ko.isObservable(args.value) ? args.value : ko.observable(args.value || {});
+        this.valuePrimary = ko.isObservable(args.valuePrimary) ? args.valuePrimary : ko.observable(args.valuePrimary || {});
+        this.queryType = ko.isObservable(args.queryType) ? args.queryType : ko.observable(args.queryType || "");
         
+        this.isAsOfEnabled = ko.computed(() => this.queryType() !== "tree");
+
         this.assignees = ko.isObservable(args.assignees) ? args.assignees : ko.observableArray(args.assignees || []);
         this.states = ko.isObservable(args.states) ? args.states : ko.observableArray(args.states || []);
         this.priorities = ko.isObservable(args.priorities) ? args.priorities : ko.observableArray(args.priorities || []);
@@ -42,6 +47,10 @@ define([
         this.periodValue = ko.observableArray([]);
 
         this.getValue = ko.computed(this._getValue, this);
+
+        this.asOfValue = ko.observableArray([]);
+
+        this.getValuePrimary = ko.computed(this._getValuePrimary, this);
 
         this.popupId = ko.observable(null);
         this.popupTop = ko.observable("-9999px");
@@ -118,12 +127,30 @@ define([
         console.log("~Filter()");
 
         this.getValue.dispose();
+        this.getValuePrimary.dispose();
+        this.isAsOfEnabled.dispose();
     };
 
     //#endregion
 
 
     //#region [ Methods : Private ]
+
+    /**
+     * Gets actual primary filter value.
+     */
+    Filter.prototype._getValuePrimary = function() {
+        const asOf = this.asOfValue();
+        
+        const val = {};
+
+        if (asOf.length) {
+            val.asOf = asOf;
+        }
+        
+        this.valuePrimary(val);
+    };
+
 
     /**
      * Gets actual filter value.
@@ -220,6 +247,7 @@ define([
                             </div>
                         </div>
                     </div>
+                    <my-filter-item-list params="id: 'asof-popup', label: 'As of', popupId: popupId, open: popup.bind($component), values: asOfValue, isEnabled: isAsOfEnabled"></my-filter-item-list>
                     <my-filter-item-list params="id: 'period-popup', label: 'Period', popupId: popupId, open: popup.bind($component), values: periodValue"></my-filter-item-list>
                     <my-filter-item-list params="id: 'assignees-popup', label: 'Assigned To', popupId: popupId, open: popup.bind($component), values: assigneesValue"></my-filter-item-list>
                     <my-filter-item-list params="id: 'states-popup', label: 'States', popupId: popupId, open: popup.bind($component), values: statesValue"></my-filter-item-list>
@@ -230,7 +258,7 @@ define([
                     <div class="vss-FilterBar--right-items">
                         <div class="vss-FilterBar--action vss-FilterBar--action-clear">
                             <button class="filter-bar-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="-1" type="button"
-                                    data-bind="click: () => { popup(); keywords(''); assigneesValue([]); statesValue([]); prioritiesValue([]); tagsValue([]); areasValue([]); parentsValue([]); periodValue([]); }">
+                                    data-bind="click: () => { popup(); keywords(''); assigneesValue([]); statesValue([]); prioritiesValue([]); tagsValue([]); areasValue([]); parentsValue([]); periodValue([]); asOfValue([]); }">
                                 <span class="fluent-icons-enabled">
                                     <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Cancel medium"></span>
                                 </span>
@@ -238,6 +266,7 @@ define([
                         </div>
                     </div>
                 </div>
+                <my-filter-popup-single-date params="id: 'asof-popup', popupId: popupId, top: popupTop, left: popupLeft, values: asOfValue"></my-filter-popup-single-date>
                 <my-filter-popup-date params="id: 'period-popup', popupId: popupId, top: popupTop, left: popupLeft, values: periodValue"></my-filter-popup-date>
                 <my-filter-popup-list params="id: 'assignees-popup', popupId: popupId, top: popupTop, left: popupLeft, items: assignees, values: assigneesValue, zeroText: 'There are not any work items that would be assigned to the user'"></my-filter-popup-list>
                 <my-filter-popup-list params="id: 'states-popup', popupId: popupId, top: popupTop, left: popupLeft, items: states, values: statesValue"></my-filter-popup-list>

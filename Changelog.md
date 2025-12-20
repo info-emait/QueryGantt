@@ -1,6 +1,24 @@
 # Changelog
 
 
+
+## QueryGantt v1.5.0
+
+### Added
+* State can now be edited in the side detail panel.
+* One hop and flat queries can be now filtered using **As of** filter to show historical data.
+
+### Changed
+* The libraries in use have been updated to the latest versions.
+* Changed the shape of the arrow lines from bezier to cornered line.
+* Changed the Gantt page paddings to default.
+
+### Fixed
+* Fixed when rendering failed due to the deleted state in the project process [#25](https://github.com/info-emait/QueryGantt/issues/25).
+
+
+
+
 ## QueryGantt v1.4.1
 
 ### Added
@@ -31,9 +49,9 @@
 * The visibility of fields can now be configured in a separate configuration panel.
 * The fields visibility configuration is saved and loaded from the settings of the currently logged-in user.
 * A separate filtering toolbar has been added, allowing filtering by:
-    * work item ID,
-    * work item Title,
-    * period (Start Date, Target Date),
+    * Work item ID,
+    * Work item Title,
+    * Period (Start Date, Target Date),
     * Assigned To,
     * State,
     * Priority,

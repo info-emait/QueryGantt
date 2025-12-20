@@ -13,6 +13,8 @@
                 <my-message params="text: message"></my-message>
                 <div class="flex-row margin-top-16" style="display: none; position: sticky; top: 0; z-index: 3" data-bind="visible: wits().length">
                     <my-filter params="value: filter,
+                                       valuePrimary: filterPrimary,
+                                       queryType: queryType,
                                        assignees: assigneesFilter,
                                        states: statesFilter,
                                        tags: tagsFilter,

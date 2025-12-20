@@ -15,6 +15,7 @@ define([
         this.open = typeof(args.open) === "function" ? args.open : function() {};
         this.values = ko.isObservable(args.values) ? args.values : ko.observableArray(args.values || []);
         this.empty = ko.isObservable(args.empty) ? args.empty : ko.observable(args.empty || "");
+        this.isEnabled = ko.isObservable(args.isEnabled) ? args.isEnabled : ko.observable(typeof(args.isEnabled) === "boolean" ? args.isEnabled : true);
     };
 
     //#endregion
@@ -35,6 +36,14 @@ define([
             }
             if(o[1] instanceof Date) {
                 r.push(`To: ${o[1].toISOString().split("T")[0]}`);
+            }
+            return r.join(", ");
+        }
+
+        if ((o.length === 1) && (o[0] instanceof Date)) {
+            const r = [];
+            if(o[0] instanceof Date) {
+                r.push(`${o[0].toISOString().split("T")[0]}`);
             }
             return r.join(", ");
         }
@@ -68,11 +77,16 @@ define([
 
     Model.template =
         `<div class="vss-FilterBar--item">
-            <div class="bolt-dropdown-filter-bar-item bolt-expandable-button inline-flex-row">
-                <button class="bolt-button enabled subtle bolt-focus-treatment" role="button" tabindex="0" type="button"
+            <div class="bolt-dropdown-filter-bar-item bolt-expandable-button inline-flex-row"
+                 data-bind="css: { 'bolt-dropdown-filter-bar-item--disabled': !isEnabled() } ">
+                <button class="bolt-button subtle bolt-focus-treatment" role="button" tabindex="0" type="button"
                         data-bind="attr: { 'data-popup-id': id },
                                    click: open, 
-                                   css: { 'active': popupId() === id() }">
+                                   css: { 
+                                    'active': popupId() === id(),
+                                    'enabled': isEnabled(),
+                                    'disabled': !isEnabled()
+                                   }">
                     <div class="bolt-dropdown-expandable-button-label justify-start flex-grow text-ellipsis" style="pointer-events: none">
                             <!-- ko if: !values().filter((v) => v !== null).length -->
                             <span data-bind="text: label"></span>

@@ -15,6 +15,8 @@ define([
     /**
      * Constructor.
      * 
+     * VERTICAL SCROLL: require(["knockout"], (ko) => ko.contextFor(temp2).$data.timeline.setOptions({verticalScroll: true, height: 200}))
+     * 
      * @param {object} args Arguments.
      */
     let Timeline = function (args = {}) {
@@ -506,10 +508,23 @@ define([
         // Create an Arrow
         const dependencies = items
             .filter((i) => i.dependencies.length)
-            .map((i) => i.dependencies.map((d) => ({ id: `${i.id}_${d}`, id_item_1: i.id, id_item_2: d })))
+            .map((i) => i.dependencies.map((d) => ({ 
+                id: `${i.id}_${d}`, 
+                id_item_1: i.id, 
+                id_item_2: d,
+                //title: "Custom title",
+                color: "#83A44A",
+                direction: 1,   // arrow always at id_item_2
+                line: 0,        // solid
+                type: 2,        // cornered
+                align: "center" // straight center-to-center (if type: 1)                
+            })))
             .flat(1);
         if (dependencies.length) {
-            this.arrows = new VisTimelineArrow(this.timeline, dependencies, { color: "rgba(var(--palette-accent2), .8)" });
+            this.arrows = new VisTimelineArrow(this.timeline, dependencies, { 
+                followRelationships: true,
+                color: "rgba(var(--palette-accent2), .8)" 
+            });
         }
         
         // Events

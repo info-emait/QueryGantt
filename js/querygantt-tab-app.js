@@ -72,7 +72,9 @@ define([
         this.parentsFilter = ko.observableArray();
         this.prioritiesFilter = ko.observableArray(["1 - Must have", "2 - Should have", "3 - Could have", "4 - Won't have"]);
 
+        this.filterPrimary = ko.observable({});
         this.filter = ko.observable({});
+        this.filteredPrimaryWits = ko.computed(this._getFilteredPrimaryWits, this);
         this.filteredWits = ko.computed(this._getFilteredWits, this);
 
         this.isTotalEffortVisible = ko.computed(() => this.showFields().includes("effort"));  
@@ -112,9 +114,12 @@ define([
 
     /**
      * Initialize the application.
+     * 
+     * @param {string} asOf Specifies a historical query by indicating a date for when the filter is to be applied.
      */
-    Model.prototype.init = function () {
+    Model.prototype.init = function (asOf = null) {
         const client = api.getClient(witApi.WorkItemTrackingRestClient);
+        let queryAsOf = null;
 
         return client._options.rootPath.then((path) => {
                 this.path = path;
@@ -127,16 +132,17 @@ define([
             })
             .then((types) => {
                 this.types(types.value);
-
-                if (this.query.id !== "00000000-0000-0000-0000-000000000000") {
-                    return client.queryById(this.query.id, this.project.id);
-                }
-
-                return client.queryByWiql({ query: this.query.wiql }, this.project.id);
+                
+                // https://learn.microsoft.com/en-us/azure/devops/boards/queries/wiql-syntax?view=azure-devops
+                // MODE (Recursive): Use for Tree queries ([System.Links.LinkType] = 'System.LinkTypes.Hierarchy-Forward').
+                // Link type must be Tree topology and forward direction. Returns WorkItemLinkInfo records for all work items
+                // that satisfy the source, recursively for target. ORDER BY and ASOF aren't compatible with tree queries.
+                return client.queryByWiql({ query: (asOf !== null) && (this.query.wiql.toLowerCase().indexOf("mode (recursive)") === -1) ? `${this.query.wiql} ASOF '${asOf}'` : this.query.wiql }, this.project.id);
             })
             .then((data) => {
                 this.sortColumns(data.sortColumns || []);
                 this.queryType(data.queryType === 1 ? "flat" : data.queryType === 2 ? "tree" : "onehop");
+                queryAsOf = data.asOf || null;
 
                 // Query type "flat"
                 if (data.queryType === 1) {
@@ -163,7 +169,7 @@ define([
                 var j;
                 var chunk = 200;
                 for (i = 0, j = ids.length; i < j; i += chunk) {
-                    xhrs.push(client.getWorkItems(ids.slice(i, i + chunk), this.project.id, null, null, "all"));
+                    xhrs.push(client.getWorkItems(ids.slice(i, i + chunk), this.project.id, null, queryAsOf, "all"));
                 }
 
                 // Load work items
@@ -255,7 +261,7 @@ define([
                 var j;
                 var chunk = 200;
                 for (i = 0, j = parentIds.length; i < j; i += chunk) {
-                    xhrs.push(client.getWorkItems(parentIds.slice(i, i + chunk), this.project.id, null, null, "all"));
+                    xhrs.push(client.getWorkItems(parentIds.slice(i, i + chunk), this.project.id, null, queryAsOf, "all"));
                 }
 
                 // Load parent and map ids to titles
@@ -337,8 +343,16 @@ define([
             obj2["value"] = record.end.toISOString();
         }
 
+        // State
+        const obj3 = {
+            "op": "replace",
+            "path": "/fields/System.State",
+            "value": record.state
+        };
+
         patch.push(obj1);
         patch.push(obj2);
+        patch.push(obj3);
 
         const client = api.getClient(witApi.WorkItemTrackingRestClient);
         const id = record.id;
@@ -594,6 +608,7 @@ define([
         console.log("~QueryGanttTabApp()");
 
         this.states.dispose();
+        this.filteredPrimaryWits.dispose();
         this.filteredWits.dispose();
         this.updateQueryString.dispose();
         this.getAssigneesFilter.dispose();
@@ -768,6 +783,36 @@ define([
 
 
     /**
+     * Formats the input asOf date.
+     * 
+     * @param {date} d Date to be formatted. 
+     * @returns Date as string in the ISO 8601 format.
+     */
+    Model.prototype._formatAsOf = function(d) {
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear();
+
+        return `${year}-${month}-${day}T00:00:00.0000000`;
+    };
+
+
+    /**
+     * Gets the work items filtered by the primary filter, which triggers the query api.
+     */
+    Model.prototype._getFilteredPrimaryWits = function() {
+        const filter = this.filterPrimary();
+        
+        if (Array.isArray(filter.asOf) && (filter.asOf.length === 1) && (filter.asOf[0] instanceof Date)) {
+            this.init(`${this._formatAsOf(filter.asOf[0])}`);
+            return;
+        }
+
+        this.init();
+    };
+
+    
+    /**
      * Gets the work items filtered by the quick filter.
      */
     Model.prototype._getFilteredWits = function () {
@@ -896,7 +941,8 @@ define([
 
             var state = type.states.find((s) => s.name === w.state);
             if (!state) {
-                throw new Error("QueryGanttTabApp : Unable to find work item's state.");
+                console.warn(`QueryGanttTabApp : _markCompletedWits() : Unable to find work item's state '${w.state}' for work item  #${w.id}.`);
+                return;
             }
 
             w.isCompleted = state.category === "Completed";
