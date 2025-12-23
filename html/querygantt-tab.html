@@ -11,7 +11,7 @@
             <div class="page-content flex-column flex-grow">
                 <my-spinner params="isVisible: isLoading"></my-spinner>
                 <my-message params="text: message"></my-message>
-                <div class="flex-row margin-top-16" style="display: none; position: sticky; top: 0; z-index: 3" data-bind="visible: wits().length">
+                <div class="flex-row margin-top-16" style="display: none; position: sticky; top: 0; z-index: 3" data-bind="visible: (wits().length || zero() !== null) && !isLoading()">
                     <my-filter params="value: filter,
                                        valuePrimary: filterPrimary,
                                        queryType: queryType,
@@ -22,7 +22,7 @@
                                        parents: parentsFilter,
                                        priorities: prioritiesFilter"></my-filter>
                 </div>
-                <div data-bind="with: zero">
+                <div data-bind="with: zero, visible: !isLoading()">
                     <my-zero-data params="title: title, text: text"></my-zero-data>
                 </div>
                 <div class="flex-row margin-top-16 margin-bottom-16" style="display: none" data-bind="ifnot: isLoading, visible: filteredWits().length">
@@ -140,7 +140,7 @@
                         </div>
                     </div>
                 </div>
-                <!-- ko if: !isLoading() -->
+                <!-- ko if: !isLoading() && !zero() -->
                 <div class="querygantt-tab__footer flex-row flex-wrap justify-space-around">
                     <my-legend params="items: filteredWits, title: 'Total Effort:', reduce: (a, b) => a + b.effort || 0, format: (a) => `${a} hour(s)`, isVisible: isTotalEffortVisible"></my-legend>
                     <my-legend params="items: filteredWits, title: 'Total Remaining Work:', reduce: (a, b) => a + b.remainingWork || 0, format: (a) => `${a} hour(s)`, isVisible: isTotalRemainingWorkVisible"></my-legend>

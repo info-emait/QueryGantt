@@ -160,7 +160,7 @@ define([
                 var ids = this.witIds();
 
                 if (!ids.length) {
-                    return;
+                    return Promise.resolve([]);
                 }
 
                 // Split request into chunks
@@ -178,7 +178,7 @@ define([
             .then((wits) => {
                 var relations = this.relations();
                 var results = [];
-
+                
                 // Normalize results
                 wits.forEach((wit) => {
                     var w = {
@@ -804,11 +804,13 @@ define([
         const filter = this.filterPrimary();
         
         if (Array.isArray(filter.asOf) && (filter.asOf.length === 1) && (filter.asOf[0] instanceof Date)) {
-            this.init(`${this._formatAsOf(filter.asOf[0])}`);
+            this.isLoading(true);
+            this.init(`${this._formatAsOf(filter.asOf[0])}`).then(() => this.isLoading(false));
             return;
         }
 
-        this.init();
+        this.isLoading(true);
+        this.init().then(() => this.isLoading(false));
     };
 
     
@@ -873,8 +875,8 @@ define([
                 items = items.filter((i) => (i.targetDate instanceof Date) && i.targetDate.getTime() <= endOfDay);
             }
         }
-
-        this.zero(wits.length && !items.length ? { title: "No results match the query", text: "Please change the filtering criteria." } : null);
+        
+        this.zero((wits.length && !items.length) || !wits.length ? { title: "No results match the query", text: "Please change the filtering criteria." } : null);
 
         return items;
     };

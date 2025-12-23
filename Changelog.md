@@ -2,6 +2,13 @@
 
 
 
+## QueryGantt v1.5.1
+
+### Fixed
+* Fixed when **As of** filter returned zero work items and the Gantt stopped working.
+
+
+
 ## QueryGantt v1.5.0
 
 ### Added
