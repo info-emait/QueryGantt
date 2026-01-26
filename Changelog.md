@@ -6,6 +6,7 @@
 
 ### Fixed
 * Fixed when **As of** filter returned zero work items and the Gantt stopped working.
+* Fixed when it was not possible to update the work item within the timeline.
 
 
 

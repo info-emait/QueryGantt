@@ -352,7 +352,10 @@ define([
 
         patch.push(obj1);
         patch.push(obj2);
-        patch.push(obj3);
+
+        if (record.state) {
+            patch.push(obj3);
+        }
 
         const client = api.getClient(witApi.WorkItemTrackingRestClient);
         const id = record.id;
