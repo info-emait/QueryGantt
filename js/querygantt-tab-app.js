@@ -10,15 +10,15 @@ define([
     "api/index",
     "api/WorkItemTracking/index",
     "services/data",
+    "services/icon",
     "my/templates/gantt",
-    "text!img/icon_list.txt",
     "my/components/legend",
     "my/components/timeline",
     "my/components/spinner",
     "my/components/message",
     "my/components/filter",
     "my/components/zerodata"
-], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, dataService, ganttTemplate, icon_list) {
+], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, dataService, iconService, ganttTemplate) {
     //#region [ Fields ]
 
     const global = (function () { return this; })();
@@ -281,16 +281,12 @@ define([
                     other.forEach((o) => icons = icons.concat(o.types.map((t) => t.icon.url)));
                 }
                 icons = [...new Set(icons)];
-                let xhr = icons.map((url) => fetch(url, this._getFetchParams()).then((response) => response.ok ? response.text() : null).catch((error) => icon_list));
+
+                let xhr = icons.map((url) => iconService.fetch(url));
                 Promise.all(xhr).then((response) => {
                     let tmp = {};
-                    response.forEach((svg, index) => {
-                        let node = (new DOMParser().parseFromString(svg, "text/html")).body.firstChild;
-                        node.classList.add("my-timeline-group__icon");
-                        tmp[icons[index]] = node.outerHTML; 
-                    });
+                    response.forEach((svg, index) => tmp[icons[index]] = svg);
                     this.icons(tmp);
-
                     this.wits(wits);
                 });
             });

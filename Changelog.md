@@ -2,6 +2,13 @@
 
 
 
+## QueryGantt v1.5.2
+
+### Fixed
+* Fixed when some work item icons do not display correctly.
+
+
+
 ## QueryGantt v1.5.1
 
 ### Fixed
