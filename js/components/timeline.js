@@ -400,6 +400,24 @@ define([
 
 
     /**
+     * Handles the item double click event.
+     * 
+     * @param {object} e Arguments.
+     */
+    Timeline.prototype._onDoubleClick = function (e) {
+        // if ((e.event.type !== "dblclick") || isNaN(e.item)) {
+        //     return;
+        // }
+        // const id = e.item;
+        // this.timeline.setSelection([ id ], { focus: false });
+        // this._onSelect({
+        //     items: [id]
+        // });
+        // this.selectedItemId(id);
+    };
+
+
+    /**
      * Handles the item select event.
      * 
      * @param {object} e Arguments.
@@ -529,6 +547,7 @@ define([
         
         // Events
         this.timeline.on("select", this._onSelect.bind(this));
+        this.timeline.on("doubleClick", this._onDoubleClick.bind(this));
     };
 
 
