@@ -6,6 +6,7 @@
 
 ### Fixed
 * Fixed when some work item icons do not display correctly.
+* Fixed when selecting the work item within the timeline moves the label by 2 pixels.
 
 
 
