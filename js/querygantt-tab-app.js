@@ -96,6 +96,7 @@ define([
         this._timeline_closeAction = ko.observable();
         this._timeline_refreshAction = ko.observable();
         this._timeline_updateAction = ko.observable();
+        this._timeline_exportImageAction = ko.observable();
 
         this.updateQueryString = ko.computed(this._updateQueryString, this).extend({ deferred: true });
 
@@ -372,8 +373,15 @@ define([
      * Downloads the timeline as an png image.
      */
     Model.prototype.downloadImage = function () {
-        global.domtoimage
-            .toBlob(doc.querySelector(".my-timeline"), { 
+        const exportImage = this._timeline_exportImageAction();
+        if (typeof (exportImage) !== "function") {
+            this.message("Unable to download the Gantt chart as an image.");
+            console.warn("App : downloadImage() : Timeline is not ready for image export.");
+            return;
+        }
+
+        exportImage((node) => global.domtoimage
+            .toBlob(node, {
                 filter: (node) => {
                     if (typeof(node.hasAttribute) !== "function") {
                         return true;
@@ -381,7 +389,7 @@ define([
                     return !node.hasAttribute("data-noexport");
                 },
                 bgcolor: global.getComputedStyle(doc.body).getPropertyValue("--background-color")
-            })
+            }))
             .then((blob) => api.getClient(witApi.WorkItemTrackingRestClient).createAttachment(blob, this.project.id, `${this.query.name}_${(new Date()).toISOString().split(".").shift().replace(/(-|:)/gi,"")}.png`))
             .then((response) => sdk.getService(api.CommonServiceIds.HostNavigationService).then((service) => service.openNewWindow(response.url)))
             .catch(error => {

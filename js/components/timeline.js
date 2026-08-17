@@ -6,6 +6,7 @@ define([
     //#region [ Fields ]
     
     let global = (function() { return this; })();
+    const maxHeight = "max(12rem, calc(100vh - 16rem))";
 
     //#endregion
 
@@ -219,6 +220,34 @@ define([
 
 
     /**
+     * Runs an image renderer with the timeline expanded to include every row.
+     * Restores the capped height and vertical scroll position afterwards.
+     *
+     * @param {function} renderer Function that receives the timeline element and returns a promise.
+     * @returns Promise containing the renderer result.
+     */
+    Timeline.prototype.exportImage = function (renderer) {
+        if (!this.timeline || typeof (renderer) !== "function") {
+            return Promise.reject(new Error("Timeline is not ready for image export."));
+        }
+
+        const scrollContainer = this.node.querySelector(".vis-left.vis-vertical-scroll");
+        const scrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
+
+        return this._setOptionsAndWait({ maxHeight: "" })
+            .then(() => renderer(this.node))
+            .finally(() => this._setOptionsAndWait({ maxHeight: maxHeight })
+                .then(() => {
+                    const restoredScrollContainer = this.node.querySelector(".vis-left.vis-vertical-scroll");
+                    if (restoredScrollContainer) {
+                        restoredScrollContainer.scrollTop = scrollTop;
+                        restoredScrollContainer.dispatchEvent(new global.Event("scroll"));
+                    }
+                }));
+    };
+
+
+    /**
      * Updates the timeline record.
      * 
      * @param {number} id Record id. 
@@ -329,6 +358,39 @@ define([
         this.timeline = null;
         this.groups = null;
         this.records = null;
+    };
+
+
+    /**
+     * Applies timeline options and waits until the resulting redraw completes.
+     *
+     * @param {object} options Timeline options.
+     * @returns Promise resolved after the redraw.
+     */
+    Timeline.prototype._setOptionsAndWait = function (options) {
+        return new Promise((resolve) => {
+            const timeline = this.timeline;
+            let timeout = null;
+            let done = false;
+            const finish = () => {
+                if (done) {
+                    return;
+                }
+
+                done = true;
+                if (timeout) {
+                    global.clearTimeout(timeout);
+                }
+                timeline.off("changed", finish);
+                global.requestAnimationFrame(resolve);
+            };
+
+            timeline.on("changed", finish);
+            timeline.setOptions(options);
+            if (!done) {
+                timeout = global.setTimeout(finish, 100);
+            }
+        });
     };
 
 
@@ -511,7 +573,7 @@ define([
             verticalScroll: true,
             // Keep the time axes visible by letting vis-timeline scroll long
             // schedules inside the space left below the page controls.
-            maxHeight: "max(12rem, calc(100vh - 16rem))",
+            maxHeight: maxHeight,
             zoomKey: "ctrlKey",
             editable: {
                 remove: false,
