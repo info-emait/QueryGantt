@@ -502,9 +502,16 @@ define([
                 disabled: true
             },
             groupHeightMode: "fixed",
-            orientation: "both",
+            orientation: {
+                axis: "both",
+                // Long schedules should open at the first work item.
+                item: "top"
+            },
             horizontalScroll: true,
             verticalScroll: true,
+            // Keep the time axes visible by letting vis-timeline scroll long
+            // schedules inside the space left below the page controls.
+            maxHeight: "max(12rem, calc(100vh - 16rem))",
             zoomKey: "ctrlKey",
             editable: {
                 remove: false,
