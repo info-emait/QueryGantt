@@ -58,14 +58,24 @@ define([
      */
     Model.prototype.save = function() {
         const fieldsValue = this.fieldsValue();
-        const settings = {
-            showFields: fieldsValue
-        };
+        const key = `gantt_${this.project.id}`;
 
-        dataService.getManager().then((manager) => {
-            manager.setValue(`gantt_${this.project.id}`, JSON.stringify(settings), { scopeType: "User" });
-            this.panel.close({ fieldsValue });
-        });
+        return dataService.getManager()
+            .then((manager) => manager.getValue(key, { scopeType: "User" })
+                .then((value) => ({ manager, value })))
+            .then(({ manager, value }) => {
+                let settings = {};
+                try {
+                    const parsedSettings = value ? JSON.parse(value) : {};
+                    settings = parsedSettings && (typeof(parsedSettings) === "object") && !Array.isArray(parsedSettings) ? parsedSettings : {};
+                }
+                catch (error) {
+                }
+
+                settings.showFields = fieldsValue;
+                return manager.setValue(key, JSON.stringify(settings), { scopeType: "User" });
+            })
+            .then(() => this.panel.close({ fieldsValue }));
     };
 
 

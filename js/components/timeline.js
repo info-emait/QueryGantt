@@ -1,8 +1,9 @@
 define([
     "knockout",
+    "services/timeline-zoom",
     "vis-timeline",
     "vis-timeline-arrow"
-], function (ko, VisTimeline) {
+], function (ko, timelineZoomService, VisTimeline) {
     //#region [ Fields ]
     
     let global = (function() { return this; })();
@@ -30,6 +31,7 @@ define([
         this.typesOther = ko.isObservable(args.typesOther) ? args.typesOther : ko.observable(args.typesOther || []);
         this.icons = ko.isObservable(args.icons) ? args.icons : ko.observable(args.icons || []);
         this.showFields = ko.isObservableArray(args.showFields) ? args.showFields : ko.observableArray(args.showFields || []);
+        this.zoomView = ko.isObservable(args.zoomView) ? args.zoomView : ko.observable(timelineZoomService.normalizeView(args.zoomView));
         this.selectedItem = ko.isObservable(args.selectedItem) ? args.selectedItem : ko.observable(args.selectedItem || null);
         this.selectedItemId = ko.isObservable(args.selectedItemId) ? args.selectedItemId : ko.observable(args.selectedItemId || null);
 
@@ -39,6 +41,8 @@ define([
         this.groups = null;
         this.records = null;
         this.arrows = null;
+        this._pendingZoomPreset = null;
+        this._ignoredRange = null;
 
         // Callbacks
         this.callbacks = args.callbacks;
@@ -160,6 +164,7 @@ define([
      */
     Timeline.prototype.zoomOut = function () {
         if (this.timeline) {
+            this._pendingZoomPreset = timelineZoomService.custom;
             this.timeline.zoomOut(0.2);
         }
     };
@@ -170,6 +175,7 @@ define([
      */
     Timeline.prototype.zoomIn = function () {
         if (this.timeline) {
+            this._pendingZoomPreset = timelineZoomService.custom;
             this.timeline.zoomIn(0.2);
         }
     };
@@ -179,8 +185,41 @@ define([
      * Resets zoom.
      */
     Timeline.prototype.zoomReset = function () {
-        if (this.timeline) {
-            this.timeline.fit();
+        this.setZoomPreset(timelineZoomService.fit);
+    };
+
+
+    /**
+     * Applies a named zoom preset around the current visible center.
+     *
+     * @param {string} preset Zoom preset.
+     */
+    Timeline.prototype.setZoomPreset = function (preset) {
+        if (!this.timeline) {
+            return;
+        }
+
+        preset = timelineZoomService.normalizePreset(preset);
+        if (preset === timelineZoomService.custom) {
+            return;
+        }
+
+        this._pendingZoomPreset = preset;
+        const before = this.timeline.getWindow();
+
+        if (preset === timelineZoomService.fit) {
+            this.timeline.fit({ animation: false });
+        }
+        else {
+            const center = new Date((before.start.getTime() + before.end.getTime()) / 2);
+            const range = timelineZoomService.getPresetWindow(preset, center);
+            this.timeline.setWindow(range.start, range.end, { animation: false });
+        }
+
+        const after = this.timeline.getWindow();
+        if ((before.start.getTime() === after.start.getTime()) && (before.end.getTime() === after.end.getTime())) {
+            this._pendingZoomPreset = null;
+            this.callback("zoomChanged", timelineZoomService.normalizeView({ preset, start: after.start, end: after.end }));
         }
     };
 
@@ -190,6 +229,7 @@ define([
      */
     Timeline.prototype.focus = function () {
         if (this.timeline) {
+            this._pendingZoomPreset = timelineZoomService.custom;
             this.timeline.focus(this.timeline.getSelection());
         }
     };
@@ -329,6 +369,55 @@ define([
         this.timeline = null;
         this.groups = null;
         this.records = null;
+        this._pendingZoomPreset = null;
+        this._ignoredRange = null;
+    };
+
+
+    /**
+     * Restores the last view after the timeline has fitted its items.
+     */
+    Timeline.prototype._restoreZoom = function () {
+        const value = (this.zoomView && typeof(this.zoomView.peek) === "function") ? this.zoomView.peek() : this.zoomView();
+        const view = timelineZoomService.normalizeView(value);
+
+        if (view.preset !== timelineZoomService.fit) {
+            let range = view.start && view.end ? view : null;
+            if (!range) {
+                const fitted = this.timeline.getWindow();
+                const center = new Date((fitted.start.getTime() + fitted.end.getTime()) / 2);
+                range = timelineZoomService.getPresetWindow(view.preset, center);
+            }
+
+            this.timeline.setWindow(range.start, range.end, { animation: false });
+        }
+
+        this._ignoredRange = this.timeline.getWindow();
+    };
+
+
+    /**
+     * Persists a completed timeline range change.
+     *
+     * @param {object} e Range event.
+     */
+    Timeline.prototype._onRangeChanged = function (e) {
+        if (!e || !(e.start instanceof Date) || !(e.end instanceof Date)) {
+            return;
+        }
+
+        if (this._ignoredRange) {
+            const matchesIgnored = Math.abs(this._ignoredRange.start.getTime() - e.start.getTime()) <= 1
+                && Math.abs(this._ignoredRange.end.getTime() - e.end.getTime()) <= 1;
+            this._ignoredRange = null;
+            if (matchesIgnored) {
+                return;
+            }
+        }
+
+        const preset = this._pendingZoomPreset || timelineZoomService.identifyPreset(e.start, e.end);
+        this._pendingZoomPreset = null;
+        this.callback("zoomChanged", timelineZoomService.normalizeView({ preset, start: e.start, end: e.end }));
     };
 
 
@@ -522,6 +611,7 @@ define([
 
         // Create an Timeline
         this.timeline = new VisTimeline.Timeline(this.node, this.records, this.groups, options);
+        this._restoreZoom();
         
         // Create an Arrow
         const dependencies = items
@@ -548,6 +638,7 @@ define([
         // Events
         this.timeline.on("select", this._onSelect.bind(this));
         this.timeline.on("doubleClick", this._onDoubleClick.bind(this));
+        this.timeline.on("rangechanged", this._onRangeChanged.bind(this));
     };
 
 
