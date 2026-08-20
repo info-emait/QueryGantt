@@ -10,6 +10,7 @@ define([
     "api/index",
     "api/WorkItemTracking/index",
     "services/data",
+    "services/date-granularity",
     "services/icon",
     "my/templates/gantt",
     "my/components/legend",
@@ -18,7 +19,7 @@ define([
     "my/components/message",
     "my/components/filter",
     "my/components/zerodata"
-], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, dataService, iconService, ganttTemplate) {
+], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, dataService, dateGranularityService, iconService, ganttTemplate) {
     //#region [ Fields ]
 
     const global = (function () { return this; })();
@@ -49,6 +50,7 @@ define([
         this.zero = ko.observable(null);
 
         this.showFields = ko.observableArray(Array.isArray(args.showFields) ? args.showFields : ["duration"]).extend({ rateLimit: { timeout: 1000, method: "notifyWhenChangesStop" } });
+        this.dateGranularity = ko.observable(dateGranularityService.normalize(args.dateGranularity));
 
         this.isLoading = ko.observable(true);
         this.types = ko.observableArray([]);
@@ -567,6 +569,7 @@ define([
     Model.prototype.openSettings = function () {
         const fields = this.fields();
         const fieldsValue = this.showFields();
+        const dateGranularity = this.dateGranularity();
 
         sdk.getService(api.CommonServiceIds.HostPageLayoutService).then((host) => {
             host.openPanel(`${sdk.getExtensionContext().id}.#{Extension.Id}#-configuration`, {
@@ -574,11 +577,15 @@ define([
                 lightDismiss: false,
                 configuration: {
                     fields,
-                    fieldsValue
+                    fieldsValue,
+                    dateGranularity
                 },
                 onClose: (result = {}) => {
                     if (Array.isArray(result.fieldsValue)) {
                         this.showFields(result.fieldsValue);
+                    }
+                    if (result.dateGranularity) {
+                        this.dateGranularity(dateGranularityService.normalize(result.dateGranularity));
                     }
                 }
             });
@@ -1004,6 +1011,7 @@ define([
             .then((response) => ({ project: response[0], state: response[1], settings: response[2] }))
             .then(({ project, state, settings }) => {
                 let showFields = null;
+                let dateGranularity = null;
                 
                 // Read some initial data from settings first
                 if (settings) {
@@ -1011,6 +1019,9 @@ define([
                         const parsedSettings = JSON.parse(settings);
                         if (parsedSettings.showFields) {
                             showFields = parsedSettings.showFields;
+                        }
+                        if (parsedSettings.dateGranularity) {
+                            dateGranularity = parsedSettings.dateGranularity;
                         }
                     } 
                     catch (error) {
@@ -1030,7 +1041,8 @@ define([
                     user: sdk.getUser().displayName,
                     project: project,
                     query: sdk.getConfiguration().query,
-                    showFields
+                    showFields,
+                    dateGranularity
                 });
                 console.debug("QueryGanttTabApp : ready() : %o", model);
                 
