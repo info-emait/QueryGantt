@@ -22,8 +22,11 @@ define([
     let Timeline = function (args = {}) {
         console.debug("Timeline()");
 
-        this.node = args.element.firstChild;
+        this.root = args.element.firstChild;
+        this.node = this.root.querySelector(".my-timeline__chart");
+        this.rootDropZone = this.root.querySelector(".my-timeline__root-drop-zone");
         this.items = ko.isObservable(args.items) ? args.items : ko.observable(args.items || []);
+        this.backlogOrder = ko.isObservable(args.backlogOrder) ? args.backlogOrder : ko.observable(Boolean(args.backlogOrder));
         this.states = ko.isObservable(args.states) ? args.states : ko.observable(args.states || []);
         this.priorities = ko.isObservable(args.priorities) ? args.priorities : ko.observable(args.priorities || []);
         this.types = ko.isObservable(args.types) ? args.types : ko.observable(args.types || []);
@@ -39,6 +42,14 @@ define([
         this.groups = null;
         this.records = null;
         this.arrows = null;
+        this._backlogDraggedId = null;
+
+        this._onBacklogRootDragOverBound = this._onBacklogRootDragOver.bind(this);
+        this._onBacklogRootDragLeaveBound = this._onBacklogRootDragLeave.bind(this);
+        this._onBacklogRootDropBound = this._onBacklogRootDrop.bind(this);
+        this.rootDropZone.addEventListener("dragover", this._onBacklogRootDragOverBound, false);
+        this.rootDropZone.addEventListener("dragleave", this._onBacklogRootDragLeaveBound, false);
+        this.rootDropZone.addEventListener("drop", this._onBacklogRootDropBound, false);
 
         // Callbacks
         this.callbacks = args.callbacks;
@@ -265,6 +276,9 @@ define([
 
         this._onItemsChangedSubscribe.dispose();
         this._onSelectedIdChangedSubscribe.dispose();
+        this.rootDropZone.removeEventListener("dragover", this._onBacklogRootDragOverBound, false);
+        this.rootDropZone.removeEventListener("dragleave", this._onBacklogRootDragLeaveBound, false);
+        this.rootDropZone.removeEventListener("drop", this._onBacklogRootDropBound, false);
     };
 
     //#endregion
@@ -329,6 +343,195 @@ define([
         this.timeline = null;
         this.groups = null;
         this.records = null;
+    };
+
+
+    /**
+     * Starts dragging a row in backlog-order mode.
+     *
+     * @param {object} record Timeline group record.
+     * @param {DragEvent} e Drag event.
+     */
+    Timeline.prototype._onBacklogDragStart = function (record, e) {
+        if (!this.backlogOrder() || !record.backlogEligible) {
+            e.preventDefault();
+            return;
+        }
+
+        this._backlogDraggedId = record.id;
+        this.root.classList.add("my-timeline--dragging");
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", record.originalId + "");
+        e.stopPropagation();
+    };
+
+
+    /**
+     * Finishes dragging a backlog row.
+     */
+    Timeline.prototype._onBacklogDragEnd = function () {
+        this._clearBacklogDrag();
+    };
+
+
+    /**
+     * Shows the valid drop action over a backlog row.
+     *
+     * @param {object} target Target timeline group.
+     * @param {HTMLElement} element Target row element.
+     * @param {DragEvent} e Drag event.
+     */
+    Timeline.prototype._onBacklogDragOver = function (target, element, e) {
+        const dragged = this.groups && this.groups.get(this._backlogDraggedId);
+        const position = this._getBacklogDropPosition(dragged, target, element, e);
+        this._clearBacklogDropClasses();
+
+        if (!position) {
+            e.dataTransfer.dropEffect = "none";
+            return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "move";
+        element.classList.add(`my-timeline-group--drop-${position}`);
+        element.setAttribute("data-backlog-drop-position", position);
+    };
+
+
+    /**
+     * Removes a row's drop indication after leaving it.
+     *
+     * @param {HTMLElement} element Target row element.
+     * @param {DragEvent} e Drag event.
+     */
+    Timeline.prototype._onBacklogDragLeave = function (element, e) {
+        if (e.relatedTarget && element.contains(e.relatedTarget)) {
+            return;
+        }
+        this._clearBacklogDropClasses();
+    };
+
+
+    /**
+     * Applies a drop on another backlog row.
+     *
+     * @param {object} target Target timeline group.
+     * @param {HTMLElement} element Target row element.
+     * @param {DragEvent} e Drag event.
+     */
+    Timeline.prototype._onBacklogDrop = function (target, element, e) {
+        const dragged = this.groups && this.groups.get(this._backlogDraggedId);
+        const position = element.getAttribute("data-backlog-drop-position") || this._getBacklogDropPosition(dragged, target, element, e);
+        if (!position) {
+            return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+        this._runBacklogMove(target.id, position);
+    };
+
+
+    /**
+     * Enables dropping a dragged row at the root of its backlog level.
+     */
+    Timeline.prototype._onBacklogRootDragOver = function (e) {
+        const dragged = this.groups && this.groups.get(this._backlogDraggedId);
+        if (!dragged || !dragged.backlogEligible) {
+            return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "move";
+        this.rootDropZone.classList.add("my-timeline__root-drop-zone--active");
+    };
+
+
+    /**
+     * Clears the root drop indication after leaving it.
+     */
+    Timeline.prototype._onBacklogRootDragLeave = function () {
+        this.rootDropZone.classList.remove("my-timeline__root-drop-zone--active");
+    };
+
+
+    /**
+     * Moves a dragged row to the root of its backlog level.
+     */
+    Timeline.prototype._onBacklogRootDrop = function (e) {
+        if (this._backlogDraggedId === null) {
+            return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+        this._runBacklogMove(null, "root");
+    };
+
+
+    /**
+     * Resolves the meaning of a row drop from the participating backlog levels.
+     */
+    Timeline.prototype._getBacklogDropPosition = function (dragged, target, element, e) {
+        if (!dragged || !target || !dragged.backlogEligible || !target.backlogEligible || (dragged.id === target.id)) {
+            return null;
+        }
+
+        if (dragged.backlogId === target.backlogId) {
+            const bounds = element.getBoundingClientRect();
+            return e.clientY < bounds.top + (bounds.height / 2) ? "before" : "after";
+        }
+
+        if (target.backlogRank === dragged.backlogRank + 1) {
+            return "inside";
+        }
+
+        return null;
+    };
+
+
+    /**
+     * Sends a backlog move to the application model.
+     */
+    Timeline.prototype._runBacklogMove = function (targetId, position) {
+        const draggedId = this._backlogDraggedId;
+        this._clearBacklogDrag();
+
+        const result = this.callback("reorderWit", {
+            draggedId: draggedId,
+            targetId: targetId,
+            position: position
+        });
+        if (result && (typeof (result.catch) === "function")) {
+            result.catch((error) => {
+                console.warn("Timeline : _runBacklogMove() : Unable to reorder work item.");
+                console.warn(error);
+            });
+        }
+    };
+
+
+    /**
+     * Clears drag state and all drop indicators.
+     */
+    Timeline.prototype._clearBacklogDrag = function () {
+        this._backlogDraggedId = null;
+        this.root.classList.remove("my-timeline--dragging");
+        this.rootDropZone.classList.remove("my-timeline__root-drop-zone--active");
+        this._clearBacklogDropClasses();
+    };
+
+
+    /**
+     * Clears row drop indicators.
+     */
+    Timeline.prototype._clearBacklogDropClasses = function () {
+        this.root.querySelectorAll("[data-backlog-drop-position]").forEach((element) => {
+            element.classList.remove("my-timeline-group--drop-before", "my-timeline-group--drop-after", "my-timeline-group--drop-inside");
+            element.removeAttribute("data-backlog-drop-position");
+        });
     };
 
 
@@ -454,6 +657,7 @@ define([
         var typesOther = this.typesOther();
         var icons = this.icons();
         var showFields = this.showFields();
+        var backlogOrder = this.backlogOrder();
         var now = new Date();
 
         this._createStyles(types, typesOther);
@@ -511,7 +715,7 @@ define([
                 updateGroup: false,
                 updateTime: true
             },
-            groupTemplate: (record, element) => createGroupTemplate(this, record, element, states, priorities, types, typesOther, icons, showFields),
+            groupTemplate: (record, element) => createGroupTemplate(this, record, element, states, priorities, types, typesOther, icons, showFields, backlogOrder),
             visibleFrameTemplate: (record, element) => createVisibleFrameTemplate(this, record, element),
             onMove: (record, callback) => updateWit(this, record, callback)
             //template: function (item, element, data) { return '<h1>' + item.header + data.moving?' '+ data.start:'' + '</h1><p>' + item.description + '</p>'; }
@@ -620,6 +824,7 @@ define([
     let createGroup = function (wit, items, now) {
         var group = {
             id: wit.id,
+            originalId: wit.originalId,
             parentId: wit.parentId,
             parentTitle: wit.parentTitle,
             project: wit.project,
@@ -645,6 +850,9 @@ define([
             tags: wit.tags,
             startDate: wit.startDate,
             endDate: wit.targetDate,
+            backlogEligible: Boolean(wit.backlogOrder && wit.backlogOrder.eligible),
+            backlogId: wit.backlogOrder && wit.backlogOrder.backlogId,
+            backlogRank: wit.backlogOrder && wit.backlogOrder.backlogRank,
             nestedGroups: items
                 .filter((child) => (child.parent === wit.path) && !isMarker(child))
                 .map((child) => child.id)
@@ -707,8 +915,9 @@ define([
      * @param {array} typesOthers List of supported types for other projects in the across project query.
      * @param {array} icons List of icons.
      * @param {array} showFields List of fields which should be rendered.
+     * @param {boolean} backlogOrder True when backlog ordering is active.
      */
-    let createGroupTemplate = function (vm, record, element, states, priorities, types, typesOther, icons, showFields) {
+    let createGroupTemplate = function (vm, record, element, states, priorities, types, typesOther, icons, showFields, backlogOrder) {
         // Do not create group label for markers group
         if (!record || (record.type === "markers")) {
             return "";
@@ -722,6 +931,14 @@ define([
             `<a class="my-timeline-group__title ${record.isCompleted ? "my-timeline-group__title--completed" : ""}" data-id="${record.id}" title="${record.title}" href="${record.url.replace('/_apis/wit/workItems/', '/_workitems/edit/')}">${showFields.includes("id") ? "<span class='font-weight-semibold'>#" + record.id + "</span>&nbsp" : ""}${record.content}</a>`,
             `<div class="my-timeline-group__state" title="${record.state}" style="background-color: #${state.color}"></div>`
         ];
+
+        if (backlogOrder && record.backlogEligible) {
+            result.unshift(
+                `<div class="my-timeline-group__button my-timeline-group__button--drag fluent-icons-enabled text-center" title="Drag to reorder in the team backlog" draggable="true" data-noexport="true">
+                    <span aria-hidden="true" class="flex-noshrink fabric-icon ms-Icon--GripperDotsVertical large"></span>
+                 </div>`
+            );
+        }
 
         if (showFields.includes("tags")) {
             const tags = record.tags.length ? record.tags.map((t) => `<div>${t}</div>`).join("") : "";
@@ -804,11 +1021,21 @@ define([
         // Create element
         let el = global.document.createElement("div");
         el.classList.add("my-timeline-group");
+        el.setAttribute("data-work-item-id", record.id);
         el.innerHTML = result.join("");
 
         el.querySelector(".my-timeline-group__title").addEventListener("pointerdown", vm._onGroupTitleSelect.bind(vm), false);
         el.querySelector(".my-timeline-group__button--checkbox").addEventListener("pointerdown", vm._onGroupSelect.bind(vm), false);
         el.querySelector(".my-timeline-group__button--edit").addEventListener("pointerdown", vm._onGroupEdit.bind(vm), false);
+
+        const dragHandle = el.querySelector(".my-timeline-group__button--drag");
+        if (dragHandle) {
+            dragHandle.addEventListener("dragstart", vm._onBacklogDragStart.bind(vm, record), false);
+            dragHandle.addEventListener("dragend", vm._onBacklogDragEnd.bind(vm), false);
+            el.addEventListener("dragover", vm._onBacklogDragOver.bind(vm, record, el), false);
+            el.addEventListener("dragleave", vm._onBacklogDragLeave.bind(vm, el), false);
+            el.addEventListener("drop", vm._onBacklogDrop.bind(vm, record, el), false);
+        }
 
         return el;
     };
@@ -964,7 +1191,10 @@ define([
             createViewModel: Timeline.createViewModel 
         },
         template: 
-            `<div class="my-timeline"></div>`
+            `<div class="my-timeline">
+                <div class="my-timeline__root-drop-zone" data-noexport="true">Move to backlog root</div>
+                <div class="my-timeline__chart"></div>
+             </div>`
     });
 
     //#endregion

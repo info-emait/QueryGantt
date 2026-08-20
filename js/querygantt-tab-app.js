@@ -9,7 +9,9 @@ define([
     "dom-to-image",
     "api/index",
     "api/WorkItemTracking/index",
+    "api/Work/index",
     "services/data",
+    "services/backlog-order",
     "services/icon",
     "my/templates/gantt",
     "my/components/legend",
@@ -18,7 +20,7 @@ define([
     "my/components/message",
     "my/components/filter",
     "my/components/zerodata"
-], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, dataService, iconService, ganttTemplate) {
+], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, workApi, dataService, backlogOrderService, iconService, ganttTemplate) {
     //#region [ Fields ]
 
     const global = (function () { return this; })();
@@ -41,10 +43,15 @@ define([
         this.version = args.version;
         this.user = args.user;
         this.project = args.project;
+        this.team = args.team;
         this.query = args.query;
+        this.manager = args.manager || null;
+        this.settingsKey = args.settingsKey || null;
+        this.settings = args.settings || {};
 
         this.token = null;
         this.path = null;
+        this._backlogRequestId = 0;
 
         this.zero = ko.observable(null);
 
@@ -58,6 +65,11 @@ define([
         this.witIds = ko.observableArray([]);
         this.relations = ko.observableArray([]);
         this.wits = ko.observableArray([]);
+        this.backlogIndex = ko.observable(backlogOrderService.empty());
+        this.backlogAvailable = ko.observable(false);
+        this.backlogLoading = ko.observable(false);
+        this.isHistorical = ko.observable(false);
+        this.orderMode = ko.observable(args.orderMode === backlogOrderService.backlogOrder ? backlogOrderService.backlogOrder : backlogOrderService.queryOrder);
         this.current = ko.observable(null);
         this.currentId = ko.observable(null);
         
@@ -76,6 +88,9 @@ define([
         this.filter = ko.observable({});
         this.filteredPrimaryWits = ko.computed(this._getFilteredPrimaryWits, this);
         this.filteredWits = ko.computed(this._getFilteredWits, this);
+        this.isBacklogOrder = ko.computed(() => (this.orderMode() === backlogOrderService.backlogOrder) && this.backlogAvailable());
+        this.orderedWits = ko.computed(this._getOrderedWits, this);
+        this.backlogOrderTitle = ko.computed(this._getBacklogOrderTitle, this);
 
         this.isTotalEffortVisible = ko.computed(() => this.showFields().includes("effort"));  
         this.isTotalRemainingWorkVisible = ko.computed(() => this.showFields().includes("remainingWork"));
@@ -105,6 +120,7 @@ define([
         this.getAreasFilter = ko.computed(this._getAreasFilter, this);
         this.getParentsFilter = ko.computed(this._getParentsFilter, this);
         this.showDetail = ko.computed(this._showDetail, this);
+        this._orderModeSubscribe = this.orderMode.subscribe(this._saveOrderMode, this);
     };
 
     //#endregion
@@ -120,6 +136,10 @@ define([
     Model.prototype.init = function (asOf = null) {
         const client = api.getClient(witApi.WorkItemTrackingRestClient);
         let queryAsOf = null;
+        let queryBacklogIndex = backlogOrderService.empty();
+        const historical = asOf !== null;
+        this.isHistorical(historical);
+        const backlogPromise = this._loadBacklogOrder(asOf);
 
         return client._options.rootPath.then((path) => {
                 this.path = path;
@@ -137,7 +157,13 @@ define([
                 // MODE (Recursive): Use for Tree queries ([System.Links.LinkType] = 'System.LinkTypes.Hierarchy-Forward').
                 // Link type must be Tree topology and forward direction. Returns WorkItemLinkInfo records for all work items
                 // that satisfy the source, recursively for target. ORDER BY and ASOF aren't compatible with tree queries.
-                return client.queryByWiql({ query: (asOf !== null) && (this.query.wiql.toLowerCase().indexOf("mode (recursive)") === -1) ? `${this.query.wiql} ASOF '${asOf}'` : this.query.wiql }, this.project.id);
+                return Promise.all([
+                    client.queryByWiql({ query: (asOf !== null) && (this.query.wiql.toLowerCase().indexOf("mode (recursive)") === -1) ? `${this.query.wiql} ASOF '${asOf}'` : this.query.wiql }, this.project.id),
+                    backlogPromise
+                ]).then((response) => {
+                    queryBacklogIndex = response[1];
+                    return response[0];
+                });
             })
             .then((data) => {
                 this.sortColumns(data.sortColumns || []);
@@ -183,6 +209,7 @@ define([
                 wits.forEach((wit) => {
                     var w = {
                         id: wit.fields["System.Id"],
+                        originalId: wit.fields["System.Id"],
                         parentId: wit.fields["System.Parent"] || null,
                         rev: wit.fields["System.Rev"],
                         project: wit.fields["System.TeamProject"],
@@ -227,6 +254,21 @@ define([
 
                         results.push(o);
                     });
+                });
+
+                const duplicateCount = {};
+                results.forEach((wit) => duplicateCount[wit.originalId] = (duplicateCount[wit.originalId] || 0) + 1);
+                results.forEach((wit) => {
+                    const entry = backlogOrderService.getEntry(queryBacklogIndex, wit.originalId, wit.type);
+                    wit.backlogOrder = entry ? {
+                        eligible: !historical && (wit.project === this.project.name) && (duplicateCount[wit.originalId] === 1),
+                        parentId: entry.parentId,
+                        backlogId: entry.backlogId,
+                        backlogRank: entry.backlogRank,
+                        position: entry.position
+                    } : {
+                        eligible: false
+                    };
                 });
 
                 return results;
@@ -369,6 +411,38 @@ define([
 
 
     /**
+     * Reorders a work item in the current team's backlog.
+     *
+     * @param {object} move Drag and drop description.
+     */
+    Model.prototype.reorderWit = function (move) {
+        const dragged = this.wits().find((wit) => (wit.id + "") === (move.draggedId + ""));
+        const target = move.targetId === null || move.targetId === undefined
+            ? null
+            : this.wits().find((wit) => (wit.id + "") === (move.targetId + ""));
+        const plan = backlogOrderService.planMove(this.backlogIndex(), dragged, target, move.position);
+
+        if (!plan.valid) {
+            this.message(plan.reason);
+            return Promise.resolve(false);
+        }
+
+        this.isLoading(true);
+        const client = api.getClient(workApi.WorkRestClient);
+        return client.reorderBacklogWorkItems(plan.operation, this._getTeamContext())
+            .then(() => this.refresh())
+            .then(() => true)
+            .catch((error) => {
+                this.isLoading(false);
+                this.message(`Unable to reorder work item #${plan.operation.ids[0]}.`);
+                console.warn(`App : reorderWit() : Unable to reorder work item #${plan.operation.ids[0]}.`);
+                console.warn(error);
+                return false;
+            });
+    };
+
+
+    /**
      * Downloads the timeline as an png image.
      */
     Model.prototype.downloadImage = function () {
@@ -402,9 +476,12 @@ define([
             .then((workbook) => {
                 // Get the right sheet
                 let sheet = workbook.sheet("GANTT");
+                const wits = this.isBacklogOrder()
+                    ? backlogOrderService.sortItems(this.wits(), this.backlogIndex())
+                    : this.wits();
 
                 // Set output data
-                this.wits().forEach((wit, i) => {
+                wits.forEach((wit, i) => {
                     sheet.cell(`B${i + 8}`).value(wit.id);
                     sheet.cell(`C${i + 8}`).value(wit.level);
                     sheet.cell(`D${i + 8}`).value(wit.type);
@@ -557,7 +634,7 @@ define([
         this.sortColumns([]);
         this.types([]);
 
-        this.init().then(() => this.isLoading(false));
+        return this.init().then(() => this.isLoading(false));
     };
 
 
@@ -579,6 +656,7 @@ define([
                 onClose: (result = {}) => {
                     if (Array.isArray(result.fieldsValue)) {
                         this.showFields(result.fieldsValue);
+                        this.settings.showFields = result.fieldsValue;
                     }
                 }
             });
@@ -609,6 +687,9 @@ define([
         this.states.dispose();
         this.filteredPrimaryWits.dispose();
         this.filteredWits.dispose();
+        this.orderedWits.dispose();
+        this.isBacklogOrder.dispose();
+        this.backlogOrderTitle.dispose();
         this.updateQueryString.dispose();
         this.getAssigneesFilter.dispose();
         this.getStatesFilter.dispose();
@@ -619,6 +700,7 @@ define([
         this.isTotalEffortVisible.dispose();
         this.isTotalRemainingWorkVisible.dispose();
         this.isTotalCompletedWorkVisible.dispose();
+        this._orderModeSubscribe.dispose();
     };
 
     //#endregion
@@ -636,6 +718,66 @@ define([
                 "Authorization": "Bearer " + this.token
             }
         };
+    };
+
+
+    /**
+     * Returns the current Azure DevOps team context in the format expected by the Work API.
+     */
+    Model.prototype._getTeamContext = function () {
+        return {
+            projectId: this.project.id,
+            teamId: this.team && this.team.id
+        };
+    };
+
+
+    /**
+     * Loads all visible backlog levels for the current team.
+     *
+     * @param {string} asOf Historical query date, if any.
+     */
+    Model.prototype._loadBacklogOrder = function (asOf) {
+        const requestId = ++this._backlogRequestId;
+        const emptyIndex = backlogOrderService.empty();
+        this.backlogAvailable(false);
+        this.backlogIndex(emptyIndex);
+
+        if (asOf !== null || !this.team || !this.team.id) {
+            this.backlogLoading(false);
+            return Promise.resolve(emptyIndex);
+        }
+
+        this.backlogLoading(true);
+        const client = api.getClient(workApi.WorkRestClient);
+        return client.getBacklogs(this._getTeamContext())
+            .then((backlogs) => (backlogs || []).filter((backlog) => !backlog.isHidden))
+            .then((backlogs) => Promise.all([
+                backlogs,
+                Promise.all(backlogs.map((backlog) => client.getBacklogLevelWorkItems(this._getTeamContext(), backlog.id)))
+            ]))
+            .then((response) => {
+                const index = backlogOrderService.createIndex(response[0], response[1]);
+                if (requestId !== this._backlogRequestId) {
+                    return emptyIndex;
+                }
+                this.backlogIndex(index);
+                this.backlogAvailable(index.size > 0);
+                this.backlogLoading(false);
+                return index;
+            })
+            .catch((error) => {
+                if (requestId !== this._backlogRequestId) {
+                    return emptyIndex;
+                }
+                this.backlogLoading(false);
+                if (this.orderMode() === backlogOrderService.backlogOrder) {
+                    this.message("Backlog order is unavailable for the current team.");
+                }
+                console.warn("App : _loadBacklogOrder() : Unable to load backlog order.");
+                console.warn(error);
+                return emptyIndex;
+            });
     };
 
 
@@ -879,6 +1021,42 @@ define([
 
         return items;
     };
+
+
+    /**
+     * Gets the filtered work items in the selected display order.
+     */
+    Model.prototype._getOrderedWits = function () {
+        const items = this.filteredWits();
+        if (!this.isBacklogOrder()) {
+            return items;
+        }
+
+        return backlogOrderService.sortItems(items, this.backlogIndex());
+    };
+
+
+    /**
+     * Gets a tooltip describing backlog-order availability and drag support.
+     */
+    Model.prototype._getBacklogOrderTitle = function () {
+        if (this.backlogLoading()) {
+            return "Loading the current team's backlog order.";
+        }
+        if (this.isHistorical()) {
+            return "Backlog order is unavailable for historical query results.";
+        }
+        if (!this.team || !this.team.id) {
+            return "Backlog order requires an Azure DevOps team context.";
+        }
+        if (!this.backlogAvailable()) {
+            return "No backlog order is available for the current team.";
+        }
+
+        const items = this.wits();
+        const eligible = items.filter((wit) => wit.backlogOrder && wit.backlogOrder.eligible).length;
+        return `${this.team.name} backlog order. ${eligible} of ${items.length} query items can be dragged.`;
+    };
     
 
     /**
@@ -920,6 +1098,26 @@ define([
             .then(({ host, state }) => {
                 state.showFields = showFields.join(",");
                 host.setQueryParams(state);
+            });
+    };
+
+
+    /**
+     * Persists the selected display order in the existing per-user/project settings.
+     *
+     * @param {string} value Selected order mode.
+     */
+    Model.prototype._saveOrderMode = function(value) {
+        if (!this.manager || !this.settingsKey) {
+            return;
+        }
+
+        this.settings.orderMode = value;
+        this.manager
+            .setValue(this.settingsKey, JSON.stringify(this.settings), { scopeType: "User" })
+            .catch((error) => {
+                console.warn("App : _saveOrderMode() : Unable to save display order.");
+                console.warn(error);
             });
     };
 
@@ -999,21 +1197,35 @@ define([
             .then(({ project, host, manager }) => Promise.all([
                 project.getProject(),
                 host.getQueryParams(),
-                project.getProject().then((p) => manager.getValue(`gantt_${p.id}`, { scopeType: "User" }))
+                project.getProject().then((p) => manager.getValue(`gantt_${p.id}`, { scopeType: "User" })),
+                manager
             ]))
-            .then((response) => ({ project: response[0], state: response[1], settings: response[2] }))
-            .then(({ project, state, settings }) => {
+            .then((response) => ({ project: response[0], state: response[1], settings: response[2], manager: response[3] }))
+            .then(({ project, state, settings, manager }) => {
                 let showFields = null;
+                let orderMode = backlogOrderService.queryOrder;
+                let parsedSettings = {};
+                let team = null;
+
+                try {
+                    team = sdk.getTeamContext();
+                }
+                catch (error) {
+                }
                 
                 // Read some initial data from settings first
                 if (settings) {
                     try {
-                        const parsedSettings = JSON.parse(settings);
+                        parsedSettings = JSON.parse(settings);
                         if (parsedSettings.showFields) {
                             showFields = parsedSettings.showFields;
                         }
+                        if (parsedSettings.orderMode === backlogOrderService.backlogOrder) {
+                            orderMode = backlogOrderService.backlogOrder;
+                        }
                     } 
                     catch (error) {
+                        parsedSettings = {};
                     }
                 }
 
@@ -1029,8 +1241,13 @@ define([
                     fields: cnf.fields,
                     user: sdk.getUser().displayName,
                     project: project,
+                    team,
                     query: sdk.getConfiguration().query,
-                    showFields
+                    showFields,
+                    orderMode,
+                    manager,
+                    settings: parsedSettings,
+                    settingsKey: `gantt_${project.id}`
                 });
                 console.debug("QueryGanttTabApp : ready() : %o", model);
                 

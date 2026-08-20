@@ -48,6 +48,14 @@
                                 </div>
                                 <div class="bolt-header-commandbar bolt-button-group flex-row justify-end">
                                     <div class="bolt-header-commandbar-button-group flex-row flex-center scroll-hidden">
+                                        <label class="querygantt-tab__order-selector flex-row flex-center" data-bind="attr: { title: backlogOrderTitle }">
+                                            <span>Order:</span>
+                                            <select aria-label="Gantt display order" data-bind="value: orderMode">
+                                                <option value="query">Query order</option>
+                                                <option value="backlog">Backlog order</option>
+                                            </select>
+                                            <span class="querygantt-tab__order-unavailable" data-bind="visible: orderMode() === 'backlog' && !backlogLoading() && !backlogAvailable()">Unavailable</span>
+                                        </label>
                                         <button class="bolt-header-command-item-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment margin-left-8" tabindex="0" type="button" title="Refresh data"
                                                 data-bind="click: refresh">
                                             <span class="fluent-icons-enabled">
@@ -110,9 +118,10 @@
                         </div>
                         <div class="bolt-card-content flex-row flex-grow">
                             <div class="h-scroll-auto bolt-table-container flex-grow" data-bind="if: filteredWits().length">
-                                <my-timeline params="items: filteredWits,
+                                <my-timeline params="items: orderedWits,
                                                     selectedItem: current,
                                                     selectedItemId: currentId,
+                                                    backlogOrder: isBacklogOrder,
                                                     states: states, 
                                                     priorities: priorities, 
                                                     types: types, 
@@ -121,7 +130,8 @@
                                                     showFields: showFields,
                                                     callbacks: {
                                                         openNewWindow: openNewWindow.bind($root),
-                                                        updateWit: updateWit.bind($root)
+                                                        updateWit: updateWit.bind($root),
+                                                        reorderWit: reorderWit.bind($root)
                                                     },
                                                     actions: {
                                                         expand: _timeline_expandAction,

@@ -29,6 +29,29 @@ html, body {
         padding-top: rem(16px);
     }
 
+    &__order-selector {
+        color: var(--text-secondary-color);
+        font-size: rem(12px);
+        gap: rem(6px);
+        margin-left: rem(8px);
+        white-space: nowrap;
+
+        select {
+            height: rem(28px);
+            max-width: rem(130px);
+            border: 1px solid var(--component-border-color, rgba(0, 0, 0, .2));
+            border-radius: rem(2px);
+            padding: 0 rem(24px) 0 rem(8px);
+            color: var(--text-primary-color);
+            background-color: var(--background-color);
+            font: inherit;
+        }
+    }
+
+    &__order-unavailable {
+        color: rgba(var(--palette-error, 205, 74, 69), 1);
+    }
+
     &__footer {
         line-height: rem(24px);
         font-size: rem(14px);

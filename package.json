@@ -4,6 +4,9 @@
     "version": "#{Project.AssemblyInfo.Version}#",
     "author": "emait",
     "private": true,
+    "scripts": {
+        "test": "node tests/backlog-order.test.js && node tests/querygantt-backlog-integration.test.js"
+    },
     "devDependencies": {
         "grunt": "1.6.1",
         "grunt-version": "3.0.2",

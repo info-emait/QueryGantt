@@ -13,6 +13,7 @@ Query Gantt is an extension for the Azure DevOps, which enables you to view the 
 * Share the timeline via URL (user needs to copy the URL address in the browser address bar).
 * Filtering by Id, Title, Period, Assigned To, State, Priority, Tags, Area and Parent work item.
 * Visualisation of the Successor-Predecessor relations.
+* Switch between query order and the current team's backlog order, with drag-and-drop reordering for eligible backlog items.
 
 # Setup
 After installing the extension from the Marketplace, you need to enable it in the **Manage features**  section. In order to do so, follow the instructions [here](https://learn.microsoft.com/en-us/azure/devops/project/navigation/preview-features?view=azure-devops).
