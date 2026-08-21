@@ -41,6 +41,10 @@ define([
         this.groups = null;
         this.records = null;
         this.arrows = null;
+        this._resizeTimelineBound = this._resizeTimeline.bind(this);
+        if (typeof(global.addEventListener) === "function") {
+            global.addEventListener("resize", this._resizeTimelineBound, false);
+        }
 
         // Callbacks
         this.callbacks = args.callbacks;
@@ -267,12 +271,25 @@ define([
 
         this._onItemsChangedSubscribe.dispose();
         this._onSelectedIdChangedSubscribe.dispose();
+        if (typeof(global.removeEventListener) === "function") {
+            global.removeEventListener("resize", this._resizeTimelineBound, false);
+        }
     };
 
     //#endregion
 
 
     //#region [ Methods : Private ]
+
+    /**
+     * Keeps Day mode capped at a day axis after the host panel is resized.
+     */
+    Timeline.prototype._resizeTimeline = function () {
+        if (!this.timeline || dateGranularityService.normalize(this.dateGranularity()) !== dateGranularityService.day) {
+            return;
+        }
+        this.timeline.setOptions({ zoomMin: dateGranularityService.getZoomMin(dateGranularityService.day, this.node.clientWidth) });
+    };
 
     /**
      * Create styles for the input types.
@@ -522,6 +539,7 @@ define([
 
         if (dateGranularity === dateGranularityService.day) {
             options.snap = dateGranularityService.startOfDay;
+            options.zoomMin = dateGranularityService.getZoomMin(dateGranularity, this.node.clientWidth);
         }
 
         this.groups = new VisTimeline.DataSet(groups);

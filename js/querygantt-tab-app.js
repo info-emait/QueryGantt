@@ -10,6 +10,7 @@ define([
     "api/index",
     "api/WorkItemTracking/index",
     "services/data",
+    "services/browser-settings",
     "services/date-granularity",
     "services/icon",
     "my/templates/gantt",
@@ -19,7 +20,7 @@ define([
     "my/components/message",
     "my/components/filter",
     "my/components/zerodata"
-], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, dataService, dateGranularityService, iconService, ganttTemplate) {
+], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, dataService, browserSettingsService, dateGranularityService, iconService, ganttTemplate) {
     //#region [ Fields ]
 
     const global = (function () { return this; })();
@@ -43,6 +44,8 @@ define([
         this.user = args.user;
         this.project = args.project;
         this.query = args.query;
+        this.extensionId = args.extensionId || "querygantt";
+        this.browserStorage = args.browserStorage || null;
 
         this.token = null;
         this.path = null;
@@ -578,14 +581,17 @@ define([
                 configuration: {
                     fields,
                     fieldsValue,
-                    dateGranularity
+                    dateGranularity,
+                    extensionId: this.extensionId
                 },
                 onClose: (result = {}) => {
                     if (Array.isArray(result.fieldsValue)) {
                         this.showFields(result.fieldsValue);
                     }
                     if (result.dateGranularity) {
-                        this.dateGranularity(dateGranularityService.normalize(result.dateGranularity));
+                        const dateGranularity = dateGranularityService.normalize(result.dateGranularity);
+                        this.dateGranularity(dateGranularity);
+                        this._saveDateGranularity(dateGranularity);
                     }
                 }
             });
@@ -632,6 +638,21 @@ define([
 
 
     //#region [ Methods : Private ]
+
+    /**
+     * Persists date granularity in this browser profile.
+     */
+    Model.prototype._saveDateGranularity = function (value) {
+        value = dateGranularityService.normalize(value);
+        return Promise.resolve(browserSettingsService.write(
+            this.extensionId,
+            this.project.id,
+            "dateGranularity",
+            null,
+            value,
+            this.browserStorage
+        ));
+    };
 
     /**
      * Returns params for fetch calls.
@@ -1012,11 +1033,20 @@ define([
             .then(({ project, state, settings }) => {
                 let showFields = null;
                 let dateGranularity = null;
+                let parsedSettings = {};
+                let extensionId = "querygantt";
+
+                try {
+                    extensionId = sdk.getExtensionContext().id || extensionId;
+                }
+                catch (error) {
+                }
                 
                 // Read some initial data from settings first
                 if (settings) {
                     try {
-                        const parsedSettings = JSON.parse(settings);
+                        const value = JSON.parse(settings);
+                        parsedSettings = value && (typeof(value) === "object") && !Array.isArray(value) ? value : {};
                         if (parsedSettings.showFields) {
                             showFields = parsedSettings.showFields;
                         }
@@ -1025,11 +1055,21 @@ define([
                         }
                     } 
                     catch (error) {
+                        parsedSettings = {};
                     }
                 }
 
+                const browserGranularity = browserSettingsService.read(extensionId, project.id, "dateGranularity", null);
+                dateGranularity = dateGranularityService.normalize(browserGranularity === null ? dateGranularity : browserGranularity);
+
+                // Migrate the older Extension Data preference into browser-local
+                // storage the first time this version is opened.
+                if (browserGranularity === null && parsedSettings.dateGranularity) {
+                    browserSettingsService.write(extensionId, project.id, "dateGranularity", null, dateGranularity);
+                }
+
                 // Read some initial data from query string
-                if (state["showFields"]) {
+                if (!Array.isArray(showFields) && state["showFields"]) {
                     showFields = state["showFields"].split(",").filter((f) => f.length > 0);
                 }
 
@@ -1042,7 +1082,8 @@ define([
                     project: project,
                     query: sdk.getConfiguration().query,
                     showFields,
-                    dateGranularity
+                    dateGranularity,
+                    extensionId
                 });
                 console.debug("QueryGanttTabApp : ready() : %o", model);
                 

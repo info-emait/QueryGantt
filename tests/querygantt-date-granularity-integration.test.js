@@ -124,10 +124,12 @@ DataSet.prototype.getIds = function () { return this.data.map((item) => item.id)
 DataSet.prototype.update = function () {};
 
 const TimelineStub = function (node, records, groups, options) {
-    timelineCaptures.push({ node: node, records: records, groups: groups, options: options });
+    this.setOptionsCalls = [];
+    timelineCaptures.push({ node: node, records: records, groups: groups, options: options, instance: this });
 };
 TimelineStub.prototype.on = function () {};
 TimelineStub.prototype.destroy = function () {};
+TimelineStub.prototype.setOptions = function (options) { this.setOptionsCalls.push(options); };
 
 loadAmd(path.join(__dirname, "../js/components/timeline.js"), {
     knockout: timelineKnockout,
@@ -168,6 +170,7 @@ const makeItem = function (id, hour, minute) {
 };
 
 const granularity = observable("day");
+const timelineNode = { clientWidth: 1200 };
 const timelineViewModel = timelineRegistration.viewModel.createViewModel({
     items: observable([makeItem(1, 1, 20), makeItem(2, 23, 50)]),
     states: observable([]),
@@ -178,7 +181,7 @@ const timelineViewModel = timelineRegistration.viewModel.createViewModel({
     showFields: observable([]),
     dateGranularity: granularity,
     actions: {}
-}, { element: { querySelector: function () {}, firstChild: {} } });
+}, { element: { querySelector: function () {}, firstChild: timelineNode } });
 
 timelineViewModel._onItemsChanged();
 let capture = timelineCaptures[timelineCaptures.length - 1];
@@ -187,12 +190,30 @@ assert.strictEqual(capture.records.data[0].end.getTime(), capture.records.data[1
 assert.strictEqual(capture.groups.data[0].duration, 1);
 assert.strictEqual(typeof capture.options.snap, "function", "day mode should configure day snapping");
 assert.strictEqual(capture.options.snap(new Date(2026, 7, 21, 18, 30)).getHours(), 0);
+assert.strictEqual(capture.options.zoomMin, dateGranularityService.getZoomMin("day", 1200), "day mode should cap the finest visible axis at calendar days");
+timelineNode.clientWidth = 1800;
+timelineViewModel._resizeTimeline();
+assert.strictEqual(capture.instance.setOptionsCalls[0].zoomMin, dateGranularityService.getZoomMin("day", 1800), "the day cap should follow host panel resizes");
 
 granularity("time");
 timelineViewModel._onItemsChanged();
 capture = timelineCaptures[timelineCaptures.length - 1];
 assert.notStrictEqual(capture.records.data[0].start.getTime(), capture.records.data[1].start.getTime(), "time mode should retain timestamp offsets");
 assert.strictEqual(Object.prototype.hasOwnProperty.call(capture.options, "snap"), false, "time mode should retain vis-timeline's existing snap behavior");
+assert.strictEqual(Object.prototype.hasOwnProperty.call(capture.options, "zoomMin"), false, "time mode should permit the original hour/minute zoom");
+
+const browserValues = new Map();
+const browserStorage = {
+    getItem: function (key) { return browserValues.has(key) ? browserValues.get(key) : null; },
+    setItem: function (key, value) { browserValues.set(key, value); }
+};
+let browserSettingsService = null;
+vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../js/services/browser-settings.js"), "utf8"), {
+    console: { warn: function () {} },
+    define: function (dependencies, factory) { browserSettingsService = factory(); },
+    encodeURIComponent: encodeURIComponent,
+    localStorage: browserStorage
+});
 
 let savedSettings = null;
 let panelResult = null;
@@ -209,6 +230,7 @@ const configurationModule = loadAmd(path.join(__dirname, "../js/querygantt-confi
     sdk: {},
     "api/index": { CommonServiceIds: {} },
     "services/data": { getManager: function () { return Promise.resolve(settingsManager); } },
+    "services/browser-settings": browserSettingsService,
     "services/date-granularity": dateGranularityService
 }, true).result;
 const configurationModel = new configurationModule.Model({
@@ -216,13 +238,15 @@ const configurationModel = new configurationModule.Model({
     fields: [],
     fieldsValue: ["dates", "duration"],
     dateGranularity: "day",
+    extensionId: "publisher.extension",
+    browserStorage: browserStorage,
     panel: { close: function (result) { panelResult = result; } }
 });
 
 let openedPanel = null;
 let startupModel = null;
 const pageService = { getProject: function () { return Promise.resolve({ id: "project-id", name: "Project" }); } };
-const navigationService = { getQueryParams: function () { return Promise.resolve({}); } };
+const navigationService = { getQueryParams: function () { return Promise.resolve({ showFields: "id" }); } };
 const layoutService = { openPanel: function (id, options) { openedPanel = { id: id, options: options }; } };
 const commonServiceIds = {
     ProjectPageService: "project-page",
@@ -245,7 +269,7 @@ const sdk = {
     register: function () {}
 };
 const startupSettingsManager = {
-    getValue: function () { return Promise.resolve(JSON.stringify({ showFields: ["duration"], dateGranularity: "day" })); }
+    getValue: function () { return Promise.resolve(JSON.stringify({ showFields: ["duration"], dateGranularity: "time" })); }
 };
 const appKnockout = Object.assign({}, knockout, {
     applyBindings: function (model) { startupModel = model; }
@@ -257,6 +281,7 @@ const appLoader = loadAmd(path.join(__dirname, "../js/querygantt-tab-app.js"), {
     "api/index": { CommonServiceIds: commonServiceIds },
     "api/WorkItemTracking/index": {},
     "services/data": { getManager: function () { return Promise.resolve(startupSettingsManager); } },
+    "services/browser-settings": browserSettingsService,
     "services/date-granularity": dateGranularityService
 }, true);
 appLoader.result.Model.prototype.init = function () { return Promise.resolve(); };
@@ -268,8 +293,7 @@ appLoader.result.Model.prototype.init = function () { return Promise.resolve(); 
         value: {
             orderMode: "backlog",
             customSetting: true,
-            showFields: ["dates", "duration"],
-            dateGranularity: "day"
+            showFields: ["dates", "duration"]
         },
         options: { scopeType: "User" }
     }, "configuration saves should merge instead of overwriting other settings");
@@ -281,13 +305,16 @@ appLoader.result.Model.prototype.init = function () { return Promise.resolve(); 
     appLoader.runReady();
     await new Promise((resolve) => setImmediate(resolve));
     assert.ok(startupModel, "the tab should initialize from persisted settings");
-    assert.strictEqual(startupModel.dateGranularity(), "day", "the saved granularity should be restored");
+    assert.strictEqual(startupModel.dateGranularity(), "day", "the browser-local granularity should win over legacy shared settings");
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(startupModel.showFields())), ["duration"], "saved columns should not be replaced by a stale query-string value");
 
     startupModel.openSettings();
     await Promise.resolve();
     assert.strictEqual(openedPanel.options.configuration.dateGranularity, "day", "the configuration panel should receive the current granularity");
+    assert.strictEqual(openedPanel.options.configuration.extensionId, "publisher.extension");
     openedPanel.options.onClose({ fieldsValue: ["dates"], dateGranularity: "time" });
     assert.strictEqual(startupModel.dateGranularity(), "time", "closing the panel should update the live timeline setting");
+    assert.strictEqual(browserSettingsService.read("publisher.extension", "project-id", "dateGranularity", null, browserStorage), "time", "the last granularity should survive reloads in this browser profile");
 
     console.log("querygantt date granularity integration tests passed");
 })().catch((error) => {

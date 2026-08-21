@@ -1,6 +1,8 @@
 define([], function () {
     const day = "day";
     const time = "time";
+    const dayMilliseconds = 24 * 60 * 60 * 1000;
+    const dayLabelWidth = 70;
 
     /**
      * Returns a supported date granularity.
@@ -31,6 +33,30 @@ define([], function () {
         const result = new Date(value.getTime());
         result.setHours(0, 0, 0, 0);
         return result;
+    };
+
+
+    /**
+     * Gets the minimum visible interval that keeps vis-timeline on a calendar
+     * day scale. The value grows with the chart width so zooming cannot expose
+     * an hour/minute axis on wide screens.
+     *
+     * @param {string} granularity Date granularity.
+     * @param {number} width Timeline width in pixels.
+     */
+    const getZoomMin = function (granularity, width) {
+        if (normalize(granularity) !== day) {
+            return null;
+        }
+
+        width = Number(width);
+        if (!isFinite(width) || width <= 0) {
+            return dayMilliseconds;
+        }
+
+        // vis-timeline targets about seven characters per minor label. At
+        // roughly 3/4 day per label slot its finest automatic scale is Day.
+        return Math.max(dayMilliseconds, Math.ceil((width / dayLabelWidth) * 0.75) * dayMilliseconds);
     };
 
 
@@ -99,8 +125,10 @@ define([], function () {
     return {
         day,
         time,
+        dayMilliseconds,
         normalize,
         startOfDay,
+        getZoomMin,
         getTimelineRange,
         getDuration
     };

@@ -43,6 +43,9 @@ const lateValue = late.getTime();
 assert.strictEqual(service.normalize("day"), "day");
 assert.strictEqual(service.normalize("time"), "time");
 assert.strictEqual(service.normalize("unsupported"), "time", "unknown values should retain the existing timestamp behavior");
+assert.strictEqual(service.getZoomMin("time", 1200), null, "time mode should retain vis-timeline's native maximum zoom");
+assert.strictEqual(service.getZoomMin("day", 0), 24 * 60 * 60 * 1000);
+assert.ok(service.getZoomMin("day", 1200) >= 12 * 24 * 60 * 60 * 1000, "a wide chart should stop before its automatic axis reaches hours");
 
 const earlyDayRange = service.getTimelineRange(early, early, new Date(), "day");
 const lateDayRange = service.getTimelineRange(late, late, new Date(), "day");

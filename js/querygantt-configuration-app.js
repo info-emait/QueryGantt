@@ -5,8 +5,9 @@ define([
     "sdk",
     "api/index",
     "services/data",
+    "services/browser-settings",
     "services/date-granularity"
-], (module, require, ko, sdk, api, dataService, dateGranularityService) => {
+], (module, require, ko, sdk, api, dataService, browserSettingsService, dateGranularityService) => {
     //#region [ Fields ]
 
     const global = (function () { return this; })();
@@ -31,6 +32,8 @@ define([
         this.fields = ko.isObservable(args.fields) ? args.fields : ko.observableArray(args.fields || []);
         this.fieldsValue = ko.isObservable(args.fieldsValue) ? args.fieldsValue : ko.observableArray(args.fieldsValue || []);
         this.dateGranularity = ko.observable(dateGranularityService.normalize(args.dateGranularity));
+        this.extensionId = args.extensionId || "querygantt";
+        this.browserStorage = args.browserStorage || null;
         this.panel = args.panel;
     };
 
@@ -62,6 +65,14 @@ define([
         const fieldsValue = this.fieldsValue();
         const dateGranularity = dateGranularityService.normalize(this.dateGranularity());
         const key = `gantt_${this.project.id}`;
+        browserSettingsService.write(
+            this.extensionId,
+            this.project.id,
+            "dateGranularity",
+            null,
+            dateGranularity,
+            this.browserStorage
+        );
 
         return dataService.getManager()
             .then((manager) => manager.getValue(key, { scopeType: "User" })
@@ -76,7 +87,6 @@ define([
                 }
 
                 settings.showFields = fieldsValue;
-                settings.dateGranularity = dateGranularity;
 
                 return manager.setValue(key, JSON.stringify(settings), { scopeType: "User" });
             })
@@ -134,6 +144,7 @@ define([
                     fields: config.fields,
                     fieldsValue: config.fieldsValue,
                     dateGranularity: config.dateGranularity,
+                    extensionId: config.extensionId || sdk.getExtensionContext().id,
                     panel: config.panel
                 });
                 console.debug("QueryGanttConfigurationApp : ready() : %o", model);
