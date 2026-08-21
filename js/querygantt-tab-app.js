@@ -10,6 +10,7 @@ define([
     "api/index",
     "api/WorkItemTracking/index",
     "services/data",
+    "services/browser-settings",
     "services/timeline-zoom",
     "services/icon",
     "my/templates/gantt",
@@ -19,7 +20,7 @@ define([
     "my/components/message",
     "my/components/filter",
     "my/components/zerodata"
-], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, dataService, timelineZoomService, iconService, ganttTemplate) {
+], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, dataService, browserSettingsService, timelineZoomService, iconService, ganttTemplate) {
     //#region [ Fields ]
 
     const global = (function () { return this; })();
@@ -47,7 +48,8 @@ define([
         this.settingsKey = args.settingsKey || null;
         this.settings = args.settings && (typeof(args.settings) === "object") && !Array.isArray(args.settings) ? args.settings : {};
         this.zoomSettingsKey = ((this.query || {}).id || (this.query || {}).name || "default") + "";
-        this._zoomSavePromise = Promise.resolve();
+        this.extensionId = args.extensionId || "querygantt";
+        this.browserStorage = args.browserStorage || null;
 
         this.token = null;
         this.path = null;
@@ -506,7 +508,7 @@ define([
      * Resets the timeline's zoom.
      */
     Model.prototype.zoomReset = function () {
-        this.zoomPreset(timelineZoomService.fit);
+        this.zoomPreset(timelineZoomService.percent100);
         this.action("_timeline_zoomResetAction");
     };
 
@@ -514,10 +516,13 @@ define([
     /**
      * Applies the selected zoom preset.
      */
-    Model.prototype.applyZoomPreset = function () {
+    Model.prototype.applyZoomPreset = function (value, event) {
+        const selectedValue = event && event.target ? event.target.value : (typeof(value) === "string" ? value : this.zoomPreset());
+        const preset = timelineZoomService.normalizePreset(selectedValue);
+        this.zoomPreset(preset);
         const action = this._timeline_setZoomPresetAction();
         if (typeof(action) === "function") {
-            action(this.zoomPreset());
+            action(preset);
         }
     };
 
@@ -664,47 +669,20 @@ define([
     //#region [ Methods : Private ]
 
     /**
-     * Persists the current query's zoom view without overwriting other settings.
+     * Persists the current query's zoom view in this browser profile.
      *
      * @param {object} view Zoom view.
      */
     Model.prototype._saveZoomView = function (view) {
-        if (!this.manager || !this.settingsKey) {
-            return Promise.resolve(false);
-        }
-
         const serializedView = timelineZoomService.serializeView(view);
-
-        this._zoomSavePromise = this._zoomSavePromise
-            .catch(() => false)
-            .then(() => this.manager.getValue(this.settingsKey, { scopeType: "User" }))
-            .then((value) => {
-                let settings = this.settings;
-                try {
-                    if (value) {
-                        const parsedSettings = JSON.parse(value);
-                        settings = parsedSettings && (typeof(parsedSettings) === "object") && !Array.isArray(parsedSettings) ? parsedSettings : {};
-                    }
-                }
-                catch (error) {
-                }
-
-                if (!settings.zoomViews || (typeof(settings.zoomViews) !== "object") || Array.isArray(settings.zoomViews)) {
-                    settings.zoomViews = {};
-                }
-
-                settings.zoomViews[this.zoomSettingsKey] = serializedView;
-                this.settings = settings;
-                return this.manager.setValue(this.settingsKey, JSON.stringify(settings), { scopeType: "User" });
-            })
-            .then(() => true)
-            .catch((error) => {
-                console.warn("App : Unable to save the timeline zoom view.");
-                console.warn(error);
-                return false;
-            });
-
-        return this._zoomSavePromise;
+        return Promise.resolve(browserSettingsService.write(
+            this.extensionId,
+            this.project.id,
+            "zoomView",
+            this.zoomSettingsKey,
+            serializedView,
+            this.browserStorage
+        ));
     };
 
     /**
@@ -1088,6 +1066,13 @@ define([
                 let showFields = null;
                 let parsedSettings = {};
                 const query = sdk.getConfiguration().query;
+                let extensionId = "querygantt";
+
+                try {
+                    extensionId = sdk.getExtensionContext().id || extensionId;
+                }
+                catch (error) {
+                }
                 
                 // Read some initial data from settings first
                 if (settings) {
@@ -1104,10 +1089,17 @@ define([
 
                 const zoomViews = parsedSettings.zoomViews && (typeof(parsedSettings.zoomViews) === "object") && !Array.isArray(parsedSettings.zoomViews) ? parsedSettings.zoomViews : {};
                 const zoomSettingsKey = ((query || {}).id || (query || {}).name || "default") + "";
-                const zoomView = timelineZoomService.normalizeView(zoomViews[zoomSettingsKey]);
+                const browserZoomView = browserSettingsService.read(extensionId, project.id, "zoomView", zoomSettingsKey);
+                const zoomView = timelineZoomService.normalizeView(browserZoomView === null ? zoomViews[zoomSettingsKey] : browserZoomView);
+
+                // Migrate older Extension Data zoom preferences into the
+                // current browser profile the first time this version opens.
+                if (browserZoomView === null && zoomViews[zoomSettingsKey]) {
+                    browserSettingsService.write(extensionId, project.id, "zoomView", zoomSettingsKey, timelineZoomService.serializeView(zoomView));
+                }
 
                 // Read some initial data from query string
-                if (state["showFields"]) {
+                if (!Array.isArray(showFields) && state["showFields"]) {
                     showFields = state["showFields"].split(",").filter((f) => f.length > 0);
                 }
 
@@ -1121,6 +1113,7 @@ define([
                     query,
                     showFields,
                     zoomView,
+                    extensionId,
                     manager,
                     settings: parsedSettings,
                     settingsKey: `gantt_${project.id}`

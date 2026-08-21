@@ -1,138 +1,132 @@
 define([], function () {
-    const fit = "fit";
-    const month = "month";
-    const week = "week";
-    const day = "day";
     const custom = "custom";
-    const dayMilliseconds = 24 * 60 * 60 * 1000;
-    const durations = {
-        month: 30 * dayMilliseconds,
-        week: 7 * dayMilliseconds,
-        day: dayMilliseconds
-    };
+    const percent100 = "100";
+    const percent200 = "200";
+    const percent300 = "300";
+    const percent400 = "400";
+    const percent500 = "500";
+    const presets = [percent100, percent200, percent300, percent400, percent500];
 
     /**
-     * Returns a supported zoom preset.
-     *
-     * @param {string} value Zoom preset.
+     * Returns a supported zoom preset. Previous preset names are migrated
+     * without losing an explicitly saved custom window.
      */
     const normalizePreset = function (value) {
-        return [fit, month, week, day, custom].includes(value) ? value : fit;
+        value = (value === null || typeof(value) === "undefined") ? "" : value + "";
+        if (presets.includes(value) || value === custom) {
+            return value;
+        }
+        return value === "fit" ? percent100 : custom;
     };
 
-
-    /**
-     * Converts a value to a valid Date or null.
-     *
-     * @param {*} value Date value.
-     */
     const toDate = function (value) {
         if (value === null || typeof(value) === "undefined") {
             return null;
         }
-
         const result = value instanceof Date ? new Date(value.getTime()) : new Date(value);
         return isNaN(result.getTime()) ? null : result;
     };
 
-
-    /**
-     * Normalizes a persisted or live zoom view.
-     *
-     * @param {object} value Zoom view.
-     */
     const normalizeView = function (value) {
-        const preset = normalizePreset((value || {}).preset);
-        const start = toDate((value || {}).start);
-        const end = toDate((value || {}).end);
+        value = value || {};
+        const start = toDate(value.start);
+        const end = toDate(value.end);
+        let preset = normalizePreset(value.preset);
 
-        if (preset === fit) {
-            return { preset: fit, start: null, end: null };
+        // Old Month/Week/Day settings contain an exact window. Preserve it as
+        // Custom because those names no longer map to a percentage.
+        if (["month", "week", "day"].includes(value.preset) && start && end) {
+            preset = custom;
         }
 
         if (start && end && start.getTime() < end.getTime()) {
             return { preset, start, end };
         }
 
-        if (preset === custom) {
-            return { preset: fit, start: null, end: null };
-        }
-
-        return { preset, start: null, end: null };
+        return {
+            preset: preset === custom ? percent100 : preset,
+            start: null,
+            end: null
+        };
     };
 
-
     /**
-     * Converts a zoom view to JSON-safe settings data.
-     *
-     * @param {object} value Zoom view.
+     * Percentage presets are data-relative; Custom retains its exact window.
      */
     const serializeView = function (value) {
         const view = normalizeView(value);
         const result = { preset: view.preset };
-
-        if (view.start && view.end) {
+        if (view.preset === custom && view.start && view.end) {
             result.start = view.start.toISOString();
             result.end = view.end.toISOString();
         }
-
         return result;
     };
 
+    const getFactor = function (preset) {
+        preset = normalizePreset(preset);
+        return presets.includes(preset) ? Number(preset) / 100 : null;
+    };
 
     /**
-     * Gets a preset window around the supplied center.
-     *
-     * @param {string} preset Zoom preset.
-     * @param {Date} center Visible window center.
+     * Gets a percentage window from the fitted data range while retaining the
+     * current visible center.
      */
-    const getPresetWindow = function (preset, center) {
-        const normalizedPreset = normalizePreset(preset);
-        const duration = durations[normalizedPreset];
+    const getPresetWindow = function (preset, fittedRange, center) {
+        const factor = getFactor(preset);
+        const start = toDate((fittedRange || {}).start);
+        const end = toDate((fittedRange || {}).end);
         const normalizedCenter = toDate(center);
-
-        if (!duration || !normalizedCenter) {
+        if (!factor || !start || !end || start.getTime() >= end.getTime()) {
             return null;
         }
 
-        const centerTime = normalizedCenter.getTime();
+        const duration = (end.getTime() - start.getTime()) / factor;
+        const centerTime = normalizedCenter
+            ? normalizedCenter.getTime()
+            : (start.getTime() + end.getTime()) / 2;
         return {
             start: new Date(centerTime - duration / 2),
             end: new Date(centerTime + duration / 2)
         };
     };
 
-
     /**
-     * Identifies a preset from the visible window duration.
-     *
-     * @param {Date} start Visible start.
-     * @param {Date} end Visible end.
+     * Identifies a percentage from the visible range relative to the fitted
+     * data range. Arbitrary wheel, button, or pinch zooms are Custom.
      */
-    const identifyPreset = function (start, end) {
+    const identifyPreset = function (start, end, fittedRange) {
         const normalizedStart = toDate(start);
         const normalizedEnd = toDate(end);
-
-        if (!normalizedStart || !normalizedEnd || normalizedStart.getTime() >= normalizedEnd.getTime()) {
+        const fittedStart = toDate((fittedRange || {}).start);
+        const fittedEnd = toDate((fittedRange || {}).end);
+        if (!normalizedStart || !normalizedEnd || !fittedStart || !fittedEnd
+            || normalizedStart.getTime() >= normalizedEnd.getTime()
+            || fittedStart.getTime() >= fittedEnd.getTime()) {
             return custom;
         }
 
         const duration = normalizedEnd.getTime() - normalizedStart.getTime();
-        const match = Object.keys(durations).find((name) => Math.abs(duration - durations[name]) <= durations[name] * 0.005);
+        const fittedDuration = fittedEnd.getTime() - fittedStart.getTime();
+        const match = presets.find((preset) => {
+            const expected = fittedDuration / getFactor(preset);
+            return Math.abs(duration - expected) <= expected * 0.005;
+        });
         return match || custom;
     };
 
-
     return {
-        fit,
-        month,
-        week,
-        day,
         custom,
-        durations,
+        percent100,
+        percent200,
+        percent300,
+        percent400,
+        percent500,
+        presets,
         normalizePreset,
         normalizeView,
         serializeView,
+        getFactor,
         getPresetWindow,
         identifyPreset
     };

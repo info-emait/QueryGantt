@@ -43,6 +43,8 @@ define([
         this.arrows = null;
         this._pendingZoomPreset = null;
         this._ignoredRange = null;
+        this._fitRange = null;
+        this._initialZoomRestored = false;
 
         // Callbacks
         this.callbacks = args.callbacks;
@@ -185,7 +187,7 @@ define([
      * Resets zoom.
      */
     Timeline.prototype.zoomReset = function () {
-        this.setZoomPreset(timelineZoomService.fit);
+        this.setZoomPreset(timelineZoomService.percent100);
     };
 
 
@@ -207,12 +209,17 @@ define([
         this._pendingZoomPreset = preset;
         const before = this.timeline.getWindow();
 
-        if (preset === timelineZoomService.fit) {
+        if (preset === timelineZoomService.percent100) {
             this.timeline.fit({ animation: false });
+            this._fitRange = this.timeline.getWindow();
         }
         else {
             const center = new Date((before.start.getTime() + before.end.getTime()) / 2);
-            const range = timelineZoomService.getPresetWindow(preset, center);
+            const range = timelineZoomService.getPresetWindow(preset, this._fitRange, center);
+            if (!range) {
+                this._pendingZoomPreset = null;
+                return;
+            }
             this.timeline.setWindow(range.start, range.end, { animation: false });
         }
 
@@ -305,6 +312,7 @@ define([
 
         this._onItemsChangedSubscribe.dispose();
         this._onSelectedIdChangedSubscribe.dispose();
+        this._destroyTimeline();
     };
 
     //#endregion
@@ -371,6 +379,8 @@ define([
         this.records = null;
         this._pendingZoomPreset = null;
         this._ignoredRange = null;
+        this._fitRange = null;
+        this._initialZoomRestored = false;
     };
 
 
@@ -378,21 +388,32 @@ define([
      * Restores the last view after the timeline has fitted its items.
      */
     Timeline.prototype._restoreZoom = function () {
-        const value = (this.zoomView && typeof(this.zoomView.peek) === "function") ? this.zoomView.peek() : this.zoomView();
-        const view = timelineZoomService.normalizeView(value);
-
-        if (view.preset !== timelineZoomService.fit) {
-            let range = view.start && view.end ? view : null;
-            if (!range) {
-                const fitted = this.timeline.getWindow();
-                const center = new Date((fitted.start.getTime() + fitted.end.getTime()) / 2);
-                range = timelineZoomService.getPresetWindow(view.preset, center);
-            }
-
-            this.timeline.setWindow(range.start, range.end, { animation: false });
+        if (!this.timeline || this._initialZoomRestored) {
+            return;
         }
 
-        this._ignoredRange = this.timeline.getWindow();
+        const value = (this.zoomView && typeof(this.zoomView.peek) === "function") ? this.zoomView.peek() : this.zoomView();
+        const view = timelineZoomService.normalizeView(value);
+        // vis-timeline's completed automatic fit is the authoritative 100%
+        // range. Capturing its earlier constructor window makes percentages
+        // depend on a placeholder range instead of the work items.
+        this._fitRange = this.timeline.getWindow();
+        this._initialZoomRestored = true;
+
+        if (view.preset === timelineZoomService.custom && view.start && view.end) {
+            this._pendingZoomPreset = timelineZoomService.custom;
+            this._ignoredRange = { start: new Date(view.start), end: new Date(view.end) };
+            this.timeline.setWindow(view.start, view.end, { animation: false });
+        }
+        else if (view.preset !== timelineZoomService.percent100) {
+            const center = new Date((this._fitRange.start.getTime() + this._fitRange.end.getTime()) / 2);
+            const range = timelineZoomService.getPresetWindow(view.preset, this._fitRange, center);
+            if (range) {
+                this._pendingZoomPreset = view.preset;
+                this._ignoredRange = range;
+                this.timeline.setWindow(range.start, range.end, { animation: false });
+            }
+        }
     };
 
 
@@ -411,11 +432,12 @@ define([
                 && Math.abs(this._ignoredRange.end.getTime() - e.end.getTime()) <= 1;
             this._ignoredRange = null;
             if (matchesIgnored) {
+                this._pendingZoomPreset = null;
                 return;
             }
         }
 
-        const preset = this._pendingZoomPreset || timelineZoomService.identifyPreset(e.start, e.end);
+        const preset = this._pendingZoomPreset || timelineZoomService.identifyPreset(e.start, e.end, this._fitRange);
         this._pendingZoomPreset = null;
         this.callback("zoomChanged", timelineZoomService.normalizeView({ preset, start: e.start, end: e.end }));
     };
@@ -602,7 +624,9 @@ define([
             },
             groupTemplate: (record, element) => createGroupTemplate(this, record, element, states, priorities, types, typesOther, icons, showFields),
             visibleFrameTemplate: (record, element) => createVisibleFrameTemplate(this, record, element),
-            onMove: (record, callback) => updateWit(this, record, callback)
+            onMove: (record, callback) => updateWit(this, record, callback),
+            // Restore only after vis-timeline has completed its automatic fit.
+            onInitialDrawComplete: () => this._restoreZoom()
             //template: function (item, element, data) { return '<h1>' + item.header + data.moving?' '+ data.start:'' + '</h1><p>' + item.description + '</p>'; }
         };
 
@@ -611,7 +635,6 @@ define([
 
         // Create an Timeline
         this.timeline = new VisTimeline.Timeline(this.node, this.records, this.groups, options);
-        this._restoreZoom();
         
         // Create an Arrow
         const dependencies = items
