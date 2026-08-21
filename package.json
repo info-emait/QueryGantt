@@ -5,7 +5,7 @@
     "author": "emait",
     "private": true,
     "scripts": {
-        "test": "node tests/browser-settings.test.js && node tests/date-granularity.test.js && node tests/querygantt-date-granularity-integration.test.js"
+        "test": "node tests/querygantt-startup-integration.test.js && node tests/browser-settings.test.js && node tests/date-granularity.test.js && node tests/querygantt-date-granularity-integration.test.js"
     },
     "devDependencies": {
         "grunt": "1.6.1",
