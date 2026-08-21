@@ -141,6 +141,13 @@ define([
      */
     Filter.prototype._getValuePrimary = function() {
         const asOf = this.asOfValue();
+
+        // The parent model already starts with an empty primary filter. Do not
+        // publish another empty object while this computed is being created,
+        // because that would start a duplicate initial Query request.
+        if (ko.computedContext.isInitial() && !asOf.length) {
+            return;
+        }
         
         const val = {};
 

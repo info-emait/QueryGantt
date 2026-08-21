@@ -809,6 +809,13 @@ define([
      */
     Model.prototype._getFilteredPrimaryWits = function() {
         const filter = this.filterPrimary();
+
+        // The model is initialized explicitly after bindings are applied. Avoid
+        // starting the same Query request during the computed's eager first
+        // evaluation.
+        if (ko.computedContext.isInitial()) {
+            return;
+        }
         
         if (Array.isArray(filter.asOf) && (filter.asOf.length === 1) && (filter.asOf[0] instanceof Date)) {
             this.isLoading(true);
