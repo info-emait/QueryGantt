@@ -105,6 +105,7 @@ const makeModel = function () {
     model.orderMode = observable(backlogOrderService.queryOrder);
     model.message = observable("");
     model.isLoading = observable(false);
+    model._settingsSavePromise = Promise.resolve();
     return model;
 };
 
@@ -114,6 +115,9 @@ const makeModel = function () {
         getBacklogs: function (context) {
             assert.deepStrictEqual(JSON.parse(JSON.stringify(context)), { projectId: "project-id", teamId: "team-id" });
             return Promise.resolve(backlogs);
+        },
+        getBacklogConfigurations: function () {
+            return Promise.resolve({ backlogFields: { typeFields: { Order: "Microsoft.VSTS.Common.StackRank" } } });
         },
         getBacklogLevelWorkItems: function (context, backlogId) {
             fetchedBacklogs.push(backlogId);
@@ -128,6 +132,7 @@ const makeModel = function () {
     assert.strictEqual(model.backlogLoading(), false);
     assert.strictEqual(model.backlogAvailable(), true);
     assert.strictEqual(model.backlogIndex().size, 5);
+    assert.strictEqual(model.backlogIndex().orderField, "Microsoft.VSTS.Common.StackRank");
 
     fetchedBacklogs.length = 0;
     assert.strictEqual((await model._loadBacklogOrder("2026-01-01")).size, 0, "historical queries should not load current backlog state");
@@ -139,6 +144,7 @@ const makeModel = function () {
     const raceModel = makeModel();
     workClient = {
         getBacklogs: function () { return delayedBacklogs; },
+        getBacklogConfigurations: function () { return Promise.resolve({ backlogFields: { typeFields: { Order: "Microsoft.VSTS.Common.StackRank" } } }); },
         getBacklogLevelWorkItems: function (context, backlogId) { return Promise.resolve(responses[backlogId]); }
     };
     const currentLoad = raceModel._loadBacklogOrder(null);
@@ -185,16 +191,18 @@ const makeModel = function () {
     assert.strictEqual(refreshed, 1, "a failed request should not refresh an uncommitted order");
 
     let saved = null;
+    let persisted = JSON.stringify({ showFields: ["duration"] });
     model.manager = {
+        getValue: function () { return Promise.resolve(persisted); },
         setValue: function (key, value, options) {
+            persisted = value;
             saved = { key: key, value: JSON.parse(value), options: options };
             return Promise.resolve();
         }
     };
     model.settingsKey = "gantt_project-id";
     model.settings = { showFields: ["duration"] };
-    model._saveOrderMode(backlogOrderService.backlogOrder);
-    await Promise.resolve();
+    await model._saveOrderMode(backlogOrderService.backlogOrder);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(saved)), {
         key: "gantt_project-id",
         value: { showFields: ["duration"], orderMode: "backlog" },

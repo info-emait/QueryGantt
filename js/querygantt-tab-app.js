@@ -47,7 +47,8 @@ define([
         this.query = args.query;
         this.manager = args.manager || null;
         this.settingsKey = args.settingsKey || null;
-        this.settings = args.settings || {};
+        this.settings = args.settings && (typeof(args.settings) === "object") && !Array.isArray(args.settings) ? args.settings : {};
+        this._settingsSavePromise = Promise.resolve();
 
         this.token = null;
         this.path = null;
@@ -232,6 +233,7 @@ define([
                         completedWork: (wit.fields["Microsoft.VSTS.Scheduling.CompletedWork"] || 0),
                         remainingWork: (wit.fields["Microsoft.VSTS.Scheduling.RemainingWork"] || 0),
                         effort: (wit.fields["Microsoft.VSTS.Scheduling.Effort"] || 0),
+                        backlogOrderValue: queryBacklogIndex.orderField ? wit.fields[queryBacklogIndex.orderField] : null,
                         tags: (wit.fields["System.Tags"] || "").split("; ").filter((t) => (t || "").length),
                         attachments: (wit.relations || []).filter((a) => a.rel === "AttachedFile"),
                         dependencies: (wit.relations || []).filter((a) => (a.rel === "System.LinkTypes.Dependency-Forward") && ((a.attributes || {}).name === "Successor")).map((r) => parseInt(r.url.split("/").pop()))
@@ -255,6 +257,12 @@ define([
                         results.push(o);
                     });
                 });
+
+                backlogOrderService.includeQueryItems(queryBacklogIndex, results);
+                if (!historical) {
+                    this.backlogIndex(queryBacklogIndex);
+                    this.backlogAvailable(Object.keys(queryBacklogIndex.levels || {}).length > 0);
+                }
 
                 const duplicateCount = {};
                 results.forEach((wit) => duplicateCount[wit.originalId] = (duplicateCount[wit.originalId] || 0) + 1);
@@ -750,19 +758,26 @@ define([
 
         this.backlogLoading(true);
         const client = api.getClient(workApi.WorkRestClient);
-        return client.getBacklogs(this._getTeamContext())
-            .then((backlogs) => (backlogs || []).filter((backlog) => !backlog.isHidden))
-            .then((backlogs) => Promise.all([
+        return Promise.all([
+                client.getBacklogs(this._getTeamContext()),
+                client.getBacklogConfigurations(this._getTeamContext()).catch(() => null)
+            ])
+            .then((response) => ({
+                backlogs: (response[0] || []).filter((backlog) => !backlog.isHidden),
+                configuration: response[1]
+            }))
+            .then(({ backlogs, configuration }) => Promise.all([
                 backlogs,
-                Promise.all(backlogs.map((backlog) => client.getBacklogLevelWorkItems(this._getTeamContext(), backlog.id)))
+                Promise.all(backlogs.map((backlog) => client.getBacklogLevelWorkItems(this._getTeamContext(), backlog.id))),
+                (((configuration || {}).backlogFields || {}).typeFields || {}).Order || null
             ]))
             .then((response) => {
-                const index = backlogOrderService.createIndex(response[0], response[1]);
+                const index = backlogOrderService.createIndex(response[0], response[1], response[2]);
                 if (requestId !== this._backlogRequestId) {
                     return emptyIndex;
                 }
                 this.backlogIndex(index);
-                this.backlogAvailable(index.size > 0);
+                this.backlogAvailable(Object.keys(index.levels).length > 0);
                 this.backlogLoading(false);
                 return index;
             })
@@ -1109,16 +1124,34 @@ define([
      */
     Model.prototype._saveOrderMode = function(value) {
         if (!this.manager || !this.settingsKey) {
-            return;
+            return Promise.resolve(false);
         }
 
-        this.settings.orderMode = value;
-        this.manager
-            .setValue(this.settingsKey, JSON.stringify(this.settings), { scopeType: "User" })
+        this._settingsSavePromise = this._settingsSavePromise
+            .catch(() => false)
+            .then(() => this.manager.getValue(this.settingsKey, { scopeType: "User" }))
+            .then((stored) => {
+                let settings = this.settings;
+                try {
+                    if (stored) {
+                        const parsed = JSON.parse(stored);
+                        settings = parsed && (typeof(parsed) === "object") && !Array.isArray(parsed) ? parsed : {};
+                    }
+                }
+                catch (error) {
+                }
+                settings.orderMode = value;
+                this.settings = settings;
+                return this.manager.setValue(this.settingsKey, JSON.stringify(settings), { scopeType: "User" });
+            })
+            .then(() => true)
             .catch((error) => {
                 console.warn("App : _saveOrderMode() : Unable to save display order.");
                 console.warn(error);
+                return false;
             });
+
+        return this._settingsSavePromise;
     };
 
 
@@ -1216,7 +1249,8 @@ define([
                 // Read some initial data from settings first
                 if (settings) {
                     try {
-                        parsedSettings = JSON.parse(settings);
+                        const value = JSON.parse(settings);
+                        parsedSettings = value && (typeof(value) === "object") && !Array.isArray(value) ? value : {};
                         if (parsedSettings.showFields) {
                             showFields = parsedSettings.showFields;
                         }
@@ -1230,7 +1264,7 @@ define([
                 }
 
                 // Read some initial data from query string
-                if (state["showFields"]) {
+                if (!Array.isArray(showFields) && state["showFields"]) {
                     showFields = state["showFields"].split(",").filter((f) => f.length > 0);
                 }
 

@@ -43,13 +43,10 @@ define([
         this.records = null;
         this.arrows = null;
         this._backlogDraggedId = null;
-
-        this._onBacklogRootDragOverBound = this._onBacklogRootDragOver.bind(this);
-        this._onBacklogRootDragLeaveBound = this._onBacklogRootDragLeave.bind(this);
-        this._onBacklogRootDropBound = this._onBacklogRootDrop.bind(this);
-        this.rootDropZone.addEventListener("dragover", this._onBacklogRootDragOverBound, false);
-        this.rootDropZone.addEventListener("dragleave", this._onBacklogRootDragLeaveBound, false);
-        this.rootDropZone.addEventListener("drop", this._onBacklogRootDropBound, false);
+        this._backlogPointerId = null;
+        this._backlogPointerHandle = null;
+        this._onBacklogPointerMoveBound = this._onBacklogPointerMove.bind(this);
+        this._onBacklogPointerUpBound = this._onBacklogPointerUp.bind(this);
 
         // Callbacks
         this.callbacks = args.callbacks;
@@ -276,9 +273,7 @@ define([
 
         this._onItemsChangedSubscribe.dispose();
         this._onSelectedIdChangedSubscribe.dispose();
-        this.rootDropZone.removeEventListener("dragover", this._onBacklogRootDragOverBound, false);
-        this.rootDropZone.removeEventListener("dragleave", this._onBacklogRootDragLeaveBound, false);
-        this.rootDropZone.removeEventListener("drop", this._onBacklogRootDropBound, false);
+        this._clearBacklogDrag();
     };
 
     //#endregion
@@ -347,127 +342,125 @@ define([
 
 
     /**
-     * Starts dragging a row in backlog-order mode.
-     *
-     * @param {object} record Timeline group record.
-     * @param {DragEvent} e Drag event.
+     * Starts a pointer-driven row drag. vis-timeline handles mouse gestures on
+     * its root element, so native HTML Drag and Drop is unreliable inside the
+     * label panel. Pointer events are stopped at the handle and tracked by this
+     * component instead.
      */
-    Timeline.prototype._onBacklogDragStart = function (record, e) {
-        if (!this.backlogOrder() || !record.backlogEligible) {
-            e.preventDefault();
+    Timeline.prototype._onBacklogPointerDown = function (record, handle, e) {
+        if (!this.backlogOrder() || !record.backlogEligible || (e.pointerType === "mouse" && e.button !== 0)) {
             return;
         }
 
-        this._backlogDraggedId = record.id;
-        this.root.classList.add("my-timeline--dragging");
-        e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", record.originalId + "");
-        e.stopPropagation();
-    };
-
-
-    /**
-     * Finishes dragging a backlog row.
-     */
-    Timeline.prototype._onBacklogDragEnd = function () {
         this._clearBacklogDrag();
+        this._backlogDraggedId = record.id;
+        this._backlogPointerId = e.pointerId;
+        this._backlogPointerHandle = handle;
+        this.root.classList.add("my-timeline--dragging");
+
+        const rootBounds = typeof(this.root.getBoundingClientRect) === "function"
+            ? this.root.getBoundingClientRect()
+            : { top: 0, left: 0 };
+        this.rootDropZone.style.top = (rootBounds.top + 4) + "px";
+        this.rootDropZone.style.left = (rootBounds.left + 4) + "px";
+        if (typeof(global.document.addEventListener) === "function") {
+            global.document.addEventListener("pointermove", this._onBacklogPointerMoveBound, true);
+            global.document.addEventListener("pointerup", this._onBacklogPointerUpBound, true);
+            global.document.addEventListener("pointercancel", this._onBacklogPointerUpBound, true);
+        }
+
+        if (typeof(handle.setPointerCapture) === "function") {
+            try {
+                handle.setPointerCapture(e.pointerId);
+            }
+            catch (error) {
+            }
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof(e.stopImmediatePropagation) === "function") {
+            e.stopImmediatePropagation();
+        }
     };
 
 
     /**
-     * Shows the valid drop action over a backlog row.
-     *
-     * @param {object} target Target timeline group.
-     * @param {HTMLElement} element Target row element.
-     * @param {DragEvent} e Drag event.
+     * Updates the drop target beneath the active pointer.
      */
-    Timeline.prototype._onBacklogDragOver = function (target, element, e) {
-        const dragged = this.groups && this.groups.get(this._backlogDraggedId);
-        const position = this._getBacklogDropPosition(dragged, target, element, e);
-        this._clearBacklogDropClasses();
-
-        if (!position) {
-            e.dataTransfer.dropEffect = "none";
+    Timeline.prototype._onBacklogPointerMove = function (e) {
+        if (this._backlogDraggedId === null || e.pointerId !== this._backlogPointerId) {
             return;
         }
 
         e.preventDefault();
         e.stopPropagation();
-        e.dataTransfer.dropEffect = "move";
+        this._clearBacklogDropClasses();
+        this.rootDropZone.classList.remove("my-timeline__root-drop-zone--active");
+
+        const hit = global.document.elementFromPoint(e.clientX, e.clientY);
+        if (!hit || typeof(hit.closest) !== "function") {
+            return;
+        }
+
+        if (hit.closest(".my-timeline__root-drop-zone") === this.rootDropZone) {
+            this.rootDropZone.classList.add("my-timeline__root-drop-zone--active");
+            return;
+        }
+
+        const element = hit.closest(".my-timeline-group");
+        if (!element || !this.root.contains(element)) {
+            return;
+        }
+
+        const id = element.getAttribute("data-work-item-id");
+        const target = this.groups && (this.groups.get(id) || this.groups.get(Number(id)));
+        const dragged = this.groups && this.groups.get(this._backlogDraggedId);
+        const position = this._getBacklogDropPosition(dragged, target, element, e);
+        if (!position) {
+            return;
+        }
+
         element.classList.add(`my-timeline-group--drop-${position}`);
         element.setAttribute("data-backlog-drop-position", position);
     };
 
 
     /**
-     * Removes a row's drop indication after leaving it.
-     *
-     * @param {HTMLElement} element Target row element.
-     * @param {DragEvent} e Drag event.
+     * Commits the highlighted pointer drop, or cancels when no valid target is
+     * highlighted.
      */
-    Timeline.prototype._onBacklogDragLeave = function (element, e) {
-        if (e.relatedTarget && element.contains(e.relatedTarget)) {
-            return;
-        }
-        this._clearBacklogDropClasses();
-    };
-
-
-    /**
-     * Applies a drop on another backlog row.
-     *
-     * @param {object} target Target timeline group.
-     * @param {HTMLElement} element Target row element.
-     * @param {DragEvent} e Drag event.
-     */
-    Timeline.prototype._onBacklogDrop = function (target, element, e) {
-        const dragged = this.groups && this.groups.get(this._backlogDraggedId);
-        const position = element.getAttribute("data-backlog-drop-position") || this._getBacklogDropPosition(dragged, target, element, e);
-        if (!position) {
+    Timeline.prototype._onBacklogPointerUp = function (e) {
+        if (this._backlogDraggedId === null || e.pointerId !== this._backlogPointerId) {
             return;
         }
 
         e.preventDefault();
         e.stopPropagation();
-        this._runBacklogMove(target.id, position);
-    };
-
-
-    /**
-     * Enables dropping a dragged row at the root of its backlog level.
-     */
-    Timeline.prototype._onBacklogRootDragOver = function (e) {
-        const dragged = this.groups && this.groups.get(this._backlogDraggedId);
-        if (!dragged || !dragged.backlogEligible) {
+        if (e.type === "pointercancel") {
+            this._clearBacklogDrag();
             return;
         }
 
-        e.preventDefault();
-        e.stopPropagation();
-        e.dataTransfer.dropEffect = "move";
-        this.rootDropZone.classList.add("my-timeline__root-drop-zone--active");
-    };
-
-
-    /**
-     * Clears the root drop indication after leaving it.
-     */
-    Timeline.prototype._onBacklogRootDragLeave = function () {
-        this.rootDropZone.classList.remove("my-timeline__root-drop-zone--active");
-    };
-
-
-    /**
-     * Moves a dragged row to the root of its backlog level.
-     */
-    Timeline.prototype._onBacklogRootDrop = function (e) {
-        if (this._backlogDraggedId === null) {
+        if (this.rootDropZone.classList.contains("my-timeline__root-drop-zone--active")) {
+            this._runBacklogMove(null, "root");
             return;
         }
 
-        e.preventDefault();
-        e.stopPropagation();
-        this._runBacklogMove(null, "root");
+        const element = this.root.querySelector("[data-backlog-drop-position]");
+        if (!element) {
+            this._clearBacklogDrag();
+            return;
+        }
+
+        const id = element.getAttribute("data-work-item-id");
+        const target = this.groups && (this.groups.get(id) || this.groups.get(Number(id)));
+        if (!target) {
+            this._clearBacklogDrag();
+            return;
+        }
+
+        this._runBacklogMove(target.id, element.getAttribute("data-backlog-drop-position"));
     };
 
 
@@ -517,9 +510,29 @@ define([
      * Clears drag state and all drop indicators.
      */
     Timeline.prototype._clearBacklogDrag = function () {
+        if (typeof(global.document.removeEventListener) === "function") {
+            global.document.removeEventListener("pointermove", this._onBacklogPointerMoveBound, true);
+            global.document.removeEventListener("pointerup", this._onBacklogPointerUpBound, true);
+            global.document.removeEventListener("pointercancel", this._onBacklogPointerUpBound, true);
+        }
+        if (this._backlogPointerHandle && this._backlogPointerId !== null
+            && typeof(this._backlogPointerHandle.releasePointerCapture) === "function") {
+            try {
+                if (typeof(this._backlogPointerHandle.hasPointerCapture) !== "function"
+                    || this._backlogPointerHandle.hasPointerCapture(this._backlogPointerId)) {
+                    this._backlogPointerHandle.releasePointerCapture(this._backlogPointerId);
+                }
+            }
+            catch (error) {
+            }
+        }
         this._backlogDraggedId = null;
+        this._backlogPointerId = null;
+        this._backlogPointerHandle = null;
         this.root.classList.remove("my-timeline--dragging");
         this.rootDropZone.classList.remove("my-timeline__root-drop-zone--active");
+        this.rootDropZone.style.top = "";
+        this.rootDropZone.style.left = "";
         this._clearBacklogDropClasses();
     };
 
@@ -934,7 +947,7 @@ define([
 
         if (backlogOrder && record.backlogEligible) {
             result.unshift(
-                `<div class="my-timeline-group__button my-timeline-group__button--drag fluent-icons-enabled text-center" title="Drag to reorder in the team backlog" draggable="true" data-noexport="true">
+                `<div class="my-timeline-group__button my-timeline-group__button--drag fluent-icons-enabled text-center" title="Drag to reorder in the team backlog" data-noexport="true">
                     <span aria-hidden="true" class="flex-noshrink fabric-icon ms-Icon--GripperDotsVertical large"></span>
                  </div>`
             );
@@ -1030,11 +1043,7 @@ define([
 
         const dragHandle = el.querySelector(".my-timeline-group__button--drag");
         if (dragHandle) {
-            dragHandle.addEventListener("dragstart", vm._onBacklogDragStart.bind(vm, record), false);
-            dragHandle.addEventListener("dragend", vm._onBacklogDragEnd.bind(vm), false);
-            el.addEventListener("dragover", vm._onBacklogDragOver.bind(vm, record, el), false);
-            el.addEventListener("dragleave", vm._onBacklogDragLeave.bind(vm, el), false);
-            el.addEventListener("drop", vm._onBacklogDrop.bind(vm, record, el), false);
+            dragHandle.addEventListener("pointerdown", vm._onBacklogPointerDown.bind(vm, record, dragHandle), false);
         }
 
         return el;

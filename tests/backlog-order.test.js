@@ -110,4 +110,32 @@ assert.strictEqual(service.planMove(index, feature11, story1, "inside").valid, f
 assert.strictEqual(service.planMove(index, story1, feature11, "before").valid, false, "before/after requires the same backlog level");
 assert.strictEqual(service.planMove(index, item(999, "User Story", "999", "", false), story1, "before").valid, false, "unsupported items cannot move");
 
+const active1 = Object.assign(item(1, "User Story", "100/11/1", "100/11"), { parentId: 11, backlogOrderValue: 100 });
+const active2 = Object.assign(item(2, "User Story", "100/11/2", "100/11"), { parentId: 11, backlogOrderValue: 300 });
+const closed = Object.assign(item(9, "User Story", "100/11/9", "100/11"), {
+    parentId: 11,
+    backlogOrderValue: 200,
+    state: "Closed"
+});
+const closedLater = Object.assign(item(10, "User Story", "100/11/10", "100/11"), {
+    parentId: 11,
+    backlogOrderValue: 250,
+    state: "Closed"
+});
+service.includeQueryItems(index, [active1, active2, closed, closedLater]);
+const closedEntry = service.getEntry(index, 9, "User Story");
+const closedLaterEntry = service.getEntry(index, 10, "User Story");
+assert.ok(closedEntry && closedEntry.synthetic, "completed items omitted from the Backlog response should still participate in their configured backlog level");
+assert.ok(closedEntry.position < closedLaterEntry.position, "multiple hidden items should retain their relative Order values between visible anchors");
+closed.backlogOrder = Object.assign({ eligible: true }, closedEntry);
+closedLater.backlogOrder = Object.assign({ eligible: true }, closedLaterEntry);
+active1.backlogOrder = Object.assign({ eligible: true }, service.getEntry(index, 1, "User Story"));
+active2.backlogOrder = Object.assign({ eligible: true }, service.getEntry(index, 2, "User Story"));
+assert.deepStrictEqual(JSON.parse(JSON.stringify(service.sortItems([active2, closedLater, closed, active1], index).map((workItem) => workItem.id))), [1, 9, 10, 2], "the process Order field should place hidden completed items between visible anchors");
+assert.deepStrictEqual(
+    JSON.parse(JSON.stringify(service.planMove(index, closedLater, closed, "after").operation)),
+    { ids: [10], parentId: 11, previousId: 9, nextId: 2 },
+    "completed items should generate the same reorder request as active items"
+);
+
 console.log("backlog-order tests passed");

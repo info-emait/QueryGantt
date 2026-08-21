@@ -5,10 +5,8 @@
 
     &__root-drop-zone {
         display: none;
-        position: absolute;
-        top: rem(4px);
-        left: rem(4px);
-        z-index: 5;
+        position: fixed;
+        z-index: 102;
         min-width: rem(180px);
         padding: rem(6px) rem(12px);
         border: 1px dashed rgba(var(--palette-primary-shade-10, 0, 90, 158), 1);
@@ -17,6 +15,7 @@
         background-color: var(--background-color);
         font-size: rem(12px);
         text-align: center;
+        pointer-events: auto;
 
         &--active {
             border-style: solid;
@@ -194,6 +193,8 @@
                 flex: 0 0 rem(24px);
                 cursor: grab;
                 margin-right: rem(2px);
+                touch-action: none;
+                user-select: none;
 
                 &:active {
                     cursor: grabbing;

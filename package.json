@@ -5,7 +5,7 @@
     "author": "emait",
     "private": true,
     "scripts": {
-        "test": "node tests/backlog-order.test.js && node tests/querygantt-backlog-integration.test.js"
+        "test": "node tests/backlog-order.test.js && node tests/querygantt-backlog-integration.test.js && node tests/timeline-backlog-interaction.test.js"
     },
     "devDependencies": {
         "grunt": "1.6.1",

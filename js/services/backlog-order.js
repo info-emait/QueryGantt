@@ -17,7 +17,8 @@ define([], () => {
             entries: {},
             levels: {},
             allEntries: [],
-            size: 0
+            size: 0,
+            orderField: null
         };
     };
 
@@ -27,9 +28,11 @@ define([], () => {
      *
      * @param {array} backlogs Backlog level configurations.
      * @param {array} responses Work item responses aligned with the backlog levels.
+     * @param {string} orderField Process-specific Order field reference name.
      */
-    const createIndex = function (backlogs, responses) {
+    const createIndex = function (backlogs, responses, orderField) {
         const index = empty();
+        index.orderField = orderField || null;
 
         (backlogs || []).forEach((backlog, backlogPosition) => {
             const level = {
@@ -59,6 +62,124 @@ define([], () => {
                 index.entries[entry.id].push(entry);
                 index.allEntries.push(entry);
                 index.size += 1;
+            });
+        });
+
+        return index;
+    };
+
+
+    /**
+     * Adds query work items that participate in a backlog level but are not in
+     * the backlog response (notably completed items hidden by Azure Boards).
+     * Azure's process-specific Order value is used when available.
+     *
+     * @param {object} index Backlog index.
+     * @param {array} items Normalized query work items.
+     */
+    const includeQueryItems = function (index, items) {
+        index = index || empty();
+        const source = items || [];
+
+        // First attach Order values to entries returned by the Backlog API so
+        // synthetic entries can be placed near reliable visible anchors.
+        source.forEach((item) => {
+            const entry = getEntry(index, getOriginalId(item), item && item.type);
+            const orderValue = toNumber(item && item.backlogOrderValue);
+            if (entry && orderValue !== null) {
+                entry.orderValue = orderValue;
+            }
+        });
+
+        const synthetic = [];
+        source.forEach((item) => {
+            const id = getOriginalId(item);
+            const level = getLevelForType(index, item && item.type);
+            if (id === null || !level || getEntry(index, id, item && item.type)) {
+                return;
+            }
+
+            const entry = {
+                id,
+                parentId: toId(item && item.parentId) || 0,
+                backlogId: level.id,
+                backlogRank: level.rank,
+                levelPosition: level.position,
+                position: Number.MAX_SAFE_INTEGER,
+                synthetic: true
+            };
+            const orderValue = toNumber(item && item.backlogOrderValue);
+            if (orderValue !== null) {
+                entry.orderValue = orderValue;
+            }
+
+            index.entries[id] = index.entries[id] || [];
+            index.entries[id].push(entry);
+            index.allEntries.push(entry);
+            index.size += 1;
+            synthetic.push(entry);
+        });
+
+        // Estimate a hidden item's existing position from visible query
+        // anchors. Azure assigns the authoritative Order value after a move.
+        const groups = {};
+        synthetic.forEach((entry) => {
+            const key = `${entry.backlogId}|${entry.parentId}`;
+            groups[key] = groups[key] || [];
+            groups[key].push(entry);
+        });
+        Object.keys(groups).forEach((key) => {
+            const hiddenEntries = groups[key].sort((left, right) => {
+                const leftOrder = toNumber(left.orderValue);
+                const rightOrder = toNumber(right.orderValue);
+                if (leftOrder !== null && rightOrder !== null && leftOrder !== rightOrder) {
+                    return leftOrder - rightOrder;
+                }
+                if (leftOrder !== null) {
+                    return -1;
+                }
+                if (rightOrder !== null) {
+                    return 1;
+                }
+                return left.id - right.id;
+            });
+            const sample = hiddenEntries[0];
+            const siblings = index.allEntries.filter((candidate) => !candidate.synthetic
+                && candidate.backlogId === sample.backlogId
+                && candidate.parentId === sample.parentId);
+            const anchors = siblings
+                .filter((candidate) => toNumber(candidate.orderValue) !== null)
+                .sort((left, right) => left.orderValue - right.orderValue);
+            const buckets = {};
+
+            hiddenEntries.forEach((entry) => {
+                const orderValue = toNumber(entry.orderValue);
+                const next = orderValue === null ? null : anchors.find((candidate) => candidate.orderValue > orderValue);
+                const previous = orderValue === null ? null : anchors.slice().reverse().find((candidate) => candidate.orderValue <= orderValue);
+                const bucketKey = `${previous ? previous.id : "start"}|${next ? next.id : "end"}`;
+                buckets[bucketKey] = buckets[bucketKey] || { previous, next, entries: [] };
+                buckets[bucketKey].entries.push(entry);
+            });
+
+            Object.keys(buckets).forEach((bucketKey) => {
+                const bucket = buckets[bucketKey];
+                const count = bucket.entries.length;
+                const lastPosition = siblings.reduce((maximum, candidate) => Math.max(maximum, candidate.position), -1);
+                bucket.entries.forEach((entry, position) => {
+                    if (bucket.previous && bucket.next) {
+                        entry.position = bucket.previous.position
+                            + ((bucket.next.position - bucket.previous.position) * (position + 1) / (count + 1));
+                    }
+                    else if (bucket.next) {
+                        entry.position = bucket.next.position - ((count - position) * 0.5);
+                    }
+                    else if (bucket.previous) {
+                        entry.position = bucket.previous.position + ((position + 1) * 0.5);
+                    }
+                    else {
+                        entry.position = lastPosition + position + 1;
+                    }
+                });
             });
         });
 
@@ -137,6 +258,12 @@ define([], () => {
             if (leftEntry && rightEntry) {
                 if (leftEntry.backlogRank !== rightEntry.backlogRank) {
                     return rightEntry.backlogRank - leftEntry.backlogRank;
+                }
+                if (leftEntry.backlogId === rightEntry.backlogId
+                    && toNumber(leftEntry.orderValue) !== null
+                    && toNumber(rightEntry.orderValue) !== null
+                    && leftEntry.orderValue !== rightEntry.orderValue) {
+                    return leftEntry.orderValue - rightEntry.orderValue;
                 }
                 if (leftEntry.backlogId === rightEntry.backlogId && leftEntry.position !== rightEntry.position) {
                     return leftEntry.position - rightEntry.position;
@@ -257,11 +384,27 @@ define([], () => {
     };
 
 
+    const toNumber = function (value) {
+        if (value === null || typeof(value) === "undefined" || value === "") {
+            return null;
+        }
+        const result = Number(value);
+        return Number.isFinite(result) ? result : null;
+    };
+
+
     const getOriginalId = function (item) {
         if (!item) {
             return null;
         }
         return toId(item.originalId !== undefined ? item.originalId : item.id);
+    };
+
+
+    const getLevelForType = function (index, type) {
+        return Object.keys((index || {}).levels || {})
+            .map((id) => index.levels[id])
+            .find((level) => (level.workItemTypes || []).includes(type)) || null;
     };
 
 
@@ -304,6 +447,7 @@ define([], () => {
         backlogOrder: backlogOrder,
         empty: empty,
         createIndex: createIndex,
+        includeQueryItems: includeQueryItems,
         getEntry: getEntry,
         sortItems: sortItems,
         planMove: planMove
