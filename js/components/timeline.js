@@ -6,8 +6,6 @@ define([
     //#region [ Fields ]
     
     let global = (function() { return this; })();
-    const maxHeight = "max(12rem, calc(100vh - 16rem))";
-
     //#endregion
 
 
@@ -15,8 +13,6 @@ define([
     
     /**
      * Constructor.
-     * 
-     * VERTICAL SCROLL: require(["knockout"], (ko) => ko.contextFor(temp2).$data.timeline.setOptions({verticalScroll: true, height: 200}))
      * 
      * @param {object} args Arguments.
      */
@@ -40,6 +36,21 @@ define([
         this.groups = null;
         this.records = null;
         this.arrows = null;
+        this._syncFloatingAxisBound = this._syncFloatingAxis.bind(this);
+        this._timelineChangedBound = () => this._syncFloatingAxis(true);
+        this.scrollContainer = typeof(this.node.closest) === "function" ? this.node.closest(".v-scroll-auto") : null;
+        this.floatingAxis = global.document.createElement("div");
+        this.floatingAxis.classList.add("my-timeline", "my-timeline__floating-axis");
+        this.floatingAxis.setAttribute("aria-hidden", "true");
+        if (global.document.body && typeof(global.document.body.appendChild) === "function") {
+            global.document.body.appendChild(this.floatingAxis);
+        }
+        if (this.scrollContainer && typeof(this.scrollContainer.addEventListener) === "function") {
+            this.scrollContainer.addEventListener("scroll", this._syncFloatingAxisBound, false);
+        }
+        if (typeof(global.addEventListener) === "function") {
+            global.addEventListener("resize", this._syncFloatingAxisBound, false);
+        }
 
         // Callbacks
         this.callbacks = args.callbacks;
@@ -220,8 +231,7 @@ define([
 
 
     /**
-     * Runs an image renderer with the timeline expanded to include every row.
-     * Restores the capped height and vertical scroll position afterwards.
+     * Runs an image renderer against the naturally expanded timeline.
      *
      * @param {function} renderer Function that receives the timeline element and returns a promise.
      * @returns Promise containing the renderer result.
@@ -231,19 +241,7 @@ define([
             return Promise.reject(new Error("Timeline is not ready for image export."));
         }
 
-        const scrollContainer = this.node.querySelector(".vis-left.vis-vertical-scroll");
-        const scrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
-
-        return this._setOptionsAndWait({ maxHeight: "" })
-            .then(() => renderer(this.node))
-            .finally(() => this._setOptionsAndWait({ maxHeight: maxHeight })
-                .then(() => {
-                    const restoredScrollContainer = this.node.querySelector(".vis-left.vis-vertical-scroll");
-                    if (restoredScrollContainer) {
-                        restoredScrollContainer.scrollTop = scrollTop;
-                        restoredScrollContainer.dispatchEvent(new global.Event("scroll"));
-                    }
-                }));
+        return Promise.resolve().then(() => renderer(this.node));
     };
 
 
@@ -294,6 +292,16 @@ define([
 
         this._onItemsChangedSubscribe.dispose();
         this._onSelectedIdChangedSubscribe.dispose();
+        this._destroyTimeline();
+        if (this.scrollContainer && typeof(this.scrollContainer.removeEventListener) === "function") {
+            this.scrollContainer.removeEventListener("scroll", this._syncFloatingAxisBound, false);
+        }
+        if (typeof(global.removeEventListener) === "function") {
+            global.removeEventListener("resize", this._syncFloatingAxisBound, false);
+        }
+        if (this.floatingAxis && this.floatingAxis.parentNode) {
+            this.floatingAxis.parentNode.removeChild(this.floatingAxis);
+        }
     };
 
     //#endregion
@@ -358,39 +366,73 @@ define([
         this.timeline = null;
         this.groups = null;
         this.records = null;
+        if (this.floatingAxis) {
+            this.floatingAxis.classList.remove("my-timeline__floating-axis--visible");
+            this.floatingAxis.innerHTML = "";
+        }
     };
 
 
     /**
-     * Applies timeline options and waits until the resulting redraw completes.
-     *
-     * @param {object} options Timeline options.
-     * @returns Promise resolved after the redraw.
+     * Gets the viewport position immediately below the sticky filter bar.
      */
-    Timeline.prototype._setOptionsAndWait = function (options) {
-        return new Promise((resolve) => {
-            const timeline = this.timeline;
-            let timeout = null;
-            let done = false;
-            const finish = () => {
-                if (done) {
-                    return;
-                }
+    Timeline.prototype._getFloatingAxisTop = function () {
+        const filter = global.document.querySelector(".querygantt-tab__filter");
+        if (!filter || typeof(filter.getBoundingClientRect) !== "function") {
+            return 0;
+        }
 
-                done = true;
-                if (timeout) {
-                    global.clearTimeout(timeout);
-                }
-                timeline.off("changed", finish);
-                global.requestAnimationFrame(resolve);
-            };
+        const bounds = filter.getBoundingClientRect();
+        return bounds.top <= 0 && bounds.bottom > 0 ? bounds.bottom : 0;
+    };
 
-            timeline.on("changed", finish);
-            timeline.setOptions(options);
-            if (!done) {
-                timeout = global.setTimeout(finish, 100);
-            }
-        });
+
+    /**
+     * Mirrors vis-timeline's top axis into a fixed, read-only layer while the
+     * Azure DevOps page scrolls through the naturally expanded work item rows.
+     * A DOM mirror is used because vis-timeline's overflow containers prevent
+     * CSS position: sticky from working reliably.
+     *
+     * @param {boolean} refreshContent Re-clone labels after range changes.
+     */
+    Timeline.prototype._syncFloatingAxis = function (refreshContent) {
+        if (!this.timeline || !this.floatingAxis || typeof(this.node.querySelector) !== "function") {
+            return;
+        }
+
+        const axis = this.node.querySelector(".vis-panel.vis-top");
+        if (!axis || typeof(axis.getBoundingClientRect) !== "function" || typeof(this.node.getBoundingClientRect) !== "function") {
+            this.floatingAxis.classList.remove("my-timeline__floating-axis--visible");
+            return;
+        }
+
+        const axisBounds = axis.getBoundingClientRect();
+        const timelineBounds = this.node.getBoundingClientRect();
+        const top = this._getFloatingAxisTop();
+        const visible = axisBounds.top < top && timelineBounds.bottom > top + axisBounds.height;
+        if (!visible) {
+            this.floatingAxis.classList.remove("my-timeline__floating-axis--visible");
+            return;
+        }
+
+        if (refreshContent === true || !this.floatingAxis.firstChild) {
+            const clone = axis.cloneNode(true);
+            [clone].concat(Array.from(clone.querySelectorAll("[id]"))).forEach((element) => element.removeAttribute("id"));
+            clone.classList.add("my-timeline__floating-axis-content");
+            clone.style.position = "relative";
+            clone.style.top = "0";
+            clone.style.left = "0";
+            clone.style.width = axisBounds.width + "px";
+            clone.style.height = axisBounds.height + "px";
+            this.floatingAxis.innerHTML = "";
+            this.floatingAxis.appendChild(clone);
+        }
+
+        this.floatingAxis.style.top = top + "px";
+        this.floatingAxis.style.left = axisBounds.left + "px";
+        this.floatingAxis.style.width = axisBounds.width + "px";
+        this.floatingAxis.style.height = axisBounds.height + "px";
+        this.floatingAxis.classList.add("my-timeline__floating-axis--visible");
     };
 
 
@@ -565,15 +607,14 @@ define([
             },
             groupHeightMode: "fixed",
             orientation: {
-                axis: "both",
+                axis: "top",
                 // Long schedules should open at the first work item.
                 item: "top"
             },
             horizontalScroll: true,
-            verticalScroll: true,
-            // Keep the time axes visible by letting vis-timeline scroll long
-            // schedules inside the space left below the page controls.
-            maxHeight: maxHeight,
+            // Let the Azure DevOps page scroll all work item rows. The top axis
+            // is mirrored by _syncFloatingAxis while its original scrolls out.
+            verticalScroll: false,
             zoomKey: "ctrlKey",
             editable: {
                 remove: false,
@@ -617,6 +658,9 @@ define([
         // Events
         this.timeline.on("select", this._onSelect.bind(this));
         this.timeline.on("doubleClick", this._onDoubleClick.bind(this));
+        this.timeline.on("rangechange", this._timelineChangedBound);
+        this.timeline.on("changed", this._timelineChangedBound);
+        this._syncFloatingAxis(true);
     };
 
 
