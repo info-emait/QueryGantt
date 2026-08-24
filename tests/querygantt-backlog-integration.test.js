@@ -99,6 +99,7 @@ const makeModel = function () {
     model.project = { id: "project-id", name: "Project" };
     model.team = { id: "team-id", name: "Team" };
     model._backlogRequestId = 0;
+    model._backlogReorderInFlight = false;
     model.backlogIndex = observable(backlogOrderService.empty());
     model.backlogAvailable = observable(false);
     model.backlogLoading = observable(false);
@@ -157,8 +158,8 @@ const makeModel = function () {
     await model._loadBacklogOrder(null);
     const entry1 = backlogOrderService.getEntry(model.backlogIndex(), 1, "User Story");
     const entry2 = backlogOrderService.getEntry(model.backlogIndex(), 2, "User Story");
-    const story1 = { id: 1, originalId: 1, type: "User Story", backlogOrder: Object.assign({ eligible: true }, entry1) };
-    const story2 = { id: 2, originalId: 2, type: "User Story", backlogOrder: Object.assign({ eligible: true }, entry2) };
+    const story1 = { id: 1, originalId: 1, type: "User Story", title: "Story 1", path: "11/1", parent: "11", parentId: 11, level: 2, isCompleted: false, backlogOrder: Object.assign({ eligible: true }, entry1) };
+    const story2 = { id: 2, originalId: 2, type: "User Story", title: "Story 2", path: "11/2", parent: "11", parentId: 11, level: 2, isCompleted: false, backlogOrder: Object.assign({ eligible: true }, entry2) };
     model.wits = observable([story1, story2]);
     let operation = null;
     let refreshed = 0;
@@ -167,15 +168,37 @@ const makeModel = function () {
         assert.deepStrictEqual(JSON.parse(JSON.stringify(context)), { projectId: "project-id", teamId: "team-id" });
         return Promise.resolve([]);
     };
-    model.refresh = function () {
-        refreshed += 1;
-        model.isLoading(false);
-        return Promise.resolve();
-    };
+    model.refresh = function () { refreshed += 1; return Promise.resolve(); };
 
     assert.strictEqual(await model.reorderWit({ draggedId: 2, targetId: 1, position: "before" }), true);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(operation)), { ids: [2], parentId: 11, previousId: 0, nextId: 1 });
-    assert.strictEqual(refreshed, 1, "a successful reorder should refresh data from Azure DevOps");
+    assert.strictEqual(refreshed, 0, "a successful reorder should not reload the entire query");
+    assert.strictEqual(model.isLoading(), false, "a successful reorder should not replace the page with a loading screen");
+    assert.deepStrictEqual(
+        JSON.parse(JSON.stringify(backlogOrderService.sortItems(model.wits(), model.backlogIndex()).map((wit) => wit.id))),
+        [2, 1],
+        "the successful order should be visible immediately from local state"
+    );
+
+    const feature12Entry = backlogOrderService.getEntry(model.backlogIndex(), 12, "Feature");
+    const feature12 = { id: 12, originalId: 12, type: "Feature", title: "Feature 12", path: "12", parent: "", parentId: null, level: 1, isCompleted: false, backlogOrder: Object.assign({ eligible: true }, feature12Entry) };
+    model.wits(model.wits().concat([feature12]));
+    assert.strictEqual(await model.reorderWit({ draggedId: 1, targetId: 12, position: "inside" }), true);
+    const reparented = model.wits().find((wit) => wit.id === 1);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify({
+        parentId: reparented.parentId,
+        parentTitle: reparented.parentTitle,
+        parent: reparented.parent,
+        path: reparented.path,
+        level: reparented.level
+    })), {
+        parentId: 12,
+        parentTitle: "Feature 12",
+        parent: "12",
+        path: "12/1",
+        level: 2
+    }, "a successful reparent should update the local query hierarchy without a reload");
+    assert.strictEqual(refreshed, 0);
 
     operation = null;
     const unsupported = { id: 999, originalId: 999, type: "User Story", backlogOrder: { eligible: false } };
@@ -188,7 +211,7 @@ const makeModel = function () {
     assert.strictEqual(await model.reorderWit({ draggedId: 2, targetId: 1, position: "before" }), false);
     assert.strictEqual(model.isLoading(), false, "a failed request should leave the UI usable");
     assert.ok(model.message().includes("#2"), "a failed request should identify the work item");
-    assert.strictEqual(refreshed, 1, "a failed request should not refresh an uncommitted order");
+    assert.strictEqual(refreshed, 0, "a failed request should not refresh or apply an uncommitted order");
 
     let saved = null;
     let persisted = JSON.stringify({ showFields: ["duration"] });

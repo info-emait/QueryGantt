@@ -53,6 +53,7 @@ define([
         this.token = null;
         this.path = null;
         this._backlogRequestId = 0;
+        this._backlogReorderInFlight = false;
 
         this.zero = ko.observable(null);
 
@@ -424,6 +425,11 @@ define([
      * @param {object} move Drag and drop description.
      */
     Model.prototype.reorderWit = function (move) {
+        if (this._backlogReorderInFlight) {
+            this.message("Please wait for the current backlog move to finish.");
+            return Promise.resolve(false);
+        }
+
         const dragged = this.wits().find((wit) => (wit.id + "") === (move.draggedId + ""));
         const target = move.targetId === null || move.targetId === undefined
             ? null
@@ -435,18 +441,93 @@ define([
             return Promise.resolve(false);
         }
 
-        this.isLoading(true);
+        this._backlogReorderInFlight = true;
         const client = api.getClient(workApi.WorkRestClient);
-        return client.reorderBacklogWorkItems(plan.operation, this._getTeamContext())
-            .then(() => this.refresh())
-            .then(() => true)
-            .catch((error) => {
-                this.isLoading(false);
+        return client.reorderBacklogWorkItems(plan.operation, this._getTeamContext()).then(
+            () => {
+                this._backlogReorderInFlight = false;
+                try {
+                    this._applyBacklogMove(plan, dragged, target);
+                    return true;
+                }
+                catch (error) {
+                    this.message(`Work item #${plan.operation.ids[0]} was reordered, but the local view could not be updated. Please refresh the data.`);
+                    console.warn(`App : reorderWit() : Unable to apply reordered work item #${plan.operation.ids[0]} locally.`);
+                    console.warn(error);
+                    return false;
+                }
+            },
+            (error) => {
+                this._backlogReorderInFlight = false;
                 this.message(`Unable to reorder work item #${plan.operation.ids[0]}.`);
                 console.warn(`App : reorderWit() : Unable to reorder work item #${plan.operation.ids[0]}.`);
                 console.warn(error);
                 return false;
-            });
+            }
+        );
+    };
+
+
+    /**
+     * Updates query hierarchy and backlog metadata after a successful move.
+     */
+    Model.prototype._applyBacklogMove = function (plan, dragged, target) {
+        const index = backlogOrderService.applyMove(this.backlogIndex(), plan.operation);
+        const oldPath = (dragged.path === null || typeof(dragged.path) === "undefined") ? dragged.id + "" : dragged.path + "";
+        let parentPath = "";
+        if (plan.position === "inside" && target) {
+            parentPath = target.path + "";
+        }
+        else if ((plan.position === "before" || plan.position === "after") && target && target.parent) {
+            parentPath = target.parent + "";
+        }
+        const newPath = parentPath ? `${parentPath}/${dragged.originalId}` : dragged.originalId + "";
+        const parent = parentPath ? this.wits().find((wit) => (wit.path + "") === parentPath) : null;
+
+        const updated = this.wits().map((source) => {
+            const wit = Object.assign({}, source);
+            const path = (wit.path === null || typeof(wit.path) === "undefined") ? "" : wit.path + "";
+            if (path === oldPath || path.indexOf(oldPath + "/") === 0) {
+                wit.path = newPath + path.substring(oldPath.length);
+                const separator = wit.path.lastIndexOf("/");
+                wit.parent = separator >= 0 ? wit.path.substring(0, separator) : "";
+                wit.level = wit.path.split("/").length;
+            }
+            if ((wit.id + "") === (dragged.id + "")) {
+                wit.parentId = plan.operation.parentId || null;
+                wit.parentTitle = parent ? parent.title : "";
+            }
+
+            const entry = backlogOrderService.getEntry(index, wit.originalId, wit.type);
+            wit.backlogOrder = entry ? Object.assign({}, wit.backlogOrder || {}, {
+                parentId: entry.parentId,
+                backlogId: entry.backlogId,
+                backlogRank: entry.backlogRank,
+                position: entry.position
+            }) : { eligible: false };
+            wit.backlogOrderValue = entry && Number.isFinite(Number(entry.orderValue)) ? Number(entry.orderValue) : wit.backlogOrderValue;
+            return wit;
+        });
+
+        const childCounts = {};
+        updated.forEach((wit) => {
+            const key = wit.parent + "";
+            childCounts[key] = childCounts[key] || { all: 0, completed: 0 };
+            childCounts[key].all += 1;
+            childCounts[key].completed += wit.isCompleted ? 1 : 0;
+        });
+        updated.forEach((wit) => {
+            const counts = childCounts[wit.path + ""] || { all: 0, completed: 0 };
+            wit.childCount = counts.all;
+            wit.childCompletedCount = counts.completed;
+        });
+
+        this.backlogIndex(index);
+        this.wits(updated);
+        if (this.current && typeof(this.current) === "function" && this.current()) {
+            const currentId = this.current().id;
+            this.current(updated.find((wit) => (wit.id + "") === (currentId + "")) || null);
+        }
     };
 
 

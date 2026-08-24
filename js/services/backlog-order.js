@@ -373,6 +373,56 @@ define([], () => {
         };
     };
 
+
+    /**
+     * Applies a successful Azure Boards reorder operation to a cloned backlog
+     * index. This lets the UI update immediately without refetching the query.
+     *
+     * @param {object} index Current backlog index.
+     * @param {object} operation Successful Azure Boards reorder operation.
+     */
+    const applyMove = function (index, operation) {
+        const result = cloneIndex(index);
+        const ids = ((operation || {}).ids || []).map(toId).filter((id) => id !== null);
+        if (ids.length !== 1) {
+            return result;
+        }
+
+        const moved = getEntry(result, ids[0]);
+        if (!moved) {
+            return result;
+        }
+
+        const oldParentId = moved.parentId;
+        const newParentId = toId(operation.parentId) || 0;
+        const siblings = getSiblings(result, moved.backlogId, newParentId, moved.id);
+        let insertAt = siblings.length;
+        const nextId = toId(operation.nextId);
+        const previousId = toId(operation.previousId);
+        if (nextId) {
+            const nextPosition = siblings.findIndex((entry) => entry.id === nextId);
+            if (nextPosition >= 0) {
+                insertAt = nextPosition;
+            }
+        }
+        else if (previousId) {
+            const previousPosition = siblings.findIndex((entry) => entry.id === previousId);
+            if (previousPosition >= 0) {
+                insertAt = previousPosition + 1;
+            }
+        }
+
+        moved.parentId = newParentId;
+        siblings.splice(insertAt, 0, moved);
+        reindexSiblings(siblings);
+
+        if (oldParentId !== newParentId) {
+            reindexSiblings(getSiblings(result, moved.backlogId, oldParentId, moved.id));
+        }
+
+        return result;
+    };
+
     //#endregion
 
 
@@ -415,6 +465,37 @@ define([], () => {
     };
 
 
+    const reindexSiblings = function (siblings) {
+        (siblings || []).forEach((entry, position) => {
+            entry.position = position;
+            // sortItems prefers the process Order value when present. A local
+            // sequential value therefore makes the successful move visible
+            // immediately while Azure keeps the authoritative persisted rank.
+            entry.orderValue = position;
+        });
+    };
+
+
+    const cloneIndex = function (index) {
+        index = index || empty();
+        const result = empty();
+        result.orderField = index.orderField || null;
+        Object.keys(index.levels || {}).forEach((id) => {
+            result.levels[id] = Object.assign({}, index.levels[id], {
+                workItemTypes: ((index.levels[id] || {}).workItemTypes || []).slice()
+            });
+        });
+        (index.allEntries || []).forEach((entry) => {
+            const copy = Object.assign({}, entry);
+            result.entries[copy.id] = result.entries[copy.id] || [];
+            result.entries[copy.id].push(copy);
+            result.allEntries.push(copy);
+            result.size += 1;
+        });
+        return result;
+    };
+
+
     const isDescendant = function (index, possibleDescendantId, ancestorId) {
         const visited = new Set();
         let currentId = possibleDescendantId;
@@ -450,6 +531,7 @@ define([], () => {
         includeQueryItems: includeQueryItems,
         getEntry: getEntry,
         sortItems: sortItems,
-        planMove: planMove
+        planMove: planMove,
+        applyMove: applyMove
     };
 });

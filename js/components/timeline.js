@@ -85,13 +85,17 @@ define([
             return;
         }
 
+        const updates = [];
         this.groups.forEach((g) => {
-            this.groups.update({
+            updates.push({
                 id: g.id,
                 visible: true,
                 showNested: true
             });
         });
+        if (updates.length) {
+            this.groups.update(updates);
+        }
     };
 
 
@@ -103,23 +107,28 @@ define([
             return;
         }
 
+        const updates = [];
         this.groups.forEach((g) => {
+            const update = { id: g.id };
+            let changed = false;
             // Hide groups with nested groups
             if (g.nestedGroups instanceof Array) {
-                this.groups.update({
-                    id: g.id,
-                    showNested: false
-                });
+                update.showNested = false;
+                changed = true;
             }
 
             // Hide nested groups
             if (g.treeLevel > 1) {
-                this.groups.update({
-                    id: g.id,
-                    visible: false
-                });
+                update.visible = false;
+                changed = true;
+            }
+            if (changed) {
+                updates.push(update);
             }
         });
+        if (updates.length) {
+            this.groups.update(updates);
+        }
     };
 
 

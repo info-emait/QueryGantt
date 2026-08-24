@@ -106,6 +106,21 @@ assert.deepStrictEqual(
     "dropping on the root target should append at the root of the same backlog"
 );
 
+const locallyMoved = service.applyMove(index, service.planMove(index, story2, story1, "before").operation);
+assert.deepStrictEqual(
+    JSON.parse(JSON.stringify([service.getEntry(locallyMoved, 2).position, service.getEntry(locallyMoved, 1).position])),
+    [0, 1],
+    "a successful same-parent move should update local sibling positions"
+);
+assert.strictEqual(service.getEntry(index, 2).position, 1, "the local move should not mutate the prior server index");
+const locallyReparented = service.applyMove(index, service.planMove(index, story1, story3, "after").operation);
+assert.strictEqual(service.getEntry(locallyReparented, 1).parentId, 12, "a successful cross-parent move should update the local parent");
+assert.deepStrictEqual(
+    JSON.parse(JSON.stringify(service.sortItems([story3, story1], locallyReparented).map((workItem) => workItem.id))),
+    [3, 1],
+    "the local index should expose the successful order without another API read"
+);
+
 assert.strictEqual(service.planMove(index, feature11, story1, "inside").valid, false, "a parent cannot move below a descendant");
 assert.strictEqual(service.planMove(index, story1, feature11, "before").valid, false, "before/after requires the same backlog level");
 assert.strictEqual(service.planMove(index, item(999, "User Story", "999", "", false), story1, "before").valid, false, "unsupported items cannot move");

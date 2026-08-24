@@ -87,6 +87,25 @@ const viewModel = ko.registration.viewModel.createViewModel({
     callbacks: { reorderWit: function (value) { move = value; return Promise.resolve(true); } }, actions: {}
 }, { element: { firstChild: root, querySelector: function () {} } });
 
+const groupUpdates = [];
+viewModel.timeline = {};
+viewModel.groups = {
+    forEach: function (callback) {
+        [{ id: 1, treeLevel: 1, nestedGroups: [2] }, { id: 2, treeLevel: 2 }].forEach(callback);
+    },
+    update: function (updates) { groupUpdates.push(updates); }
+};
+viewModel.expand();
+assert.strictEqual(groupUpdates.length, 1, "expand all should update the DataSet in one redraw batch");
+assert.strictEqual(groupUpdates[0].length, 2);
+groupUpdates.length = 0;
+viewModel.collapse();
+assert.strictEqual(groupUpdates.length, 1, "collapse all should update the DataSet in one redraw batch");
+assert.deepStrictEqual(JSON.parse(JSON.stringify(groupUpdates[0])), [
+    { id: 1, showNested: false },
+    { id: 2, visible: false }
+]);
+
 const dragged = { id: 1, originalId: 1, backlogEligible: true, backlogId: "stories", backlogRank: 1, isCompleted: true };
 const target = { id: 2, originalId: 2, backlogEligible: true, backlogId: "stories", backlogRank: 1 };
 viewModel.groups = { get: function (id) { return Number(id) === 1 ? dragged : Number(id) === 2 ? target : null; } };
