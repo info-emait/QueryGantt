@@ -21,10 +21,11 @@ const fitted = {
 const fittedDuration = fitted.end.getTime() - fitted.start.getTime();
 const center = new Date("2026-08-21T12:00:00.000Z");
 
-["100", "200", "300", "400", "500", "custom"].forEach(function (preset) {
+["100", "200", "300", "400", "custom"].forEach(function (preset) {
     assert.strictEqual(service.normalizePreset(preset), preset);
 });
 assert.strictEqual(service.normalizePreset("fit"), "100", "legacy Fit all should migrate to 100%");
+assert.strictEqual(service.normalizePreset("500"), "400", "a previously saved 500% preference should migrate to the new maximum");
 assert.strictEqual(service.normalizePreset("unsupported"), "custom");
 assert.deepStrictEqual(plain(service.normalizeView()), { preset: "100", start: null, end: null });
 assert.deepStrictEqual(plain(service.normalizeView({ preset: "custom", start: "invalid", end: "invalid" })), { preset: "100", start: null, end: null });
@@ -43,7 +44,7 @@ assert.deepStrictEqual(plain(service.serializeView(restored)), {
 assert.deepStrictEqual(plain(service.serializeView({ preset: "300", start: restored.start, end: restored.end })), { preset: "300" }, "percentage presets should remain relative to current data");
 assert.strictEqual(service.normalizeView({ preset: "week", start: restored.start, end: restored.end }).preset, "custom", "legacy named ranges should retain their exact window");
 
-[100, 200, 300, 400, 500].forEach(function (percentage) {
+[100, 200, 300, 400].forEach(function (percentage) {
     const preset = String(percentage);
     const range = service.getPresetWindow(preset, fitted, center);
     assert.strictEqual(range.end.getTime() - range.start.getTime(), fittedDuration / (percentage / 100));

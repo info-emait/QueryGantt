@@ -355,9 +355,10 @@ assert.strictEqual(appModel.zoomPreset(), "300");
     assert.strictEqual(startupModel.zoomView().end.toISOString(), "2026-08-17T00:00:00.000Z");
 
     const html = fs.readFileSync(path.join(__dirname, "../html/querygantt-tab.html"), "utf8");
-    ["Custom", "100%", "200%", "300%", "400%", "500%"].forEach(function (label) {
+    ["Custom", "100%", "200%", "300%", "400%"].forEach(function (label) {
         assert.ok(html.includes(">" + label + "</option>"));
     });
+    assert.strictEqual(html.includes(">500%</option>"), false, "the zoom selector should stop at 400%");
 
     console.log("querygantt zoom integration tests passed");
 })().catch(function (error) {

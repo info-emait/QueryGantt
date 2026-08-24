@@ -4,8 +4,7 @@ define([], function () {
     const percent200 = "200";
     const percent300 = "300";
     const percent400 = "400";
-    const percent500 = "500";
-    const presets = [percent100, percent200, percent300, percent400, percent500];
+    const presets = [percent100, percent200, percent300, percent400];
 
     /**
      * Returns a supported zoom preset. Previous preset names are migrated
@@ -15,6 +14,9 @@ define([], function () {
         value = (value === null || typeof(value) === "undefined") ? "" : value + "";
         if (presets.includes(value) || value === custom) {
             return value;
+        }
+        if (value === "500") {
+            return percent400;
         }
         return value === "fit" ? percent100 : custom;
     };
@@ -121,7 +123,6 @@ define([], function () {
         percent200,
         percent300,
         percent400,
-        percent500,
         presets,
         normalizePreset,
         normalizeView,
