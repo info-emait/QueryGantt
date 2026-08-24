@@ -122,8 +122,74 @@ assert.deepStrictEqual(
 );
 
 assert.strictEqual(service.planMove(index, feature11, story1, "inside").valid, false, "a parent cannot move below a descendant");
+assert.strictEqual(service.planMove(index, story1, story2, "inside").valid, false, "a work item cannot be nested under the same backlog category");
 assert.strictEqual(service.planMove(index, story1, feature11, "before").valid, false, "before/after requires the same backlog level");
 assert.strictEqual(service.planMove(index, item(999, "User Story", "999", "", false), story1, "before").valid, false, "unsupported items cannot move");
+assert.strictEqual(service.isValidParent(index, service.getEntry(index, 1, "User Story"), 11), true, "a Feature is a valid parent for a User Story");
+assert.strictEqual(service.isValidParent(index, service.getEntry(index, 1, "User Story"), 100), false, "an Epic cannot directly parent a User Story when the Feature level exists");
+
+const invalidHierarchyResponses = [
+    { workItems: [{ source: null, target: { id: 100 } }] },
+    { workItems: [{ source: { id: 100 }, target: { id: 11 } }] },
+    { workItems: [{ source: { id: 100 }, target: { id: 1 } }, { source: { id: 100 }, target: { id: 2 } }] }
+];
+const invalidHierarchyIndex = service.createIndex(backlogs, invalidHierarchyResponses);
+const invalidStory1 = item(1, "User Story", "100/1", "100");
+const invalidStory2 = item(2, "User Story", "100/2", "100");
+const invalidMove = service.planMove(invalidHierarchyIndex, invalidStory1, invalidStory2, "before");
+assert.strictEqual(invalidMove.valid, false);
+assert.ok(invalidMove.reason.includes("#100") && invalidMove.reason.includes("#2"), "the invalid destination should identify the actionable parent-child link");
+assert.strictEqual(service.planMove(invalidHierarchyIndex, invalidStory1, null, "root").valid, true, "an item with an invalid current parent can still be moved to root to repair the hierarchy");
+
+const teamFieldValues = {
+    field: { referenceName: "System.AreaPath" },
+    defaultValue: "Project\\Team",
+    values: [
+        { value: "Project\\Team", includeChildren: true },
+        { value: "Project\\Shared", includeChildren: false }
+    ]
+};
+const teamIndex = service.createIndex(backlogs, responses, null, teamFieldValues);
+const teamOwned = Object.assign(item(1, "User Story", "100/11/1", "100/11"), { areaPath: "Project\\Team\\Component" });
+const exactShared = Object.assign(item(2, "User Story", "100/11/2", "100/11"), { areaPath: "Project\\Shared" });
+const otherTeam = Object.assign(item(3, "User Story", "100/12/3", "100/12"), { areaPath: "Project\\Other" });
+const outsideFeature = Object.assign(item(12, "Feature", "100/12", "100"), { areaPath: "Project\\Other" });
+const ownedClosed = Object.assign(item(9, "User Story", "100/11/9", "100/11"), {
+    areaPath: "Project\\Team",
+    parentId: 11,
+    backlogOrderValue: 150
+});
+const outsideSibling = Object.assign(item(8, "User Story", "100/11/8", "100/11"), {
+    areaPath: "Project\\Other",
+    parentId: 11,
+    backlogOrderValue: 175
+});
+service.includeQueryItems(teamIndex, [teamOwned, exactShared, otherTeam, outsideFeature, ownedClosed, outsideSibling]);
+assert.strictEqual(service.getEntry(teamIndex, 1, "User Story").teamOwned, true, "included child Area Paths should be reorderable");
+assert.strictEqual(service.getEntry(teamIndex, 2, "User Story").teamOwned, true, "an exact non-recursive Area Path should be reorderable");
+assert.strictEqual(service.getEntry(teamIndex, 3, "User Story").teamOwned, false, "items outside the team's Area Paths should not be sent to the reorder API");
+otherTeam.backlogOrder = Object.assign({ eligible: true }, service.getEntry(teamIndex, 3, "User Story"));
+teamOwned.backlogOrder = Object.assign({ eligible: true }, service.getEntry(teamIndex, 1, "User Story"));
+exactShared.backlogOrder = Object.assign({ eligible: true, targetEligible: true }, service.getEntry(teamIndex, 2, "User Story"));
+outsideFeature.backlogOrder = Object.assign({ eligible: false, targetEligible: true }, service.getEntry(teamIndex, 12, "Feature"));
+ownedClosed.backlogOrder = Object.assign({ eligible: true }, service.getEntry(teamIndex, 9, "User Story"));
+const otherTeamMove = service.planMove(teamIndex, otherTeam, teamOwned, "before");
+assert.strictEqual(otherTeamMove.valid, false);
+assert.ok(otherTeamMove.reason.includes("Area Paths"));
+assert.strictEqual(service.planMove(teamIndex, teamOwned, outsideFeature, "inside").valid, false, "an item cannot be reparented below a work item outside the team's Area Paths");
+assert.deepStrictEqual(
+    JSON.parse(JSON.stringify(service.planMove(teamIndex, ownedClosed, exactShared, "after").operation)),
+    { ids: [9], parentId: 11, previousId: 2, nextId: 0 },
+    "an out-of-team sibling must not be sent as the next reorder anchor"
+);
+
+const defaultOnlyIndex = service.createIndex(backlogs, responses, null, {
+    field: { referenceName: "System.AreaPath" },
+    defaultValue: "Project\\Default",
+    values: []
+});
+assert.strictEqual(service.isTeamOwned(defaultOnlyIndex, "Project\\Default"), true, "the default Area Path remains owned if the API omits it from values");
+assert.strictEqual(service.isTeamOwned(defaultOnlyIndex, "Project\\Other"), false, "an empty values array must not make every Area Path reorderable when a default exists");
 
 const active1 = Object.assign(item(1, "User Story", "100/11/1", "100/11"), { parentId: 11, backlogOrderValue: 100 });
 const active2 = Object.assign(item(2, "User Story", "100/11/2", "100/11"), { parentId: 11, backlogOrderValue: 300 });

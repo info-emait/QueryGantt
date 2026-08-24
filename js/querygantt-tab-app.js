@@ -269,14 +269,18 @@ define([
                 results.forEach((wit) => duplicateCount[wit.originalId] = (duplicateCount[wit.originalId] || 0) + 1);
                 results.forEach((wit) => {
                     const entry = backlogOrderService.getEntry(queryBacklogIndex, wit.originalId, wit.type);
+                    const targetEligible = !historical && (wit.project === this.project.name) && (duplicateCount[wit.originalId] === 1);
                     wit.backlogOrder = entry ? {
-                        eligible: !historical && (wit.project === this.project.name) && (duplicateCount[wit.originalId] === 1),
+                        eligible: targetEligible && entry.teamOwned !== false,
+                        targetEligible: targetEligible,
                         parentId: entry.parentId,
                         backlogId: entry.backlogId,
                         backlogRank: entry.backlogRank,
-                        position: entry.position
+                        position: entry.position,
+                        parentValid: backlogOrderService.isValidParent(queryBacklogIndex, entry, entry.parentId)
                     } : {
-                        eligible: false
+                        eligible: false,
+                        targetEligible: false
                     };
                 });
 
@@ -459,7 +463,8 @@ define([
             },
             (error) => {
                 this._backlogReorderInFlight = false;
-                this.message(`Unable to reorder work item #${plan.operation.ids[0]}.`);
+                const detail = this._getBacklogErrorMessage(error);
+                this.message(`Unable to reorder work item #${plan.operation.ids[0]}.${detail ? " " + detail : ""}`);
                 console.warn(`App : reorderWit() : Unable to reorder work item #${plan.operation.ids[0]}.`);
                 console.warn(error);
                 return false;
@@ -499,12 +504,16 @@ define([
             }
 
             const entry = backlogOrderService.getEntry(index, wit.originalId, wit.type);
+            const targetEligible = Boolean(wit.backlogOrder && wit.backlogOrder.targetEligible !== false);
             wit.backlogOrder = entry ? Object.assign({}, wit.backlogOrder || {}, {
+                eligible: targetEligible && entry.teamOwned !== false,
+                targetEligible: targetEligible,
                 parentId: entry.parentId,
                 backlogId: entry.backlogId,
                 backlogRank: entry.backlogRank,
-                position: entry.position
-            }) : { eligible: false };
+                position: entry.position,
+                parentValid: backlogOrderService.isValidParent(index, entry, entry.parentId)
+            }) : { eligible: false, targetEligible: false };
             wit.backlogOrderValue = entry && Number.isFinite(Number(entry.orderValue)) ? Number(entry.orderValue) : wit.backlogOrderValue;
             return wit;
         });
@@ -822,6 +831,18 @@ define([
 
 
     /**
+     * Extracts an actionable Azure DevOps message without exposing a stack.
+     */
+    Model.prototype._getBacklogErrorMessage = function (error) {
+        const message = error && (error.message || ((error.serverError || {}).message));
+        if (!message || typeof(message) !== "string") {
+            return "";
+        }
+        return message.replace(/\s+/g, " ").trim();
+    };
+
+
+    /**
      * Loads all visible backlog levels for the current team.
      *
      * @param {string} asOf Historical query date, if any.
@@ -841,19 +862,24 @@ define([
         const client = api.getClient(workApi.WorkRestClient);
         return Promise.all([
                 client.getBacklogs(this._getTeamContext()),
-                client.getBacklogConfigurations(this._getTeamContext()).catch(() => null)
+                client.getBacklogConfigurations(this._getTeamContext()).catch(() => null),
+                typeof(client.getTeamFieldValues) === "function"
+                    ? client.getTeamFieldValues(this._getTeamContext()).catch(() => null)
+                    : Promise.resolve(null)
             ])
             .then((response) => ({
                 backlogs: (response[0] || []).filter((backlog) => !backlog.isHidden),
-                configuration: response[1]
+                configuration: response[1],
+                teamFieldValues: response[2]
             }))
-            .then(({ backlogs, configuration }) => Promise.all([
+            .then(({ backlogs, configuration, teamFieldValues }) => Promise.all([
                 backlogs,
                 Promise.all(backlogs.map((backlog) => client.getBacklogLevelWorkItems(this._getTeamContext(), backlog.id))),
-                (((configuration || {}).backlogFields || {}).typeFields || {}).Order || null
+                (((configuration || {}).backlogFields || {}).typeFields || {}).Order || null,
+                teamFieldValues
             ]))
             .then((response) => {
-                const index = backlogOrderService.createIndex(response[0], response[1], response[2]);
+                const index = backlogOrderService.createIndex(response[0], response[1], response[2], response[3]);
                 if (requestId !== this._backlogRequestId) {
                     return emptyIndex;
                 }

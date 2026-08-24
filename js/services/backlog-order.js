@@ -18,7 +18,8 @@ define([], () => {
             levels: {},
             allEntries: [],
             size: 0,
-            orderField: null
+            orderField: null,
+            teamFieldValues: null
         };
     };
 
@@ -29,10 +30,12 @@ define([], () => {
      * @param {array} backlogs Backlog level configurations.
      * @param {array} responses Work item responses aligned with the backlog levels.
      * @param {string} orderField Process-specific Order field reference name.
+     * @param {object} teamFieldValues Area paths owned by the current team.
      */
-    const createIndex = function (backlogs, responses, orderField) {
+    const createIndex = function (backlogs, responses, orderField, teamFieldValues) {
         const index = empty();
         index.orderField = orderField || null;
+        index.teamFieldValues = cloneTeamFieldValues(teamFieldValues);
 
         (backlogs || []).forEach((backlog, backlogPosition) => {
             const level = {
@@ -86,8 +89,11 @@ define([], () => {
         source.forEach((item) => {
             const entry = getEntry(index, getOriginalId(item), item && item.type);
             const orderValue = toNumber(item && item.backlogOrderValue);
-            if (entry && orderValue !== null) {
-                entry.orderValue = orderValue;
+            if (entry) {
+                entry.teamOwned = isTeamOwned(index, item && item.areaPath);
+                if (orderValue !== null) {
+                    entry.orderValue = orderValue;
+                }
             }
         });
 
@@ -106,7 +112,8 @@ define([], () => {
                 backlogRank: level.rank,
                 levelPosition: level.position,
                 position: Number.MAX_SAFE_INTEGER,
-                synthetic: true
+                synthetic: true,
+                teamOwned: isTeamOwned(index, item && item.areaPath)
             };
             const orderValue = toNumber(item && item.backlogOrderValue);
             if (orderValue !== null) {
@@ -309,7 +316,10 @@ define([], () => {
         if (!draggedEntry || !dragged || !dragged.backlogOrder || !dragged.backlogOrder.eligible) {
             return invalid("The work item is not eligible for backlog reordering.");
         }
-        if (target && (!targetEntry || !target.backlogOrder || !target.backlogOrder.eligible)) {
+        if (draggedEntry.teamOwned === false) {
+            return invalid(`Work item #${draggedId} is outside the current team's Area Paths and cannot be reordered here.`);
+        }
+        if (target && (!targetEntry || !target.backlogOrder || target.backlogOrder.targetEligible === false)) {
             return invalid("The drop target is not eligible for backlog reordering.");
         }
         if (target && draggedId === targetId) {
@@ -327,9 +337,15 @@ define([], () => {
             if (!targetEntry || (targetEntry.backlogId !== draggedEntry.backlogId)) {
                 return invalid("Items can only be placed before or after another item from the same backlog level.");
             }
+            if (!target.backlogOrder.eligible || targetEntry.teamOwned === false) {
+                return invalid("Items can only be reordered relative to another item in the current team's Area Paths.");
+            }
+            if (!isValidParent(index, draggedEntry, targetEntry.parentId)) {
+                return invalid(`Work item #${targetId} has parent #${targetEntry.parentId}, which is not in the next backlog category.`);
+            }
 
             parentId = targetEntry.parentId;
-            const siblings = getSiblings(index, draggedEntry.backlogId, parentId, draggedId);
+            const siblings = getReorderSiblings(index, draggedEntry.backlogId, parentId, draggedId);
             const targetPosition = siblings.findIndex((entry) => entry.id === targetId);
             if (targetPosition < 0) {
                 return invalid("The drop target is not present in the selected backlog.");
@@ -345,16 +361,17 @@ define([], () => {
             }
         }
         else if (position === "inside") {
-            if (!targetEntry || (targetEntry.backlogRank !== draggedEntry.backlogRank + 1)) {
+            if (!targetEntry || !target.backlogOrder.eligible || targetEntry.teamOwned === false
+                || (targetEntry.backlogRank !== draggedEntry.backlogRank + 1)) {
                 return invalid("The target must be in the next parent backlog level.");
             }
 
             parentId = targetId;
-            const children = getSiblings(index, draggedEntry.backlogId, parentId, draggedId);
+            const children = getReorderSiblings(index, draggedEntry.backlogId, parentId, draggedId);
             previousId = children.length ? children[children.length - 1].id : 0;
         }
         else if (position === "root") {
-            const roots = getSiblings(index, draggedEntry.backlogId, 0, draggedId);
+            const roots = getReorderSiblings(index, draggedEntry.backlogId, 0, draggedId);
             previousId = roots.length ? roots[roots.length - 1].id : 0;
         }
         else {
@@ -465,6 +482,12 @@ define([], () => {
     };
 
 
+    const getReorderSiblings = function (index, backlogId, parentId, excludedId) {
+        return getSiblings(index, backlogId, parentId, excludedId)
+            .filter((entry) => entry.teamOwned !== false);
+    };
+
+
     const reindexSiblings = function (siblings) {
         (siblings || []).forEach((entry, position) => {
             entry.position = position;
@@ -480,6 +503,7 @@ define([], () => {
         index = index || empty();
         const result = empty();
         result.orderField = index.orderField || null;
+        result.teamFieldValues = cloneTeamFieldValues(index.teamFieldValues);
         Object.keys(index.levels || {}).forEach((id) => {
             result.levels[id] = Object.assign({}, index.levels[id], {
                 workItemTypes: ((index.levels[id] || {}).workItemTypes || []).slice()
@@ -493,6 +517,77 @@ define([], () => {
             result.size += 1;
         });
         return result;
+    };
+
+
+    /**
+     * Returns whether a parent belongs to the immediately higher backlog
+     * category. Unknown external parents are left to Azure DevOps to validate.
+     */
+    const isValidParent = function (index, childEntry, parentId) {
+        parentId = toId(parentId);
+        if (!parentId) {
+            return true;
+        }
+        if (!childEntry) {
+            return false;
+        }
+
+        const parents = (((index || {}).entries || {})[parentId] || []);
+        if (!parents.length) {
+            return true;
+        }
+        return parents.some((parent) => parent.backlogRank === childEntry.backlogRank + 1);
+    };
+
+
+    /**
+     * Returns whether an Area Path is owned by the current team.
+     */
+    const isTeamOwned = function (index, areaPath) {
+        const settings = (index || {}).teamFieldValues;
+        if (!settings) {
+            return true;
+        }
+        if (settings.referenceName && settings.referenceName !== "System.AreaPath") {
+            return true;
+        }
+        if (!areaPath) {
+            return false;
+        }
+
+        const itemPath = normalizePath(areaPath);
+        const values = (settings.values || []).slice();
+        if (settings.defaultValue && !values.some((value) => normalizePath(value.value) === normalizePath(settings.defaultValue))) {
+            values.push({ value: settings.defaultValue, includeChildren: false });
+        }
+        if (!values.length) {
+            return true;
+        }
+        return values.some((fieldValue) => {
+            const teamPath = normalizePath(fieldValue.value);
+            return itemPath === teamPath || (fieldValue.includeChildren && itemPath.indexOf(teamPath + "\\") === 0);
+        });
+    };
+
+
+    const normalizePath = function (value) {
+        return (value || "").replace(/\\+$/g, "").toLowerCase();
+    };
+
+
+    const cloneTeamFieldValues = function (settings) {
+        if (!settings) {
+            return null;
+        }
+        return {
+            referenceName: ((settings.field || {}).referenceName || settings.referenceName || null),
+            defaultValue: settings.defaultValue || null,
+            values: (settings.values || []).map((value) => ({
+                value: value.value,
+                includeChildren: Boolean(value.includeChildren)
+            }))
+        };
     };
 
 
@@ -532,6 +627,8 @@ define([], () => {
         getEntry: getEntry,
         sortItems: sortItems,
         planMove: planMove,
-        applyMove: applyMove
+        applyMove: applyMove,
+        isValidParent: isValidParent,
+        isTeamOwned: isTeamOwned
     };
 });

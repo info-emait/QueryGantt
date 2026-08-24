@@ -120,6 +120,13 @@ const makeModel = function () {
         getBacklogConfigurations: function () {
             return Promise.resolve({ backlogFields: { typeFields: { Order: "Microsoft.VSTS.Common.StackRank" } } });
         },
+        getTeamFieldValues: function () {
+            return Promise.resolve({
+                field: { referenceName: "System.AreaPath" },
+                defaultValue: "Project\\Team",
+                values: [{ value: "Project\\Team", includeChildren: true }]
+            });
+        },
         getBacklogLevelWorkItems: function (context, backlogId) {
             fetchedBacklogs.push(backlogId);
             return Promise.resolve(responses[backlogId]);
@@ -134,6 +141,11 @@ const makeModel = function () {
     assert.strictEqual(model.backlogAvailable(), true);
     assert.strictEqual(model.backlogIndex().size, 5);
     assert.strictEqual(model.backlogIndex().orderField, "Microsoft.VSTS.Common.StackRank");
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(model.backlogIndex().teamFieldValues)), {
+        referenceName: "System.AreaPath",
+        defaultValue: "Project\\Team",
+        values: [{ value: "Project\\Team", includeChildren: true }]
+    }, "the current team's Area Paths should be retained for reorder validation");
 
     fetchedBacklogs.length = 0;
     assert.strictEqual((await model._loadBacklogOrder("2026-01-01")).size, 0, "historical queries should not load current backlog state");
@@ -146,6 +158,7 @@ const makeModel = function () {
     workClient = {
         getBacklogs: function () { return delayedBacklogs; },
         getBacklogConfigurations: function () { return Promise.resolve({ backlogFields: { typeFields: { Order: "Microsoft.VSTS.Common.StackRank" } } }); },
+        getTeamFieldValues: function () { return Promise.resolve(null); },
         getBacklogLevelWorkItems: function (context, backlogId) { return Promise.resolve(responses[backlogId]); }
     };
     const currentLoad = raceModel._loadBacklogOrder(null);
@@ -211,6 +224,7 @@ const makeModel = function () {
     assert.strictEqual(await model.reorderWit({ draggedId: 2, targetId: 1, position: "before" }), false);
     assert.strictEqual(model.isLoading(), false, "a failed request should leave the UI usable");
     assert.ok(model.message().includes("#2"), "a failed request should identify the work item");
+    assert.ok(model.message().includes("reorder rejected"), "the Azure DevOps reason should be shown instead of a generic error only");
     assert.strictEqual(refreshed, 0, "a failed request should not refresh or apply an uncommitted order");
 
     let saved = null;

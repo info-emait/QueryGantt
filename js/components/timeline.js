@@ -78,56 +78,89 @@ define([
 
 
     /**
-     * Expand all.
+     * Expands one visible hierarchy level.
      */
     Timeline.prototype.expand = function () {
         if (!this.timeline || !this.groups) {
             return;
         }
 
-        const updates = [];
+        const groups = [];
         this.groups.forEach((g) => {
-            updates.push({
-                id: g.id,
-                visible: true,
-                showNested: true
+            groups.push(g);
+        });
+        const collapsed = groups.filter((group) => group.visible !== false
+            && group.nestedGroups instanceof Array
+            && group.nestedGroups.length
+            && group.showNested === false);
+        if (!collapsed.length) {
+            return;
+        }
+
+        const level = Math.min.apply(null, collapsed.map((group) => group.treeLevel || 1));
+        const updates = new Map();
+        collapsed.filter((group) => (group.treeLevel || 1) === level).forEach((group) => {
+            updates.set(group.id, { id: group.id, showNested: true });
+            group.nestedGroups.forEach((id) => {
+                const child = this.groups.get(id);
+                if (!child) {
+                    return;
+                }
+                const update = { id: child.id, visible: true };
+                if (child.nestedGroups instanceof Array && child.nestedGroups.length) {
+                    update.showNested = false;
+                }
+                updates.set(child.id, update);
             });
         });
-        if (updates.length) {
-            this.groups.update(updates);
+        if (updates.size) {
+            this.groups.update(Array.from(updates.values()));
         }
     };
 
 
     /**
-     * Collapse all.
+     * Collapses one visible hierarchy level.
      */
     Timeline.prototype.collapse = function () {
         if (!this.timeline || !this.groups) {
             return;
         }
 
-        const updates = [];
+        const groups = [];
         this.groups.forEach((g) => {
-            const update = { id: g.id };
-            let changed = false;
-            // Hide groups with nested groups
-            if (g.nestedGroups instanceof Array) {
-                update.showNested = false;
-                changed = true;
-            }
-
-            // Hide nested groups
-            if (g.treeLevel > 1) {
-                update.visible = false;
-                changed = true;
-            }
-            if (changed) {
-                updates.push(update);
-            }
+            groups.push(g);
         });
-        if (updates.length) {
-            this.groups.update(updates);
+        const expanded = groups.filter((group) => group.visible !== false
+            && group.nestedGroups instanceof Array
+            && group.nestedGroups.length
+            && group.showNested !== false);
+        if (!expanded.length) {
+            return;
+        }
+
+        const level = Math.max.apply(null, expanded.map((group) => group.treeLevel || 1));
+        const updates = new Map();
+        const hideDescendants = (group) => {
+            (group.nestedGroups || []).forEach((id) => {
+                const child = this.groups.get(id);
+                if (!child) {
+                    return;
+                }
+                const update = { id: child.id, visible: false };
+                if (child.nestedGroups instanceof Array && child.nestedGroups.length) {
+                    update.showNested = false;
+                    hideDescendants(child);
+                }
+                updates.set(child.id, update);
+            });
+        };
+        expanded.filter((group) => (group.treeLevel || 1) === level).forEach((group) => {
+            updates.set(group.id, { id: group.id, showNested: false });
+            hideDescendants(group);
+        });
+        if (updates.size) {
+            this.groups.update(Array.from(updates.values()));
         }
     };
 
@@ -430,8 +463,9 @@ define([
             return;
         }
 
-        element.classList.add(`my-timeline-group--drop-${position}`);
-        element.setAttribute("data-backlog-drop-position", position);
+        const drop = this._canonicalizeBacklogDrop(dragged, target, element, position);
+        drop.element.classList.add(`my-timeline-group--drop-${drop.position}`);
+        drop.element.setAttribute("data-backlog-drop-position", drop.position);
     };
 
 
@@ -477,11 +511,15 @@ define([
      * Resolves the meaning of a row drop from the participating backlog levels.
      */
     Timeline.prototype._getBacklogDropPosition = function (dragged, target, element, e) {
-        if (!dragged || !target || !dragged.backlogEligible || !target.backlogEligible || (dragged.id === target.id)) {
+        if (!dragged || !target || !dragged.backlogEligible || !target.backlogEligible
+            || target.backlogTargetEligible === false || (dragged.id === target.id)) {
             return null;
         }
 
         if (dragged.backlogId === target.backlogId) {
+            if (target.backlogParentValid === false) {
+                return null;
+            }
             const bounds = element.getBoundingClientRect();
             return e.clientY < bounds.top + (bounds.height / 2) ? "before" : "after";
         }
@@ -491,6 +529,36 @@ define([
         }
 
         return null;
+    };
+
+
+    /**
+     * Uses one DOM boundary for one logical insertion point. The lower half of
+     * a row and the upper half of its next sibling otherwise produce two blue
+     * lines for the same backlog position.
+     */
+    Timeline.prototype._canonicalizeBacklogDrop = function (dragged, target, element, position) {
+        const result = { target: target, element: element, position: position };
+        if (position !== "after" || !this.groups || typeof(this.root.querySelectorAll) !== "function") {
+            return result;
+        }
+
+        const elements = Array.from(this.root.querySelectorAll(".my-timeline-group"));
+        const currentIndex = elements.indexOf(element);
+        const nextElement = currentIndex >= 0 ? elements[currentIndex + 1] : null;
+        if (!nextElement) {
+            return result;
+        }
+
+        const id = nextElement.getAttribute("data-work-item-id");
+        const next = this.groups.get(id) || this.groups.get(Number(id));
+        if (!next || next.id === dragged.id || !next.backlogEligible || next.backlogParentValid === false
+            || next.backlogId !== target.backlogId
+            || (next.backlogParentId || 0) !== (target.backlogParentId || 0)) {
+            return result;
+        }
+
+        return { target: next, element: nextElement, position: "before" };
     };
 
 
@@ -873,8 +941,11 @@ define([
             startDate: wit.startDate,
             endDate: wit.targetDate,
             backlogEligible: Boolean(wit.backlogOrder && wit.backlogOrder.eligible),
+            backlogTargetEligible: Boolean(wit.backlogOrder && wit.backlogOrder.targetEligible !== false),
             backlogId: wit.backlogOrder && wit.backlogOrder.backlogId,
             backlogRank: wit.backlogOrder && wit.backlogOrder.backlogRank,
+            backlogParentId: wit.backlogOrder && wit.backlogOrder.parentId,
+            backlogParentValid: !wit.backlogOrder || wit.backlogOrder.parentValid !== false,
             nestedGroups: items
                 .filter((child) => (child.parent === wit.path) && !isMarker(child))
                 .map((child) => child.id)
