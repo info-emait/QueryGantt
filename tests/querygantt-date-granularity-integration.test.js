@@ -125,11 +125,13 @@ DataSet.prototype.update = function () {};
 
 const TimelineStub = function (node, records, groups, options) {
     this.setOptionsCalls = [];
+    this.window = { start: new Date("2026-08-01T00:00:00.000Z"), end: new Date("2026-09-01T00:00:00.000Z") };
     timelineCaptures.push({ node: node, records: records, groups: groups, options: options, instance: this });
 };
 TimelineStub.prototype.on = function () {};
 TimelineStub.prototype.destroy = function () {};
 TimelineStub.prototype.setOptions = function (options) { this.setOptionsCalls.push(options); };
+TimelineStub.prototype.getWindow = function () { return this.window; };
 
 loadAmd(path.join(__dirname, "../js/components/timeline.js"), {
     knockout: timelineKnockout,
@@ -194,6 +196,19 @@ assert.strictEqual(capture.options.zoomMin, dateGranularityService.getZoomMin("d
 timelineNode.clientWidth = 1800;
 timelineViewModel._resizeTimeline();
 assert.strictEqual(capture.instance.setOptionsCalls[0].zoomMin, dateGranularityService.getZoomMin("day", 1800), "the day cap should follow host panel resizes");
+
+const insideElement = { style: {} };
+const outsideElement = { style: {} };
+capture.instance.itemSet = { items: {
+    inside: { data: { start: new Date("2026-08-20T00:00:00.000Z"), end: new Date("2026-08-22T00:00:00.000Z") }, dom: { box: insideElement } },
+    outside: { data: { start: new Date("2026-09-23T00:00:00.000Z"), end: new Date("2026-09-26T00:00:00.000Z") }, dom: { box: outsideElement } }
+} };
+timelineViewModel._syncRangeItemVisibility();
+assert.strictEqual(insideElement.style.visibility, "", "a work item overlapping the visible date range should remain visible");
+assert.strictEqual(outsideElement.style.visibility, "hidden", "a stale work item outside the visible date range should not remain pinned to an edge");
+capture.instance.window = { start: new Date("2026-09-20T00:00:00.000Z"), end: new Date("2026-09-30T00:00:00.000Z") };
+timelineViewModel._syncRangeItemVisibility();
+assert.strictEqual(outsideElement.style.visibility, "", "the visibility guard should clear when the date range reaches the work item");
 
 granularity("time");
 timelineViewModel._onItemsChanged();

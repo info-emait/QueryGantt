@@ -42,6 +42,7 @@ define([
         this.records = null;
         this.arrows = null;
         this._resizeTimelineBound = this._resizeTimeline.bind(this);
+        this._timelineChangedBound = this._syncRangeItemVisibility.bind(this);
         if (typeof(global.addEventListener) === "function") {
             global.addEventListener("resize", this._resizeTimelineBound, false);
         }
@@ -352,6 +353,42 @@ define([
 
 
     /**
+     * Hides stale item DOM that vis-timeline can briefly retain after a range
+     * change. Only records overlapping the current date window may remain
+     * visible; moving the window back clears the guard automatically.
+     */
+    Timeline.prototype._syncRangeItemVisibility = function () {
+        if (!this.timeline || !this.timeline.itemSet || !this.timeline.itemSet.items
+            || typeof(this.timeline.getWindow) !== "function") {
+            return;
+        }
+
+        const range = this.timeline.getWindow();
+        const rangeStart = range && range.start instanceof Date ? range.start.getTime() : NaN;
+        const rangeEnd = range && range.end instanceof Date ? range.end.getTime() : NaN;
+        if (!Number.isFinite(rangeStart) || !Number.isFinite(rangeEnd)) {
+            return;
+        }
+
+        Object.keys(this.timeline.itemSet.items).forEach((id) => {
+            const item = this.timeline.itemSet.items[id];
+            const data = (item || {}).data || {};
+            const start = data.start instanceof Date ? data.start.getTime() : new Date(data.start).getTime();
+            const end = data.end instanceof Date ? data.end.getTime() : new Date(data.end).getTime();
+            const element = ((item || {}).dom || {}).box || ((item || {}).dom || {}).point;
+            if (!Number.isFinite(start) || !element || !element.style) {
+                return;
+            }
+
+            const visible = Number.isFinite(end)
+                ? start < rangeEnd && end > rangeStart
+                : start >= rangeStart && start < rangeEnd;
+            element.style.visibility = visible ? "" : "hidden";
+        });
+    };
+
+
+    /**
      * Handles the group title click event.
      * 
      * @param {object} e Event arguments. 
@@ -533,7 +570,8 @@ define([
             },
             groupTemplate: (record, element) => createGroupTemplate(this, record, element, states, priorities, types, typesOther, icons, showFields),
             visibleFrameTemplate: (record, element) => createVisibleFrameTemplate(this, record, element),
-            onMove: (record, callback) => updateWit(this, record, callback)
+            onMove: (record, callback) => updateWit(this, record, callback),
+            onInitialDrawComplete: this._timelineChangedBound
             //template: function (item, element, data) { return '<h1>' + item.header + data.moving?' '+ data.start:'' + '</h1><p>' + item.description + '</p>'; }
         };
 
@@ -573,6 +611,8 @@ define([
         // Events
         this.timeline.on("select", this._onSelect.bind(this));
         this.timeline.on("doubleClick", this._onDoubleClick.bind(this));
+        this.timeline.on("rangechange", this._timelineChangedBound);
+        this.timeline.on("changed", this._timelineChangedBound);
     };
 
 
