@@ -49,6 +49,9 @@ const filter = {
     getBoundingClientRect: function () { return { top: 0, bottom: 48 }; }
 };
 const document = {
+    _listeners: {},
+    addEventListener: function (name, callback) { this._listeners[name] = callback; },
+    removeEventListener: function (name, callback) { if (this._listeners[name] === callback) { delete this._listeners[name]; } },
     querySelector: function (selector) { return selector === ".querygantt-tab__filter" ? filter : null; },
     head: { querySelectorAll: function () { return []; }, appendChild: function () {} },
     body: {
@@ -76,10 +79,19 @@ const axis = {
         };
     }
 };
+const scrollContainer = {
+    scrollTop: 200,
+    addEventListener: function () {},
+    removeEventListener: function () {}
+};
+const chartListeners = {};
 const chart = {
-    closest: function () { return null; },
+    clientWidth: 600,
+    closest: function (selector) { return selector === ".v-scroll-auto" ? scrollContainer : null; },
+    addEventListener: function (name, callback) { chartListeners[name] = callback; },
+    removeEventListener: function (name, callback) { if (chartListeners[name] === callback) { delete chartListeners[name]; } },
     querySelector: function (selector) { return selector === ".vis-panel.vis-top" ? axis : null; },
-    getBoundingClientRect: function () { return { bottom: 500 }; }
+    getBoundingClientRect: function () { return { bottom: 500, width: 600 }; }
 };
 
 let source = "String.prototype.truncate = function () { return this.toString(); };\n"
@@ -104,7 +116,15 @@ const viewModel = ko.registration.viewModel.createViewModel({
     showFields: observable([]), callbacks: {}, actions: {}
 }, { element: { firstChild: chart, querySelector: function () {} } });
 
-viewModel.timeline = { destroy: function () {} };
+const originalStart = new Date("2026-08-01T00:00:00.000Z");
+const originalEnd = new Date("2026-08-31T00:00:00.000Z");
+let visibleWindow = { start: originalStart, end: originalEnd };
+viewModel.timeline = {
+    range: { options: { moveable: true } },
+    getWindow: function () { return visibleWindow; },
+    setWindow: function (start, end) { visibleWindow = { start: start, end: end }; },
+    destroy: function () {}
+};
 viewModel._syncFloatingAxis(true);
 assert.ok(viewModel.floatingAxis.classList.contains("my-timeline__floating-axis--visible"));
 assert.strictEqual(viewModel.floatingAxis.style.top, "48px");
@@ -114,6 +134,28 @@ assert.ok(viewModel.floatingAxis.firstChild, "the live top axis should be mirror
 axisTop = 80;
 viewModel._syncFloatingAxis(false);
 assert.strictEqual(viewModel.floatingAxis.classList.contains("my-timeline__floating-axis--visible"), false);
+
+let prevented = false;
+viewModel._onTimelineWheel({
+    deltaX: 0, deltaY: 120, shiftKey: false, ctrlKey: false, cancelable: true,
+    preventDefault: function () { prevented = true; }, stopPropagation: function () {}
+});
+assert.strictEqual(prevented, false, "a vertical wheel should remain available to the page");
+assert.strictEqual(visibleWindow.start.getTime(), originalStart.getTime());
+viewModel._onTimelineWheel({
+    deltaX: 60, deltaY: 0, shiftKey: false, ctrlKey: false, cancelable: true,
+    preventDefault: function () { prevented = true; }, stopPropagation: function () {}
+});
+assert.strictEqual(prevented, true, "horizontal trackpad input should pan the date range");
+assert.ok(visibleWindow.start.getTime() > originalStart.getTime());
+
+const gestureTarget = { closest: function () { return null; } };
+viewModel._onTimelinePointerDown({ pointerId: 20, pointerType: "mouse", button: 0, clientX: 300, clientY: 300, target: gestureTarget });
+viewModel._onTimelinePointerMove({ pointerId: 20, clientX: 302, clientY: 250, cancelable: true, preventDefault: function () {} });
+assert.strictEqual(scrollContainer.scrollTop, 250, "a vertical background drag should scroll the page");
+assert.strictEqual(viewModel.timeline.range.options.moveable, false);
+viewModel._onTimelinePointerUp({ pointerId: 20 });
+assert.strictEqual(viewModel.timeline.range.options.moveable, true);
 
 let renderedNode = null;
 viewModel.exportImage(function (node) {
@@ -125,6 +167,7 @@ viewModel.exportImage(function (node) {
 
     assert.ok(/axis:\s*"top"/.test(source), "only the top time axis should be rendered");
     assert.ok(/verticalScroll:\s*false/.test(source), "work item rows should use page scrolling");
+    assert.ok(/horizontalScroll:\s*false/.test(source), "vertical wheel input should not be converted to horizontal panning");
     assert.strictEqual(/maxHeight\s*:/.test(source), false, "the timeline must not retain a fixed-height cap");
 
     viewModel.dispose();

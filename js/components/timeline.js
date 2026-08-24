@@ -36,6 +36,11 @@ define([
         this.groups = null;
         this.records = null;
         this.arrows = null;
+        this._timelinePointer = null;
+        this._onTimelineWheelBound = this._onTimelineWheel.bind(this);
+        this._onTimelinePointerDownBound = this._onTimelinePointerDown.bind(this);
+        this._onTimelinePointerMoveBound = this._onTimelinePointerMove.bind(this);
+        this._onTimelinePointerUpBound = this._onTimelinePointerUp.bind(this);
         this._syncFloatingAxisBound = this._syncFloatingAxis.bind(this);
         this._timelineChangedBound = () => this._syncFloatingAxis(true);
         this.scrollContainer = typeof(this.node.closest) === "function" ? this.node.closest(".v-scroll-auto") : null;
@@ -47,6 +52,10 @@ define([
         }
         if (this.scrollContainer && typeof(this.scrollContainer.addEventListener) === "function") {
             this.scrollContainer.addEventListener("scroll", this._syncFloatingAxisBound, false);
+        }
+        if (this.node && typeof(this.node.addEventListener) === "function") {
+            this.node.addEventListener("wheel", this._onTimelineWheelBound, { capture: true, passive: false });
+            this.node.addEventListener("pointerdown", this._onTimelinePointerDownBound, true);
         }
         if (typeof(global.addEventListener) === "function") {
             global.addEventListener("resize", this._syncFloatingAxisBound, false);
@@ -292,9 +301,14 @@ define([
 
         this._onItemsChangedSubscribe.dispose();
         this._onSelectedIdChangedSubscribe.dispose();
+        this._clearTimelinePointer();
         this._destroyTimeline();
         if (this.scrollContainer && typeof(this.scrollContainer.removeEventListener) === "function") {
             this.scrollContainer.removeEventListener("scroll", this._syncFloatingAxisBound, false);
+        }
+        if (this.node && typeof(this.node.removeEventListener) === "function") {
+            this.node.removeEventListener("wheel", this._onTimelineWheelBound, true);
+            this.node.removeEventListener("pointerdown", this._onTimelinePointerDownBound, true);
         }
         if (typeof(global.removeEventListener) === "function") {
             global.removeEventListener("resize", this._syncFloatingAxisBound, false);
@@ -433,6 +447,127 @@ define([
         this.floatingAxis.style.width = axisBounds.width + "px";
         this.floatingAxis.style.height = axisBounds.height + "px";
         this.floatingAxis.classList.add("my-timeline__floating-axis--visible");
+    };
+
+
+    /**
+     * Leaves ordinary vertical wheel input to the page while retaining native
+     * horizontal trackpad input (and Shift + wheel) for timeline panning.
+     */
+    Timeline.prototype._onTimelineWheel = function (e) {
+        if (!this.timeline || e.ctrlKey) {
+            return;
+        }
+
+        const deltaX = Number(e.deltaX) || 0;
+        const deltaY = Number(e.deltaY) || 0;
+        const horizontalDelta = Math.abs(deltaX) > Math.abs(deltaY)
+            ? deltaX
+            : (e.shiftKey ? deltaY : 0);
+        if (!horizontalDelta) {
+            return;
+        }
+
+        const range = this.timeline.getWindow();
+        const width = this.node.clientWidth || (typeof(this.node.getBoundingClientRect) === "function" && this.node.getBoundingClientRect().width) || 1;
+        const interval = range.end.getTime() - range.start.getTime();
+        const offset = interval * horizontalDelta / width;
+        this.timeline.setWindow(
+            new Date(range.start.getTime() + offset),
+            new Date(range.end.getTime() + offset),
+            { animation: false }
+        );
+
+        if (e.cancelable !== false) {
+            e.preventDefault();
+        }
+        e.stopPropagation();
+    };
+
+
+    /**
+     * Starts direction detection for a background drag. Item bars, row labels,
+     * and controls keep their existing edit/select/drag behavior.
+     */
+    Timeline.prototype._onTimelinePointerDown = function (e) {
+        if (!this.timeline || !this.scrollContainer || (e.pointerType === "mouse" && e.button !== 0)) {
+            return;
+        }
+        if (e.target && typeof(e.target.closest) === "function"
+            && e.target.closest(".vis-item, .my-timeline-group, button, a, input, select, textarea")) {
+            return;
+        }
+
+        this._clearTimelinePointer();
+        this._timelinePointer = {
+            id: e.pointerId,
+            startX: e.clientX,
+            startY: e.clientY,
+            startScrollTop: this.scrollContainer.scrollTop,
+            direction: null,
+            previousMoveable: null
+        };
+        if (typeof(global.document.addEventListener) === "function") {
+            global.document.addEventListener("pointermove", this._onTimelinePointerMoveBound, true);
+            global.document.addEventListener("pointerup", this._onTimelinePointerUpBound, true);
+            global.document.addEventListener("pointercancel", this._onTimelinePointerUpBound, true);
+        }
+    };
+
+
+    /**
+     * Locks a background drag to its dominant direction. Horizontal movement
+     * remains owned by vis-timeline; vertical movement scrolls the page.
+     */
+    Timeline.prototype._onTimelinePointerMove = function (e) {
+        const pointer = this._timelinePointer;
+        if (!pointer || e.pointerId !== pointer.id) {
+            return;
+        }
+
+        const deltaX = e.clientX - pointer.startX;
+        const deltaY = e.clientY - pointer.startY;
+        if (!pointer.direction) {
+            if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) < 5) {
+                return;
+            }
+            pointer.direction = Math.abs(deltaY) > Math.abs(deltaX) ? "vertical" : "horizontal";
+            if (pointer.direction === "vertical" && this.timeline.range && this.timeline.range.options) {
+                pointer.previousMoveable = this.timeline.range.options.moveable;
+                this.timeline.range.options.moveable = false;
+            }
+        }
+
+        if (pointer.direction !== "vertical") {
+            return;
+        }
+
+        this.scrollContainer.scrollTop = pointer.startScrollTop - deltaY;
+        if (e.cancelable !== false) {
+            e.preventDefault();
+        }
+    };
+
+
+    Timeline.prototype._onTimelinePointerUp = function (e) {
+        if (!this._timelinePointer || e.pointerId !== this._timelinePointer.id) {
+            return;
+        }
+        this._clearTimelinePointer();
+    };
+
+
+    Timeline.prototype._clearTimelinePointer = function () {
+        if (typeof(global.document.removeEventListener) === "function") {
+            global.document.removeEventListener("pointermove", this._onTimelinePointerMoveBound, true);
+            global.document.removeEventListener("pointerup", this._onTimelinePointerUpBound, true);
+            global.document.removeEventListener("pointercancel", this._onTimelinePointerUpBound, true);
+        }
+        if (this._timelinePointer && this._timelinePointer.previousMoveable !== null
+            && this.timeline && this.timeline.range && this.timeline.range.options) {
+            this.timeline.range.options.moveable = this._timelinePointer.previousMoveable;
+        }
+        this._timelinePointer = null;
     };
 
 
@@ -611,7 +746,9 @@ define([
                 // Long schedules should open at the first work item.
                 item: "top"
             },
-            horizontalScroll: true,
+            // Vertical wheel input belongs to the page. Horizontal trackpad
+            // input is handled directionally by _onTimelineWheel.
+            horizontalScroll: false,
             // Let the Azure DevOps page scroll all work item rows. The top axis
             // is mirrored by _syncFloatingAxis while its original scrolls out.
             verticalScroll: false,
