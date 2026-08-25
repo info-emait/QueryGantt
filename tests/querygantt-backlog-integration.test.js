@@ -100,12 +100,15 @@ const makeModel = function () {
     model.team = { id: "team-id", name: "Team" };
     model._backlogRequestId = 0;
     model._backlogReorderInFlight = false;
+    model._workItemFieldValues = {};
     model.backlogIndex = observable(backlogOrderService.empty());
     model.backlogAvailable = observable(false);
     model.backlogLoading = observable(false);
+    model.isHistorical = observable(false);
     model.orderMode = observable(backlogOrderService.queryOrder);
     model.message = observable("");
     model.isLoading = observable(false);
+    model.wits = observable([]);
     model._settingsSavePromise = Promise.resolve();
     return model;
 };
@@ -226,6 +229,73 @@ const makeModel = function () {
     assert.ok(model.message().includes("#2"), "a failed request should identify the work item");
     assert.ok(model.message().includes("reorder rejected"), "the Azure DevOps reason should be shown instead of a generic error only");
     assert.strictEqual(refreshed, 0, "a failed request should not refresh or apply an uncommitted order");
+
+    const makeOrderedStory = function (id, title, order, parentType) {
+        return {
+            id: id, originalId: id, type: "User Story", title: title,
+            project: "Project", areaPath: "Project\\Team", parentId: 11, parentType: parentType || "Feature",
+            parentTitle: "Feature 11", path: `11/${id}`, parent: "11", level: 2, isCompleted: false,
+            backlogOrderValue: order
+        };
+    };
+    let retryBacklogLoads = 0;
+    let reorderAttempts = 0;
+    workClient = {
+        getBacklogs: function () { retryBacklogLoads += 1; return Promise.resolve(backlogs); },
+        getBacklogConfigurations: function () { return Promise.resolve({ backlogFields: { typeFields: { Order: "Microsoft.VSTS.Common.StackRank" } } }); },
+        getTeamFieldValues: function () { return Promise.resolve({ field: { referenceName: "System.AreaPath" }, defaultValue: "Project\\Team", values: [{ value: "Project\\Team", includeChildren: true }] }); },
+        getBacklogLevelWorkItems: function (context, backlogId) { return Promise.resolve(responses[backlogId]); },
+        reorderBacklogWorkItems: function () {
+            reorderAttempts += 1;
+            return reorderAttempts === 1
+                ? Promise.reject(new Error("TF400486: another user has modified items, or the item is outside of its immediate parent."))
+                : Promise.resolve([]);
+        }
+    };
+    const retryModel = makeModel();
+    retryModel._workItemFieldValues = {
+        1: { "Microsoft.VSTS.Common.StackRank": 100 },
+        2: { "Microsoft.VSTS.Common.StackRank": 200 }
+    };
+    retryModel.wits([makeOrderedStory(1, "Story 1", 100), makeOrderedStory(2, "Story 2", 200)]);
+    retryModel._activateBacklogIndex(await retryModel._loadBacklogOrder(null));
+    assert.strictEqual(await retryModel.reorderWit({ draggedId: 2, targetId: 1, position: "before" }), true, "a stale sibling snapshot should be rebuilt and retried once");
+    assert.strictEqual(reorderAttempts, 2, "TF400486 should cause exactly one reorder retry");
+    assert.strictEqual(retryBacklogLoads, 2, "retrying should refresh only the backlog index, not the full query");
+
+    const invalidParentModel = makeModel();
+    invalidParentModel._workItemFieldValues = retryModel._workItemFieldValues;
+    invalidParentModel.wits([
+        makeOrderedStory(1, "Story 1", 100, "User Story"),
+        makeOrderedStory(2, "Story 2", 200, "User Story")
+    ]);
+    invalidParentModel._activateBacklogIndex(await invalidParentModel._loadBacklogOrder(null));
+    const callsBeforeInvalidMove = reorderAttempts;
+    assert.strictEqual(await invalidParentModel.reorderWit({ draggedId: 2, targetId: 1, position: "before" }), false, "same-category parent links should be blocked locally");
+    assert.strictEqual(reorderAttempts, callsBeforeInvalidMove, "a deterministic process hierarchy violation must not call the reorder API");
+    assert.ok(invalidParentModel.message().includes("next backlog category"));
+
+    const recoveryModel = makeModel();
+    recoveryModel.orderMode(backlogOrderService.backlogOrder);
+    recoveryModel._workItemFieldValues = retryModel._workItemFieldValues;
+    recoveryModel.wits([makeOrderedStory(1, "Story 1", 100), makeOrderedStory(2, "Story 2", 200)]);
+    workClient = {
+        getBacklogs: function () { return Promise.reject(new Error("temporary discovery failure")); },
+        getBacklogConfigurations: function () { return Promise.resolve(null); },
+        getTeamFieldValues: function () { return Promise.resolve(null); }
+    };
+    await recoveryModel._loadBacklogOrder(null);
+    assert.strictEqual(recoveryModel.backlogAvailable(), false);
+    assert.strictEqual(recoveryModel.message(), "Backlog order is unavailable for the current team.");
+    workClient = successfulWorkClient;
+    await recoveryModel._onOrderModeChanged(backlogOrderService.backlogOrder);
+    assert.strictEqual(recoveryModel.backlogAvailable(), true, "selecting a remembered Backlog order should retry discovery after a transient Unavailable state");
+    assert.strictEqual(recoveryModel.message(), "");
+    assert.ok(recoveryModel.wits().every((wit) => wit.backlogOrder && wit.backlogOrder.eligible), "the recovered index should immediately replace the query-order fallback");
+
+    recoveryModel.message("An unrelated warning");
+    recoveryModel._activateBacklogIndex(recoveryModel.backlogIndex());
+    assert.strictEqual(recoveryModel.message(), "An unrelated warning", "late backlog activation must not erase an unrelated user-facing message");
 
     let saved = null;
     let persisted = JSON.stringify({ showFields: ["duration"] });

@@ -16,6 +16,7 @@ define([], () => {
         return {
             entries: {},
             levels: {},
+            itemTypes: {},
             allEntries: [],
             size: 0,
             orderField: null,
@@ -84,12 +85,28 @@ define([], () => {
         index = index || empty();
         const source = items || [];
 
+        // Backlog responses identify the level for each returned link, but do
+        // not include the concrete work-item type. Keep the types loaded by
+        // the query so parent validation cannot accidentally select another
+        // occurrence of the same id from a different backlog response.
+        source.forEach((item) => {
+            const id = getOriginalId(item);
+            if (id !== null && item && item.type) {
+                index.itemTypes[id] = item.type;
+            }
+            const parentId = toId(item && item.parentId);
+            if (parentId && item && item.parentType) {
+                index.itemTypes[parentId] = item.parentType;
+            }
+        });
+
         // First attach Order values to entries returned by the Backlog API so
         // synthetic entries can be placed near reliable visible anchors.
         source.forEach((item) => {
             const entry = getEntry(index, getOriginalId(item), item && item.type);
             const orderValue = toNumber(item && item.backlogOrderValue);
             if (entry) {
+                entry.workItemType = item && item.type;
                 entry.teamOwned = isTeamOwned(index, item && item.areaPath);
                 if (orderValue !== null) {
                     entry.orderValue = orderValue;
@@ -112,6 +129,7 @@ define([], () => {
                 backlogRank: level.rank,
                 levelPosition: level.position,
                 position: Number.MAX_SAFE_INTEGER,
+                workItemType: item && item.type,
                 synthetic: true,
                 teamOwned: isTeamOwned(index, item && item.areaPath)
             };
@@ -202,15 +220,17 @@ define([], () => {
      * @param {string} type Work item type.
      */
     const getEntry = function (index, id, type) {
-        const entries = ((index || {}).entries || {})[toId(id)] || [];
+        const normalizedId = toId(id);
+        const entries = ((index || {}).entries || {})[normalizedId] || [];
         if (!entries.length) {
             return null;
         }
 
+        type = type || (((index || {}).itemTypes || {})[normalizedId]);
         if (type) {
             const match = entries.find((entry) => {
                 const level = index.levels[entry.backlogId] || {};
-                return (level.workItemTypes || []).includes(type);
+                return entry.workItemType === type || (level.workItemTypes || []).includes(type);
             });
             if (match) {
                 return match;
@@ -504,6 +524,7 @@ define([], () => {
         const result = empty();
         result.orderField = index.orderField || null;
         result.teamFieldValues = cloneTeamFieldValues(index.teamFieldValues);
+        result.itemTypes = Object.assign({}, index.itemTypes || {});
         Object.keys(index.levels || {}).forEach((id) => {
             result.levels[id] = Object.assign({}, index.levels[id], {
                 workItemTypes: ((index.levels[id] || {}).workItemTypes || []).slice()
@@ -522,7 +543,9 @@ define([], () => {
 
     /**
      * Returns whether a parent belongs to the immediately higher backlog
-     * category. Unknown external parents are left to Azure DevOps to validate.
+     * category. When the parent's concrete type was loaded with the query, it
+     * is authoritative even if Azure returned the same id at another level.
+     * Unknown external parents are left to Azure DevOps to validate.
      */
     const isValidParent = function (index, childEntry, parentId) {
         parentId = toId(parentId);
@@ -531,6 +554,12 @@ define([], () => {
         }
         if (!childEntry) {
             return false;
+        }
+
+        const parentType = ((index || {}).itemTypes || {})[parentId];
+        if (parentType) {
+            const parentLevel = getLevelForType(index, parentType);
+            return Boolean(parentLevel && parentLevel.rank === childEntry.backlogRank + 1);
         }
 
         const parents = (((index || {}).entries || {})[parentId] || []);

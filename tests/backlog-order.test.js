@@ -106,6 +106,25 @@ assert.deepStrictEqual(
     "dropping on the root target should append at the root of the same backlog"
 );
 
+const taskIndex = service.createIndex(backlogs.concat([
+    { id: "tasks", rank: 0, workItemTypes: [{ name: "Task" }] }
+]), responses.concat([{ workItems: [
+    { source: { id: 1 }, target: { id: 31 } },
+    { source: { id: 3 }, target: { id: 32 } }
+] }]));
+const task31 = item(31, "Task", "100/11/1/31", "100/11/1");
+const task32 = item(32, "Task", "100/12/3/32", "100/12/3");
+assert.deepStrictEqual(
+    JSON.parse(JSON.stringify(service.planMove(taskIndex, task31, task32, "after").operation)),
+    { ids: [31], parentId: 3, previousId: 32, nextId: 0 },
+    "a Task should be reparented when it is placed beside a Task under another User Story"
+);
+assert.deepStrictEqual(
+    JSON.parse(JSON.stringify(service.planMove(taskIndex, task31, story3, "inside").operation)),
+    { ids: [31], parentId: 3, previousId: 32, nextId: 0 },
+    "a Task should be appendable directly inside a different User Story"
+);
+
 const locallyMoved = service.applyMove(index, service.planMove(index, story2, story1, "before").operation);
 assert.deepStrictEqual(
     JSON.parse(JSON.stringify([service.getEntry(locallyMoved, 2).position, service.getEntry(locallyMoved, 1).position])),
@@ -140,6 +159,36 @@ const invalidMove = service.planMove(invalidHierarchyIndex, invalidStory1, inval
 assert.strictEqual(invalidMove.valid, false);
 assert.ok(invalidMove.reason.includes("#100") && invalidMove.reason.includes("#2"), "the invalid destination should identify the actionable parent-child link");
 assert.strictEqual(service.planMove(invalidHierarchyIndex, invalidStory1, null, "root").valid, true, "an item with an invalid current parent can still be moved to root to repair the hierarchy");
+
+const ambiguousHierarchyIndex = service.createIndex(backlogs, [
+    { workItems: [{ source: null, target: { id: 100 } }] },
+    { workItems: [{ source: null, target: { id: 100 } }] },
+    { workItems: [{ source: { id: 100 }, target: { id: 1 } }, { source: { id: 100 }, target: { id: 2 } }] }
+]);
+const ambiguousStory1 = Object.assign(item(1, "User Story", "100/1", "100"), { parentId: 100, parentType: "Epic" });
+const ambiguousStory2 = Object.assign(item(2, "User Story", "100/2", "100"), { parentId: 100, parentType: "Epic" });
+service.includeQueryItems(ambiguousHierarchyIndex, [ambiguousStory1, ambiguousStory2]);
+ambiguousStory1.backlogOrder = Object.assign({ eligible: true, targetEligible: true }, service.getEntry(ambiguousHierarchyIndex, 1, "User Story"));
+ambiguousStory2.backlogOrder = Object.assign({ eligible: true, targetEligible: true }, service.getEntry(ambiguousHierarchyIndex, 2, "User Story"));
+assert.strictEqual(service.getEntry(ambiguousHierarchyIndex, 100).backlogRank, 3, "untyped lookups should still use the known concrete work-item type");
+assert.strictEqual(
+    service.isValidParent(ambiguousHierarchyIndex, service.getEntry(ambiguousHierarchyIndex, 1, "User Story"), 100),
+    false,
+    "the concrete parent type must win when the same id appears in more than one backlog response"
+);
+assert.strictEqual(
+    service.planMove(ambiguousHierarchyIndex, ambiguousStory1, ambiguousStory2, "before").valid,
+    false,
+    "an Epic-to-User Story category skip must be rejected before Azure receives the reorder request"
+);
+
+const sameCategoryChild = Object.assign(item(1, "User Story", "2/1", "2"), { parentId: 2, parentType: "User Story" });
+service.includeQueryItems(index, [sameCategoryChild, Object.assign(item(2, "User Story", "2", ""), { parentId: null })]);
+assert.strictEqual(
+    service.isValidParent(index, service.getEntry(index, 1, "User Story"), 2),
+    false,
+    "same-category parent/child links must not be offered as valid backlog destinations"
+);
 
 const teamFieldValues = {
     field: { referenceName: "System.AreaPath" },

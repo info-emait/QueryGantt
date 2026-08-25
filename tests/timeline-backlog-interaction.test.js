@@ -177,4 +177,8 @@ assert.ok(source.includes("pointerdown"), "drag handles should use pointer event
 assert.strictEqual(source.includes('draggable="true"'), false, "native HTML drag should not be used inside vis-timeline");
 assert.ok(fs.readFileSync(path.join(__dirname, "../html/querygantt-tab.html"), "utf8").includes("<span>Sort:</span>"));
 
+const timelineLess = fs.readFileSync(path.join(__dirname, "../less/components/timeline.less"), "utf8");
+assert.ok(timelineLess.includes("&--drop-inside {\n            .my-timeline-group__title"), "a child drop should highlight the target title rather than draw another sibling line");
+assert.ok(timelineLess.includes("--status-success-background"), "the child destination should use a distinct light green success highlight");
+
 console.log("timeline backlog interaction tests passed");

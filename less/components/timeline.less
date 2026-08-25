@@ -233,8 +233,11 @@
         }
 
         &--drop-inside {
-            background-color: rgba(var(--palette-primary-tint-30, 222, 236, 249), 1);
-            outline: 1px solid rgba(var(--palette-primary-shade-10, 0, 90, 158), 1);
+            .my-timeline-group__title {
+                background-color: var(--status-success-background, rgba(85, 163, 98, .20));
+                border-radius: rem(2px);
+                box-shadow: 0 0 0 rem(3px) var(--status-success-background, rgba(85, 163, 98, .20));
+            }
         }
     }
 

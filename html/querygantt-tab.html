@@ -54,6 +54,7 @@
                                                 <option value="query">Query order</option>
                                                 <option value="backlog">Backlog order</option>
                                             </select>
+                                            <span class="querygantt-tab__order-loading" data-bind="visible: orderMode() === 'backlog' && backlogLoading()">Loading…</span>
                                             <span class="querygantt-tab__order-unavailable" data-bind="visible: orderMode() === 'backlog' && !backlogLoading() && !backlogAvailable()">Unavailable</span>
                                         </label>
                                         <button class="bolt-header-command-item-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment margin-left-8" tabindex="0" type="button" title="Refresh data"

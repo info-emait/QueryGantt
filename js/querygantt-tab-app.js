@@ -54,6 +54,7 @@ define([
         this.path = null;
         this._backlogRequestId = 0;
         this._backlogReorderInFlight = false;
+        this._workItemFieldValues = {};
 
         this.zero = ko.observable(null);
 
@@ -122,7 +123,7 @@ define([
         this.getAreasFilter = ko.computed(this._getAreasFilter, this);
         this.getParentsFilter = ko.computed(this._getParentsFilter, this);
         this.showDetail = ko.computed(this._showDetail, this);
-        this._orderModeSubscribe = this.orderMode.subscribe(this._saveOrderMode, this);
+        this._orderModeSubscribe = this.orderMode.subscribe(this._onOrderModeChanged, this);
     };
 
     //#endregion
@@ -138,10 +139,11 @@ define([
     Model.prototype.init = function (asOf = null) {
         const client = api.getClient(witApi.WorkItemTrackingRestClient);
         let queryAsOf = null;
-        let queryBacklogIndex = backlogOrderService.empty();
         const historical = asOf !== null;
+        this._workItemFieldValues = {};
         this.isHistorical(historical);
         const backlogPromise = this._loadBacklogOrder(asOf);
+        const backlogRequestId = this._backlogRequestId;
 
         return client._options.rootPath.then((path) => {
                 this.path = path;
@@ -159,13 +161,7 @@ define([
                 // MODE (Recursive): Use for Tree queries ([System.Links.LinkType] = 'System.LinkTypes.Hierarchy-Forward').
                 // Link type must be Tree topology and forward direction. Returns WorkItemLinkInfo records for all work items
                 // that satisfy the source, recursively for target. ORDER BY and ASOF aren't compatible with tree queries.
-                return Promise.all([
-                    client.queryByWiql({ query: (asOf !== null) && (this.query.wiql.toLowerCase().indexOf("mode (recursive)") === -1) ? `${this.query.wiql} ASOF '${asOf}'` : this.query.wiql }, this.project.id),
-                    backlogPromise
-                ]).then((response) => {
-                    queryBacklogIndex = response[1];
-                    return response[0];
-                });
+                return client.queryByWiql({ query: (asOf !== null) && (this.query.wiql.toLowerCase().indexOf("mode (recursive)") === -1) ? `${this.query.wiql} ASOF '${asOf}'` : this.query.wiql }, this.project.id);
             })
             .then((data) => {
                 this.sortColumns(data.sortColumns || []);
@@ -209,6 +205,12 @@ define([
                 
                 // Normalize results
                 wits.forEach((wit) => {
+                    this._workItemFieldValues[wit.id] = Object.keys(wit.fields || {}).reduce((values, name) => {
+                        if (typeof(wit.fields[name]) === "number" && Number.isFinite(wit.fields[name])) {
+                            values[name] = wit.fields[name];
+                        }
+                        return values;
+                    }, {});
                     var w = {
                         id: wit.fields["System.Id"],
                         originalId: wit.fields["System.Id"],
@@ -234,7 +236,7 @@ define([
                         completedWork: (wit.fields["Microsoft.VSTS.Scheduling.CompletedWork"] || 0),
                         remainingWork: (wit.fields["Microsoft.VSTS.Scheduling.RemainingWork"] || 0),
                         effort: (wit.fields["Microsoft.VSTS.Scheduling.Effort"] || 0),
-                        backlogOrderValue: queryBacklogIndex.orderField ? wit.fields[queryBacklogIndex.orderField] : null,
+                        backlogOrderValue: null,
                         tags: (wit.fields["System.Tags"] || "").split("; ").filter((t) => (t || "").length),
                         attachments: (wit.relations || []).filter((a) => a.rel === "AttachedFile"),
                         dependencies: (wit.relations || []).filter((a) => (a.rel === "System.LinkTypes.Dependency-Forward") && ((a.attributes || {}).name === "Successor")).map((r) => parseInt(r.url.split("/").pop()))
@@ -259,31 +261,6 @@ define([
                     });
                 });
 
-                backlogOrderService.includeQueryItems(queryBacklogIndex, results);
-                if (!historical) {
-                    this.backlogIndex(queryBacklogIndex);
-                    this.backlogAvailable(Object.keys(queryBacklogIndex.levels || {}).length > 0);
-                }
-
-                const duplicateCount = {};
-                results.forEach((wit) => duplicateCount[wit.originalId] = (duplicateCount[wit.originalId] || 0) + 1);
-                results.forEach((wit) => {
-                    const entry = backlogOrderService.getEntry(queryBacklogIndex, wit.originalId, wit.type);
-                    const targetEligible = !historical && (wit.project === this.project.name) && (duplicateCount[wit.originalId] === 1);
-                    wit.backlogOrder = entry ? {
-                        eligible: targetEligible && entry.teamOwned !== false,
-                        targetEligible: targetEligible,
-                        parentId: entry.parentId,
-                        backlogId: entry.backlogId,
-                        backlogRank: entry.backlogRank,
-                        position: entry.position,
-                        parentValid: backlogOrderService.isValidParent(queryBacklogIndex, entry, entry.parentId)
-                    } : {
-                        eligible: false,
-                        targetEligible: false
-                    };
-                });
-
                 return results;
             })
             .then((wits) => {
@@ -304,9 +281,18 @@ define([
                 return this._markCompletedWits(wits);
             })
             .then((wits) => {
-                // Get unique parent ids
-                let parentIds = [...new Set(wits.map((w) => w.parentId).filter((p) => p))];
+                // Reuse parent details already returned by a tree query and
+                // fetch only parents that are outside the result set.
+                let parentMap = {};
+                wits.forEach((w) => parentMap[w.originalId] = { title: w.title, type: w.type });
+                const applyParentDetails = () => wits.forEach((w) => {
+                    const parent = parentMap[w.parentId] || {};
+                    w.parentTitle = parent.title || "";
+                    w.parentType = parent.type || null;
+                });
+                let parentIds = [...new Set(wits.map((w) => w.parentId).filter((p) => p && !parentMap[p]))];
                 if (!parentIds.length) {
+                    applyParentDetails();
                     return wits;
                 }
 
@@ -323,13 +309,27 @@ define([
                 return Promise.all(xhrs)
                     .then((chunks) => Array.prototype.concat.apply([], chunks))
                     .then((parents) => {
-                        let parentIdTitleMap = {};
-                        parents.forEach((p) => parentIdTitleMap[p.id] = p.fields["System.Title"]);
-                        wits.forEach((w) => w.parentTitle = parentIdTitleMap[w.parentId] || "");
+                        parents.forEach((p) => parentMap[p.id] = {
+                            title: p.fields["System.Title"],
+                            type: p.fields["System.WorkItemType"]
+                        });
+                        applyParentDetails();
                         return wits;
                     });
             })
             .then((wits) => {
+                const decorated = this._decorateBacklogItems(wits, this.backlogIndex(), historical);
+                this.wits(decorated);
+
+                // Backlog APIs can be much slower than WIQL and work-item
+                // retrieval. Render query results first, then activate backlog
+                // ordering as soon as the independent request completes.
+                backlogPromise.then((index) => {
+                    if (!historical && backlogRequestId === this._backlogRequestId) {
+                        this._activateBacklogIndex(index);
+                    }
+                });
+
                 let icons = this.types().map((t) => t.icon.url);
                 let other = this.typesOther() || [];
                 if (other.length) {
@@ -342,8 +342,12 @@ define([
                     let tmp = {};
                     response.forEach((svg, index) => tmp[icons[index]] = svg);
                     this.icons(tmp);
-                    this.wits(wits);
+                }).catch((error) => {
+                    console.warn("App : init() : Unable to load work item icons.");
+                    console.warn(error);
                 });
+
+                return decorated;
             });
     };
 
@@ -424,6 +428,66 @@ define([
 
 
     /**
+     * Adds process-aware backlog metadata to normalized query work items.
+     * Raw fields are retained by the model so a backlog request that finishes
+     * after first paint can still read the process-specific Order field.
+     */
+    Model.prototype._decorateBacklogItems = function (items, index, historical) {
+        index = index || backlogOrderService.empty();
+        historical = typeof(historical) === "boolean" ? historical : this.isHistorical();
+        const results = (items || []).map((source) => Object.assign({}, source));
+
+        results.forEach((wit) => {
+            const fields = this._workItemFieldValues[wit.originalId] || {};
+            wit.backlogOrderValue = index.orderField ? fields[index.orderField] : wit.backlogOrderValue;
+        });
+        backlogOrderService.includeQueryItems(index, results);
+
+        const duplicateCount = {};
+        results.forEach((wit) => duplicateCount[wit.originalId] = (duplicateCount[wit.originalId] || 0) + 1);
+        results.forEach((wit) => {
+            const entry = backlogOrderService.getEntry(index, wit.originalId, wit.type);
+            const targetEligible = !historical && (wit.project === this.project.name) && (duplicateCount[wit.originalId] === 1);
+            wit.backlogOrder = entry ? {
+                eligible: targetEligible && entry.teamOwned !== false,
+                targetEligible: targetEligible,
+                parentId: entry.parentId,
+                backlogId: entry.backlogId,
+                backlogRank: entry.backlogRank,
+                position: entry.position,
+                parentValid: backlogOrderService.isValidParent(index, entry, entry.parentId)
+            } : {
+                eligible: false,
+                targetEligible: false
+            };
+        });
+
+        return results;
+    };
+
+
+    /**
+     * Activates a freshly loaded backlog index without re-running the query.
+     */
+    Model.prototype._activateBacklogIndex = function (index) {
+        index = index || backlogOrderService.empty();
+        if (this.isHistorical()) {
+            return;
+        }
+
+        this.backlogIndex(index);
+        const available = Object.keys(index.levels || {}).length > 0;
+        this.backlogAvailable(available);
+        if (available && this.message() === "Backlog order is unavailable for the current team.") {
+            this.message("");
+        }
+        if (this.wits().length) {
+            this.wits(this._decorateBacklogItems(this.wits(), index, false));
+        }
+    };
+
+
+    /**
      * Reorders a work item in the current team's backlog.
      *
      * @param {object} move Drag and drop description.
@@ -434,11 +498,14 @@ define([
             return Promise.resolve(false);
         }
 
-        const dragged = this.wits().find((wit) => (wit.id + "") === (move.draggedId + ""));
-        const target = move.targetId === null || move.targetId === undefined
-            ? null
-            : this.wits().find((wit) => (wit.id + "") === (move.targetId + ""));
-        const plan = backlogOrderService.planMove(this.backlogIndex(), dragged, target, move.position);
+        const findItems = () => ({
+            dragged: this.wits().find((wit) => (wit.id + "") === (move.draggedId + "")),
+            target: move.targetId === null || move.targetId === undefined
+                ? null
+                : this.wits().find((wit) => (wit.id + "") === (move.targetId + ""))
+        });
+        const initialItems = findItems();
+        const plan = backlogOrderService.planMove(this.backlogIndex(), initialItems.dragged, initialItems.target, move.position);
 
         if (!plan.valid) {
             this.message(plan.reason);
@@ -447,27 +514,60 @@ define([
 
         this._backlogReorderInFlight = true;
         const client = api.getClient(workApi.WorkRestClient);
-        return client.reorderBacklogWorkItems(plan.operation, this._getTeamContext()).then(
-            () => {
-                this._backlogReorderInFlight = false;
+        const fail = (failedPlan, error) => {
+            const detail = this._getBacklogErrorMessage(error);
+            this.message(`Unable to reorder work item #${failedPlan.operation.ids[0]}.${detail ? " " + detail : ""}`);
+            console.warn(`App : reorderWit() : Unable to reorder work item #${failedPlan.operation.ids[0]}.`);
+            console.warn(error);
+            return false;
+        };
+        const execute = (currentPlan, items, canRetry) => Promise.resolve()
+            .then(() => client.reorderBacklogWorkItems(currentPlan.operation, this._getTeamContext()))
+            .then(() => {
                 try {
-                    this._applyBacklogMove(plan, dragged, target);
+                    this._applyBacklogMove(currentPlan, items.dragged, items.target);
                     return true;
                 }
                 catch (error) {
-                    this.message(`Work item #${plan.operation.ids[0]} was reordered, but the local view could not be updated. Please refresh the data.`);
-                    console.warn(`App : reorderWit() : Unable to apply reordered work item #${plan.operation.ids[0]} locally.`);
+                    this.message(`Work item #${currentPlan.operation.ids[0]} was reordered, but the local view could not be updated. Please refresh the data.`);
+                    console.warn(`App : reorderWit() : Unable to apply reordered work item #${currentPlan.operation.ids[0]} locally.`);
                     console.warn(error);
                     return false;
                 }
+            })
+            .catch((error) => {
+                if (!canRetry || !this._isRetryableBacklogError(error)) {
+                    return fail(currentPlan, error);
+                }
+
+                // TF400486 commonly means the local sibling anchors became
+                // stale. Refresh only the backlog index and retry the exact
+                // user action once; deterministic hierarchy failures are not
+                // retried.
+                const previousIndex = this.backlogIndex();
+                return this._loadBacklogOrder(null, true).then((freshIndex) => {
+                    if (freshIndex === previousIndex || !Object.keys((freshIndex || {}).levels || {}).length) {
+                        return fail(currentPlan, error);
+                    }
+                    this._activateBacklogIndex(freshIndex);
+                    const freshItems = findItems();
+                    const retryPlan = backlogOrderService.planMove(freshIndex, freshItems.dragged, freshItems.target, move.position);
+                    if (!retryPlan.valid) {
+                        this.message(retryPlan.reason);
+                        return false;
+                    }
+                    return execute(retryPlan, freshItems, false);
+                });
+            });
+
+        return execute(plan, initialItems, true).then(
+            (result) => {
+                this._backlogReorderInFlight = false;
+                return result;
             },
             (error) => {
                 this._backlogReorderInFlight = false;
-                const detail = this._getBacklogErrorMessage(error);
-                this.message(`Unable to reorder work item #${plan.operation.ids[0]}.${detail ? " " + detail : ""}`);
-                console.warn(`App : reorderWit() : Unable to reorder work item #${plan.operation.ids[0]}.`);
-                console.warn(error);
-                return false;
+                return fail(plan, error);
             }
         );
     };
@@ -843,15 +943,32 @@ define([
 
 
     /**
+     * Returns whether Azure reported a stale backlog snapshot. These failures
+     * can succeed after rebuilding parent and sibling anchors; hierarchy and
+     * category validation errors are deterministic and must remain visible.
+     */
+    Model.prototype._isRetryableBacklogError = function (error) {
+        const message = this._getBacklogErrorMessage(error).toLowerCase();
+        return message.indexOf("tf400486") >= 0
+            || message.indexOf("another user has modified") >= 0
+            || message.indexOf("outside of its immediate parent") >= 0;
+    };
+
+
+    /**
      * Loads all visible backlog levels for the current team.
      *
      * @param {string} asOf Historical query date, if any.
+     * @param {boolean} preserveCurrent Keep the active index if refresh fails.
      */
-    Model.prototype._loadBacklogOrder = function (asOf) {
+    Model.prototype._loadBacklogOrder = function (asOf, preserveCurrent = false) {
         const requestId = ++this._backlogRequestId;
         const emptyIndex = backlogOrderService.empty();
-        this.backlogAvailable(false);
-        this.backlogIndex(emptyIndex);
+        const previousIndex = this.backlogIndex();
+        if (!preserveCurrent) {
+            this.backlogAvailable(false);
+            this.backlogIndex(emptyIndex);
+        }
 
         if (asOf !== null || !this.team || !this.team.id) {
             this.backlogLoading(false);
@@ -881,7 +998,7 @@ define([
             .then((response) => {
                 const index = backlogOrderService.createIndex(response[0], response[1], response[2], response[3]);
                 if (requestId !== this._backlogRequestId) {
-                    return emptyIndex;
+                    return preserveCurrent ? previousIndex : emptyIndex;
                 }
                 this.backlogIndex(index);
                 this.backlogAvailable(Object.keys(index.levels).length > 0);
@@ -890,15 +1007,19 @@ define([
             })
             .catch((error) => {
                 if (requestId !== this._backlogRequestId) {
-                    return emptyIndex;
+                    return preserveCurrent ? previousIndex : emptyIndex;
                 }
                 this.backlogLoading(false);
+                if (!preserveCurrent) {
+                    this.backlogAvailable(false);
+                    this.backlogIndex(emptyIndex);
+                }
                 if (this.orderMode() === backlogOrderService.backlogOrder) {
                     this.message("Backlog order is unavailable for the current team.");
                 }
                 console.warn("App : _loadBacklogOrder() : Unable to load backlog order.");
                 console.warn(error);
-                return emptyIndex;
+                return preserveCurrent ? previousIndex : emptyIndex;
             });
     };
 
@@ -1270,6 +1391,29 @@ define([
 
 
     /**
+     * Persists the selected order and retries backlog discovery when a prior
+     * transient failure left a remembered Backlog order marked Unavailable.
+     */
+    Model.prototype._onOrderModeChanged = function(value) {
+        const save = this._saveOrderMode(value);
+        if (value !== backlogOrderService.backlogOrder) {
+            if (this.message() === "Backlog order is unavailable for the current team.") {
+                this.message("");
+            }
+            return save;
+        }
+        if (this.isHistorical() || this.backlogAvailable() || this.backlogLoading()) {
+            return save;
+        }
+
+        return Promise.all([
+            save,
+            this._loadBacklogOrder(null, true).then((index) => this._activateBacklogIndex(index))
+        ]);
+    };
+
+
+    /**
      * Traverses the work items and marks the commpleted ones.
      *  
      * @param {array} wits List of work items. 
@@ -1341,12 +1485,12 @@ define([
                 dataService.getManager()
             ]))
             .then((response) => ({ project: response[0], host: response[1], manager: response[2] }))
-            .then(({ project, host, manager }) => Promise.all([
-                project.getProject(),
+            .then(({ project, host, manager }) => project.getProject().then((currentProject) => Promise.all([
+                currentProject,
                 host.getQueryParams(),
-                project.getProject().then((p) => manager.getValue(`gantt_${p.id}`, { scopeType: "User" })),
+                manager.getValue(`gantt_${currentProject.id}`, { scopeType: "User" }),
                 manager
-            ]))
+            ])))
             .then((response) => ({ project: response[0], state: response[1], settings: response[2], manager: response[3] }))
             .then(({ project, state, settings, manager }) => {
                 let showFields = null;
