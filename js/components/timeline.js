@@ -333,18 +333,14 @@ define([
 
 
     /**
-     * Handles the group title click event.
-     * 
-     * @param {object} e Event arguments. 
+     * Keeps native target=_blank navigation isolated from vis-timeline's row
+     * selection handlers. Native anchor navigation avoids rendering an Azure
+     * DevOps work-item page inside the extension iframe.
+     *
+     * @param {object} e Event arguments.
      */
     Timeline.prototype._onGroupTitleSelect = function (e) {
         e.stopPropagation();
-        e.preventDefault();
-
-        var id = parseInt(e.target.getAttribute("data-id"));
-        if (!isNaN(id)) {
-            this.callback("openNewWindow", e.target.getAttribute("href"));
-        }
     };
 
 
@@ -719,7 +715,7 @@ define([
 
         const result = [
             `${icons[type.icon.url] || ""}`,
-            `<a class="my-timeline-group__title ${record.isCompleted ? "my-timeline-group__title--completed" : ""}" data-id="${record.id}" title="${record.title}" href="${record.url.replace('/_apis/wit/workItems/', '/_workitems/edit/')}">${showFields.includes("id") ? "<span class='font-weight-semibold'>#" + record.id + "</span>&nbsp" : ""}${record.content}</a>`,
+            `<a class="my-timeline-group__title ${record.isCompleted ? "my-timeline-group__title--completed" : ""}" data-id="${record.id}" title="${record.title}" href="${record.url.replace('/_apis/wit/workItems/', '/_workitems/edit/')}" target="_blank" rel="noopener noreferrer">${showFields.includes("id") ? "<span class='font-weight-semibold'>#" + record.id + "</span>&nbsp" : ""}${record.content}</a>`,
             `<div class="my-timeline-group__state" title="${record.state}" style="background-color: #${state.color}"></div>`
         ];
 
@@ -807,6 +803,7 @@ define([
         el.innerHTML = result.join("");
 
         el.querySelector(".my-timeline-group__title").addEventListener("pointerdown", vm._onGroupTitleSelect.bind(vm), false);
+        el.querySelector(".my-timeline-group__title").addEventListener("click", vm._onGroupTitleSelect.bind(vm), false);
         el.querySelector(".my-timeline-group__button--checkbox").addEventListener("pointerdown", vm._onGroupSelect.bind(vm), false);
         el.querySelector(".my-timeline-group__button--edit").addEventListener("pointerdown", vm._onGroupEdit.bind(vm), false);
 
