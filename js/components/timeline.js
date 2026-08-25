@@ -215,7 +215,7 @@ define([
         }
         else {
             const center = new Date((before.start.getTime() + before.end.getTime()) / 2);
-            const range = timelineZoomService.getPresetWindow(preset, this._fitRange, center);
+            const range = timelineZoomService.getPresetWindow(preset, this._fitRange, center, this._getTimelineWidth());
             if (!range) {
                 this._pendingZoomPreset = null;
                 return;
@@ -228,6 +228,15 @@ define([
             this._pendingZoomPreset = null;
             this.callback("zoomChanged", timelineZoomService.normalizeView({ preset, start: after.start, end: after.end }));
         }
+    };
+
+
+    /**
+     * Gets the drawable timeline width without the variable row-label panel.
+     */
+    Timeline.prototype._getTimelineWidth = function () {
+        const center = this.timeline && this.timeline.body && this.timeline.body.domProps && this.timeline.body.domProps.center;
+        return (center && Number(center.width)) || this.node.clientWidth || 1;
     };
 
 
@@ -407,7 +416,7 @@ define([
         }
         else if (view.preset !== timelineZoomService.percent100) {
             const center = new Date((this._fitRange.start.getTime() + this._fitRange.end.getTime()) / 2);
-            const range = timelineZoomService.getPresetWindow(view.preset, this._fitRange, center);
+            const range = timelineZoomService.getPresetWindow(view.preset, this._fitRange, center, this._getTimelineWidth());
             if (range) {
                 this._pendingZoomPreset = view.preset;
                 this._ignoredRange = range;

@@ -21,7 +21,7 @@ const fitted = {
 const fittedDuration = fitted.end.getTime() - fitted.start.getTime();
 const center = new Date("2026-08-21T12:00:00.000Z");
 
-["100", "200", "300", "400", "custom"].forEach(function (preset) {
+["100", "200", "300", "400", "daily", "custom"].forEach(function (preset) {
     assert.strictEqual(service.normalizePreset(preset), preset);
 });
 assert.strictEqual(service.normalizePreset("fit"), "100", "legacy Fit all should migrate to 100%");
@@ -42,6 +42,7 @@ assert.deepStrictEqual(plain(service.serializeView(restored)), {
     end: "2026-08-25T00:00:00.000Z"
 });
 assert.deepStrictEqual(plain(service.serializeView({ preset: "300", start: restored.start, end: restored.end })), { preset: "300" }, "percentage presets should remain relative to current data");
+assert.deepStrictEqual(plain(service.serializeView({ preset: "daily", start: restored.start, end: restored.end })), { preset: "daily" }, "the one-day scale should be restored relative to the current chart width");
 assert.strictEqual(service.normalizeView({ preset: "week", start: restored.start, end: restored.end }).preset, "custom", "legacy named ranges should retain their exact window");
 
 [100, 200, 300, 400].forEach(function (percentage) {
@@ -51,6 +52,12 @@ assert.strictEqual(service.normalizeView({ preset: "week", start: restored.start
     assert.strictEqual((range.start.getTime() + range.end.getTime()) / 2, center.getTime());
     assert.strictEqual(service.identifyPreset(range.start, range.end, fitted), preset);
 });
+
+const dailyWidth = 420;
+const dailyRange = service.getPresetWindow("daily", fitted, center, dailyWidth);
+const dailyMinimumStep = (dailyRange.end.getTime() - dailyRange.start.getTime()) * 70 / dailyWidth;
+assert.ok(dailyMinimumStep > 12 * 60 * 60 * 1000 && dailyMinimumStep < 24 * 60 * 60 * 1000, "the daily preset should force vis-timeline's one-day label scale");
+assert.strictEqual((dailyRange.start.getTime() + dailyRange.end.getTime()) / 2, center.getTime(), "the daily preset should retain the current center");
 
 assert.strictEqual(service.getPresetWindow("custom", fitted, center), null);
 assert.strictEqual(service.getPresetWindow("200", {}, center), null);

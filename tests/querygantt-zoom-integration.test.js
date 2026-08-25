@@ -141,6 +141,7 @@ const TimelineStub = function (node, records, groups, options) {
     this.handlers = {};
     this.options = options;
     this.selection = [];
+    this.body = { domProps: { center: { width: 420 } } };
     latestTimeline = this;
 };
 TimelineStub.prototype.getWindow = function () {
@@ -249,6 +250,13 @@ latestTimeline.emit("rangechanged", latestTimeline.getWindow());
 assert.strictEqual(changes[2].preset, "100");
 assert.deepStrictEqual(plain(zoomService.serializeView(changes[2])), { preset: "100" });
 
+timelineViewModel.setZoomPreset("daily");
+const dailyDuration = latestTimeline.window.end - latestTimeline.window.start;
+const dailyMinimumStep = dailyDuration * 70 / latestTimeline.body.domProps.center.width;
+assert.ok(dailyMinimumStep > 12 * 60 * 60 * 1000 && dailyMinimumStep < 24 * 60 * 60 * 1000, "the 1 day option should use the drawable chart width and select daily labels");
+latestTimeline.emit("rangechanged", latestTimeline.getWindow());
+assert.strictEqual(changes[3].preset, "daily");
+
 const extensionWrites = [];
 const manager = {
     getValue: function () { return Promise.resolve(JSON.stringify({ showFields: ["duration"] })); },
@@ -355,7 +363,7 @@ assert.strictEqual(appModel.zoomPreset(), "300");
     assert.strictEqual(startupModel.zoomView().end.toISOString(), "2026-08-17T00:00:00.000Z");
 
     const html = fs.readFileSync(path.join(__dirname, "../html/querygantt-tab.html"), "utf8");
-    ["Custom", "100%", "200%", "300%", "400%"].forEach(function (label) {
+    ["Custom", "100%", "200%", "300%", "400%", "1 day"].forEach(function (label) {
         assert.ok(html.includes(">" + label + "</option>"));
     });
     assert.strictEqual(html.includes(">500%</option>"), false, "the zoom selector should stop at 400%");

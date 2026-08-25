@@ -4,7 +4,10 @@ define([], function () {
     const percent200 = "200";
     const percent300 = "300";
     const percent400 = "400";
+    const daily = "daily";
     const presets = [percent100, percent200, percent300, percent400];
+    const dayMilliseconds = 24 * 60 * 60 * 1000;
+    const minorLabelWidth = 70;
 
     /**
      * Returns a supported zoom preset. Previous preset names are migrated
@@ -12,7 +15,7 @@ define([], function () {
      */
     const normalizePreset = function (value) {
         value = (value === null || typeof(value) === "undefined") ? "" : value + "";
-        if (presets.includes(value) || value === custom) {
+        if (presets.includes(value) || value === custom || value === daily) {
             return value;
         }
         if (value === "500") {
@@ -74,11 +77,36 @@ define([], function () {
      * Gets a percentage window from the fitted data range while retaining the
      * current visible center.
      */
-    const getPresetWindow = function (preset, fittedRange, center) {
+    const getPresetWindow = function (preset, fittedRange, center, width) {
+        preset = normalizePreset(preset);
         const factor = getFactor(preset);
         const start = toDate((fittedRange || {}).start);
         const end = toDate((fittedRange || {}).end);
         const normalizedCenter = toDate(center);
+
+        // vis-timeline selects a one-day minor scale when the time represented
+        // by one label is between half a day and one day. Use the actual chart
+        // width (excluding row labels) and a small safety margin so every day
+        // receives a label regardless of the selected field columns.
+        if (preset === daily) {
+            const centerTime = normalizedCenter
+                ? normalizedCenter.getTime()
+                : (start && end && start.getTime() < end.getTime()
+                    ? (start.getTime() + end.getTime()) / 2
+                    : null);
+            if (centerTime === null) {
+                return null;
+            }
+            const normalizedWidth = Number.isFinite(Number(width)) && Number(width) > 0
+                ? Math.max(minorLabelWidth, Number(width))
+                : minorLabelWidth * 10;
+            const duration = dayMilliseconds * 0.7 * normalizedWidth / minorLabelWidth;
+            return {
+                start: new Date(centerTime - duration / 2),
+                end: new Date(centerTime + duration / 2)
+            };
+        }
+
         if (!factor || !start || !end || start.getTime() >= end.getTime()) {
             return null;
         }
@@ -123,6 +151,7 @@ define([], function () {
         percent200,
         percent300,
         percent400,
+        daily,
         presets,
         normalizePreset,
         normalizeView,
