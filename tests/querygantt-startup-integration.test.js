@@ -142,4 +142,44 @@ assert.strictEqual(Object.keys(primaryFilter()).length, 0);
 
 filter.dispose();
 
-console.log("querygantt startup integration tests passed");
+(async function () {
+    let queryState = { showFields: "duration", retained: "value" };
+    const queryStringWrites = [];
+    const hostNavigationService = {
+        getQueryParams: function () { return Promise.resolve(Object.assign({}, queryState)); },
+        setQueryParams: function (state) {
+            queryStringWrites.push(state);
+            queryState = Object.assign({}, state);
+            return Promise.resolve();
+        }
+    };
+    const navigationApi = { CommonServiceIds: { HostNavigationService: "host-navigation" } };
+    const navigationApp = loadAmd(path.join(__dirname, "../js/querygantt-tab-app.js"), {
+        module: { config: function () { return {}; } },
+        knockout: ko,
+        sdk: { getService: function () { return Promise.resolve(hostNavigationService); } },
+        "api/index": navigationApi
+    }, true);
+    const queryStringModel = {
+        showFields: function () { return ["duration"]; },
+        _queryStringUpdatePromise: Promise.resolve()
+    };
+
+    const noOpResult = await navigationApp.Model.prototype._updateQueryString.call(queryStringModel);
+    assert.strictEqual(noOpResult, false);
+    assert.strictEqual(queryStringWrites.length, 0, "an unchanged showFields query parameter must not reload the extension iframe");
+
+    queryStringModel.showFields = function () { return ["duration", "id"]; };
+    await Promise.all([
+        navigationApp.Model.prototype._updateQueryString.call(queryStringModel),
+        navigationApp.Model.prototype._updateQueryString.call(queryStringModel)
+    ]);
+    assert.strictEqual(queryStringWrites.length, 1, "concurrent notifications for one value should serialize into one URL update");
+    assert.strictEqual(queryStringWrites[0].showFields, "duration,id");
+    assert.strictEqual(queryStringWrites[0].retained, "value", "unrelated host query parameters must be retained");
+
+    console.log("querygantt startup integration tests passed");
+})().catch(function (error) {
+    console.error(error);
+    process.exitCode = 1;
+});
