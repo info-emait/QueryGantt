@@ -57,8 +57,14 @@ const targetElement = makeTargetElement(2, 100);
 const nextTargetElement = makeTargetElement(3, 130);
 const dropZone = { classList: makeClassList(), style: {} };
 const chart = {};
+const scrollContainer = {
+    scrollTop: 200,
+    addEventListener: function () {},
+    removeEventListener: function () {}
+};
 const root = {
     classList: makeClassList(),
+    closest: function (selector) { return selector === ".v-scroll-auto" ? scrollContainer : null; },
     contains: function (element) { return element === targetElement || element === nextTargetElement; },
     getBoundingClientRect: function () { return { top: 60, left: 80 }; },
     querySelectorAll: function (selector) {
@@ -137,6 +143,67 @@ assert.strictEqual(groupUpdates.length, 4, "the second collapse should close the
 assert.strictEqual(groupData.get(1).showNested, false);
 assert.strictEqual(groupData.get(2).visible, false);
 assert.strictEqual(groupData.get(3).visible, false);
+
+const makeDataSet = function (items, onUpdate) {
+    const data = new Map(items.map((item) => [item.id + "", Object.assign({}, item)]));
+    return {
+        data: data,
+        forEach: function (callback) { data.forEach((value) => callback(value)); },
+        get: function (id) { return data.get(id + "") || null; },
+        getIds: function () { return Array.from(data.values()).map((item) => item.id); },
+        remove: function (ids) { ids.forEach((id) => data.delete(id + "")); },
+        update: function (updates) {
+            (updates instanceof Array ? updates : [updates]).forEach((update) => {
+                const current = data.get(update.id + "") || {};
+                data.set(update.id + "", Object.assign({}, current, update));
+            });
+            if (onUpdate) { onUpdate(); }
+        }
+    };
+};
+const makeWit = function (id, pathValue, parent, level, type) {
+    return {
+        id: id, originalId: id, path: pathValue, parent: parent, level: level,
+        parentId: null, parentTitle: "", project: "Project", areaPath: "Project", nodeName: "Project",
+        remainingWork: 0, completedWork: 0, effort: 0, iterationPath: "Project", isCompleted: false,
+        childCount: 0, childCompletedCount: 0, assignedTo: "", url: `https://example.test/_apis/wit/workItems/${id}`,
+        title: `Work item ${id}`, type: type, state: "New", priority: 1, tags: [],
+        startDate: new Date("2026-08-01T00:00:00.000Z"), targetDate: new Date("2026-08-02T00:00:00.000Z"),
+        dependencies: [], backlogOrder: { eligible: true, targetEligible: true }
+    };
+};
+const reorderedItems = [
+    makeWit(20, "20", "", 1, "User Story"),
+    makeWit(10, "10", "", 1, "User Story"),
+    makeWit(11, "10/11", "10", 2, "Task")
+];
+viewModel.items(reorderedItems);
+viewModel.groups = makeDataSet([
+    { id: 10, order: 0, treeLevel: 1, visible: true, showNested: false, nestedGroups: [11] },
+    { id: 11, order: 1, treeLevel: 2, visible: false, showNested: true, nestedInGroup: 10 },
+    { id: 20, order: 2, treeLevel: 1, visible: true, showNested: true }
+], function () { scrollContainer.scrollTop = 0; });
+viewModel.records = makeDataSet([
+    { id: 10, group: 10 }, { id: 11, group: 11 }, { id: 20, group: 20 }
+]);
+let timelineDestroyed = false;
+const liveTimeline = { destroy: function () { timelineDestroyed = true; } };
+viewModel.timeline = liveTimeline;
+viewModel._renderContext = {
+    states: viewModel.states(), priorities: viewModel.priorities(), types: viewModel.types(),
+    typesOther: viewModel.typesOther(), icons: viewModel.icons(), showFields: viewModel.showFields(),
+    backlogOrder: viewModel.backlogOrder()
+};
+viewModel._dependenciesKey = viewModel._getDependenciesKey(reorderedItems);
+scrollContainer.scrollTop = 640;
+viewModel._onItemsChanged();
+assert.strictEqual(viewModel.timeline, liveTimeline, "a backlog reorder must keep the existing vis-timeline instance");
+assert.strictEqual(timelineDestroyed, false, "a backlog reorder must not destroy and reconstruct the timeline");
+assert.strictEqual(viewModel.groups.get(10).showNested, false, "the moved user's collapsed hierarchy state must be retained");
+assert.strictEqual(viewModel.groups.get(11).visible, false, "tasks below a collapsed moved item must stay hidden");
+assert.strictEqual(viewModel.groups.get(20).order, 0, "the live DataSet should receive the new backlog order");
+assert.strictEqual(scrollContainer.scrollTop, 640, "a backlog reorder must restore page scroll after the DataSet redraw");
+scrollContainer.scrollTop = 200;
 
 const dragged = { id: 1, originalId: 1, backlogEligible: true, backlogTargetEligible: true, backlogId: "stories", backlogRank: 1, backlogParentId: 11, backlogParentValid: true, isCompleted: true };
 const target = { id: 2, originalId: 2, backlogEligible: true, backlogTargetEligible: true, backlogId: "stories", backlogRank: 1, backlogParentId: 11, backlogParentValid: true };

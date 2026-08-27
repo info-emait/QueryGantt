@@ -42,6 +42,9 @@ define([
         this.groups = null;
         this.records = null;
         this.arrows = null;
+        this._renderContext = null;
+        this._dependenciesKey = null;
+        this.scrollContainer = typeof(this.root.closest) === "function" ? this.root.closest(".v-scroll-auto") : null;
         this._backlogDraggedId = null;
         this._backlogPointerId = null;
         this._backlogPointerHandle = null;
@@ -380,6 +383,8 @@ define([
         this.timeline = null;
         this.groups = null;
         this.records = null;
+        this._renderContext = null;
+        this._dependenciesKey = null;
     };
 
 
@@ -737,6 +742,121 @@ define([
 
 
     /**
+     * Checks whether non-item rendering inputs still match the live timeline.
+     */
+    Timeline.prototype._hasSameRenderContext = function (context) {
+        if (!this._renderContext) {
+            return false;
+        }
+
+        return Object.keys(context).every((name) => this._renderContext[name] === context[name]);
+    };
+
+
+    /**
+     * Gets a stable signature for dependency arrows. A changed relationship
+     * requires rebuilding the arrow helper, while a hierarchy-only reorder
+     * can safely update the existing DataSets in place.
+     */
+    Timeline.prototype._getDependenciesKey = function (items) {
+        return items
+            .map((item) => `${item.id}:${(item.dependencies || []).map((id) => id + "").sort().join(",")}`)
+            .sort()
+            .join("|");
+    };
+
+
+    /**
+     * Checks whether the next data can replace the current DataSets without
+     * constructing another vis-timeline instance.
+     */
+    Timeline.prototype._hasSameTimelineIds = function (groups, records) {
+        if (!this.groups || !this.records || (typeof(this.groups.getIds) !== "function") || (typeof(this.records.getIds) !== "function")) {
+            return false;
+        }
+
+        const sameIds = (current, next) => {
+            const currentIds = current.getIds().map((id) => id + "").sort();
+            const nextIds = next.map((item) => item.id + "").sort();
+            return currentIds.length === nextIds.length && currentIds.every((id, index) => id === nextIds[index]);
+        };
+
+        return sameIds(this.groups, groups) && sameIds(this.records, records);
+    };
+
+
+    /**
+     * Updates hierarchy/order data while preserving the live timeline, the
+     * user's expanded/collapsed nodes, the visible date window, and page
+     * scroll position.
+     */
+    Timeline.prototype._syncTimelineData = function (groups, records) {
+        const scrollTop = this.scrollContainer ? this.scrollContainer.scrollTop : null;
+        const previous = new Map();
+        this.groups.forEach((group) => previous.set(group.id + "", group));
+
+        const parentByChild = new Map();
+        groups.forEach((group) => (group.nestedGroups || []).forEach((id) => parentByChild.set(id + "", group.id)));
+
+        const groupsById = new Map();
+        groups.forEach((group) => {
+            const oldGroup = previous.get(group.id + "");
+            group.nestedInGroup = parentByChild.has(group.id + "") ? parentByChild.get(group.id + "") : null;
+            group.selected = oldGroup ? Boolean(oldGroup.selected) : Boolean(group.selected);
+
+            if (group.nestedGroups && group.nestedGroups.length) {
+                group.showNested = oldGroup ? oldGroup.showNested !== false : true;
+            }
+            else {
+                // DataSet.update merges objects, so explicit null/true values
+                // clear hierarchy state left over from an earlier parent role.
+                group.nestedGroups = null;
+                group.showNested = true;
+            }
+
+            groupsById.set(group.id + "", group);
+        });
+
+        const visited = new Set();
+        const updateVisibility = (id, visible) => {
+            const key = id + "";
+            const group = groupsById.get(key);
+            if (!group || visited.has(key)) {
+                return;
+            }
+
+            visited.add(key);
+            group.visible = visible;
+            const childrenVisible = visible && group.showNested !== false;
+            (group.nestedGroups || []).forEach((childId) => updateVisibility(childId, childrenVisible));
+        };
+        groups
+            .filter((group) => group.nestedInGroup === null)
+            .forEach((group) => updateVisibility(group.id, true));
+        groups
+            .filter((group) => !visited.has(group.id + ""))
+            .forEach((group) => updateVisibility(group.id, true));
+
+        const nextGroupIds = new Set(groups.map((group) => group.id + ""));
+        const nextRecordIds = new Set(records.map((record) => record.id + ""));
+        const removedGroups = this.groups.getIds().filter((id) => !nextGroupIds.has(id + ""));
+        const removedRecords = this.records.getIds().filter((id) => !nextRecordIds.has(id + ""));
+        if (removedGroups.length) {
+            this.groups.remove(removedGroups);
+        }
+        if (removedRecords.length) {
+            this.records.remove(removedRecords);
+        }
+
+        this.groups.update(groups);
+        this.records.update(records);
+        if (this.scrollContainer && Number.isFinite(scrollTop)) {
+            this.scrollContainer.scrollTop = scrollTop;
+        }
+    };
+
+
+    /**
      * Initializes or destroys the timeline after the items are ready.
      **/
     Timeline.prototype._onItemsChanged = function () {
@@ -749,24 +869,32 @@ define([
         var showFields = this.showFields();
         var backlogOrder = this.backlogOrder();
         var now = new Date();
-
-        this._createStyles(types, typesOther);
-        this._destroyTimeline();
+        var renderContext = {
+            states: states,
+            priorities: priorities,
+            types: types,
+            typesOther: typesOther,
+            icons: icons,
+            showFields: showFields,
+            backlogOrder: backlogOrder
+        };
 
         if (!items || !items.length) {
+            this._createStyles(types, typesOther);
+            this._destroyTimeline();
             return;
         }
 
         // Create groups
         var markerGroup = null;
         var groups = items
-            .map((wit) => {
+            .map((wit, index) => {
                 if (isMarker(wit)) {
-                    markerGroup = markerGroup || createMarkerGroup();
+                    markerGroup = markerGroup || createMarkerGroup(-1);
                     return null;
                 }
 
-                return createGroup(wit, items, now);
+                return createGroup(wit, items, now, index);
             })
             .filter((group) => group !== null);
 
@@ -779,6 +907,17 @@ define([
         var records = items
             .map((wit) => createRecord(wit, now))
             .filter((record) => record !== null);
+        var dependenciesKey = this._getDependenciesKey(items);
+
+        if (this.timeline && this._hasSameRenderContext(renderContext) && this._dependenciesKey === dependenciesKey && this._hasSameTimelineIds(groups, records)) {
+            this._syncTimelineData(groups, records);
+            return;
+        }
+
+        this._createStyles(types, typesOther);
+        this._destroyTimeline();
+        this._renderContext = renderContext;
+        this._dependenciesKey = dependenciesKey;
 
         // Options for the Timeline
         var options = {
@@ -795,6 +934,7 @@ define([
             xss: {
                 disabled: true
             },
+            groupOrder: "order",
             groupHeightMode: "fixed",
             orientation: "both",
             horizontalScroll: true,
@@ -891,11 +1031,13 @@ define([
     /**
      * Creates and gets marker group.
      * 
+     * @param {number} order Stable visual position in the group DataSet.
      * @returns Returns object, which represents marker group.
      */
-    let createMarkerGroup = function () {
+    let createMarkerGroup = function (order) {
         return {
             id: "markers",
+            order: order,
             treeLevel: 1,
             content: "MARKERS",
             type: "markers",
@@ -910,10 +1052,12 @@ define([
      * @param {object} wit Current work item.
      * @param {array} items List of all work items. 
      * @param {number} now Current date. 
+     * @param {number} order Stable visual position in the group DataSet.
      */
-    let createGroup = function (wit, items, now) {
+    let createGroup = function (wit, items, now, order) {
         var group = {
             id: wit.id,
+            order: order,
             originalId: wit.originalId,
             parentId: wit.parentId,
             parentTitle: wit.parentTitle,
