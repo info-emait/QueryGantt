@@ -58,7 +58,11 @@ const app = loadAmd(path.join(__dirname, "../js/querygantt-tab-app.js"), {
 }, true);
 
 const initCalls = [];
+const initDependencyProbe = ko.observable(0);
 app.Model.prototype.init = function (asOf) {
+    // A primary-filter observer must not acquire dependencies read by init().
+    // Otherwise unrelated observable changes can recursively start new loads.
+    initDependencyProbe();
     initCalls.push(asOf || null);
     return Promise.resolve();
 };
@@ -85,6 +89,13 @@ assert.deepStrictEqual(
     initCalls,
     ["2026-08-21T00:00:00.0000000"],
     "a real As of filter change should still reload the query"
+);
+
+initDependencyProbe(1);
+assert.deepStrictEqual(
+    initCalls,
+    ["2026-08-21T00:00:00.0000000"],
+    "observables read by init must not become primary-filter dependencies"
 );
 
 model.dispose();
@@ -132,15 +143,73 @@ assert.strictEqual(
     "creating the filter must not publish an unchanged empty As of filter"
 );
 
+filter.asOfValue([null]);
+assert.strictEqual(
+    primaryWrites,
+    0,
+    "an empty date input represented by null must not publish a primary-filter change"
+);
+
 filter.asOfValue([asOf]);
 assert.strictEqual(primaryWrites, 1, "selecting an As of date should publish one primary-filter change");
 assert.strictEqual(primaryFilter().asOf[0], asOf);
+
+filter.asOfValue([new Date(asOf.getTime())]);
+assert.strictEqual(primaryWrites, 1, "publishing the same As of date again must be a no-op");
 
 filter.asOfValue([]);
 assert.strictEqual(primaryWrites, 2, "clearing an active As of date should publish one primary-filter change");
 assert.strictEqual(Object.keys(primaryFilter()).length, 0);
 
+filter.asOfValue([]);
+assert.strictEqual(primaryWrites, 2, "clearing an already empty As of date must be a no-op");
+
 filter.dispose();
+
+let singleDateRegistration = null;
+const singleDateKnockout = Object.create(ko);
+singleDateKnockout.components = {
+    register: function (name, registration) {
+        if (name === "my-filter-popup-single-date") {
+            singleDateRegistration = registration;
+        }
+    }
+};
+
+loadAmd(path.join(__dirname, "../js/components/filter-popup-single-date.js"), {
+    knockout: singleDateKnockout
+}, false);
+
+assert.ok(singleDateRegistration, "the single-date filter component should register itself");
+
+const singleDateValues = ko.observableArray([]);
+let singleDateWrites = 0;
+singleDateValues.subscribe(function () { singleDateWrites += 1; });
+
+const singleDateFilter = singleDateRegistration.viewModel.createViewModel({
+    values: singleDateValues
+}, {
+    element: {
+        querySelector: function () { return null; }
+    }
+});
+
+assert.strictEqual(
+    singleDateWrites,
+    0,
+    "creating an empty single-date filter must not replace [] with [null]"
+);
+assert.strictEqual(singleDateValues().length, 0);
+
+singleDateFilter.from("2026-08-21");
+assert.strictEqual(singleDateWrites, 1, "entering a date should publish one value change");
+assert.strictEqual(singleDateValues()[0].toISOString(), "2026-08-21T00:00:00.000Z");
+
+singleDateFilter.from("");
+assert.strictEqual(singleDateWrites, 2, "clearing a date should publish one empty value change");
+assert.strictEqual(singleDateValues().length, 0);
+
+singleDateFilter.dispose();
 
 (async function () {
     let queryState = { showFields: "duration", retained: "value" };
