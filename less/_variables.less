@@ -1,3 +1,9 @@
 @font-family: "Segoe UI VSS (Regular)","Segoe UI","-apple-system",BlinkMacSystemFont,Roboto,"Helvetica Neue",Helvetica,Ubuntu,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol";
 @font-family-icons-regular: "FluentRegular";
 @font-family-icons-filled: "FluentFilled";
+
+// Fixed layers appended directly to the document must remain below filter
+// callouts, which are bounded by the sticky filter's stacking context.
+@z-index-timeline-floating-axis: 101;
+@z-index-backlog-root-drop-zone: 102;
+@z-index-filter: 103;
