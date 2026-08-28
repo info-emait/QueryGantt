@@ -4,8 +4,10 @@ define([
     "knockout",
     "sdk",
     "api/index",
-    "services/data"
-], (module, require, ko, sdk, api, dataService) => {
+    "services/data",
+    "services/browser-settings",
+    "services/date-granularity"
+], (module, require, ko, sdk, api, dataService, browserSettingsService, dateGranularityService) => {
     //#region [ Fields ]
 
     const global = (function () { return this; })();
@@ -29,6 +31,9 @@ define([
         this.project = args.project;
         this.fields = ko.isObservable(args.fields) ? args.fields : ko.observableArray(args.fields || []);
         this.fieldsValue = ko.isObservable(args.fieldsValue) ? args.fieldsValue : ko.observableArray(args.fieldsValue || []);
+        this.dateGranularity = ko.observable(dateGranularityService.normalize(args.dateGranularity));
+        this.extensionId = args.extensionId || "querygantt";
+        this.browserStorage = args.browserStorage || null;
         this.panel = args.panel;
     };
 
@@ -58,14 +63,34 @@ define([
      */
     Model.prototype.save = function() {
         const fieldsValue = this.fieldsValue();
-        const settings = {
-            showFields: fieldsValue
-        };
+        const dateGranularity = dateGranularityService.normalize(this.dateGranularity());
+        const key = `gantt_${this.project.id}`;
+        browserSettingsService.write(
+            this.extensionId,
+            this.project.id,
+            "dateGranularity",
+            null,
+            dateGranularity,
+            this.browserStorage
+        );
 
-        dataService.getManager().then((manager) => {
-            manager.setValue(`gantt_${this.project.id}`, JSON.stringify(settings), { scopeType: "User" });
-            this.panel.close({ fieldsValue });
-        });
+        return dataService.getManager()
+            .then((manager) => manager.getValue(key, { scopeType: "User" })
+                .then((value) => ({ manager, value })))
+            .then(({ manager, value }) => {
+                let settings = {};
+                try {
+                    const parsedSettings = value ? JSON.parse(value) : {};
+                    settings = parsedSettings && (typeof(parsedSettings) === "object") && !Array.isArray(parsedSettings) ? parsedSettings : {};
+                }
+                catch (error) {
+                }
+
+                settings.showFields = fieldsValue;
+
+                return manager.setValue(key, JSON.stringify(settings), { scopeType: "User" });
+            })
+            .then(() => this.panel.close({ fieldsValue, dateGranularity }));
     };
 
 
@@ -118,6 +143,8 @@ define([
                     project: project,
                     fields: config.fields,
                     fieldsValue: config.fieldsValue,
+                    dateGranularity: config.dateGranularity,
+                    extensionId: config.extensionId || sdk.getExtensionContext().id,
                     panel: config.panel
                 });
                 console.debug("QueryGanttConfigurationApp : ready() : %o", model);

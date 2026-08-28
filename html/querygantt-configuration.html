@@ -8,10 +8,19 @@
     <body class="querygantt-configuration flex-column">
         <div class="flex-row flex-grow v-scroll-auto">
             <div class="flex-column full-width">
-                <label class="bolt-formitem-label body-m">Fields:</label>
+                <label class="bolt-formitem-label body-m">Timeline granularity:</label>
+                <div class="bolt-textfield bolt-textfield--select flex-row flex-center focus-treatment">
+                    <select class="bolt-textfield-input flex-grow" tabindex="0" data-bind="value: dateGranularity">
+                        <option value="time">Hours and minutes</option>
+                        <option value="day">Day</option>
+                    </select>
+                </div>
+                <span class="bolt-formitem-message body-xs">Day aligns bars to full local calendar days</span>
+
+                <label class="bolt-formitem-label body-m margin-top-16">Fields:</label>
                 <!-- ko foreach: fields -->
                 <label class="bolt-checkbox bolt-formitem-label body-m flex-row">
-                    <input type="checkbox" data-bind="checkedValue: value, checked: $parent.fieldsValue" />
+                    <input type="checkbox" tabindex="0" data-bind="checkedValue: value, checked: $parent.fieldsValue" />
                     <span data-bind="text: name"></span>
                 </label>
                 <!-- /ko -->

@@ -11,7 +11,7 @@
             <div class="page-content flex-column flex-grow">
                 <my-spinner params="isVisible: isLoading"></my-spinner>
                 <my-message params="text: message"></my-message>
-                <div class="flex-row margin-top-16" style="display: none; position: sticky; top: 0; z-index: 3" data-bind="visible: (wits().length || zero() !== null) && !isLoading()">
+                <div class="querygantt-tab__filter flex-row margin-top-16" style="display: none" data-bind="visible: (wits().length || zero() !== null) && !isLoading()">
                     <my-filter params="value: filter,
                                        valuePrimary: filterPrimary,
                                        queryType: queryType,
@@ -119,6 +119,7 @@
                                                     typesOther: typesOther, 
                                                     icons: icons, 
                                                     showFields: showFields,
+                                                    dateGranularity: dateGranularity,
                                                     callbacks: {
                                                         openNewWindow: openNewWindow.bind($root),
                                                         updateWit: updateWit.bind($root)
