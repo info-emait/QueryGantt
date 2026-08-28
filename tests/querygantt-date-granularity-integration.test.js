@@ -6,9 +6,11 @@ const path = require("path");
 const vm = require("vm");
 
 const observable = function (initial) {
+    const subscribers = [];
     const result = function (value) {
         if (arguments.length) {
             initial = value;
+            subscribers.slice().forEach(function (subscriber) { subscriber(value); });
             return result;
         }
         return initial;
@@ -16,6 +18,17 @@ const observable = function (initial) {
     result.__observable = true;
     result.extend = function () { return result; };
     result.dispose = function () {};
+    result.subscribe = function (subscriber) {
+        subscribers.push(subscriber);
+        return {
+            dispose: function () {
+                const index = subscribers.indexOf(subscriber);
+                if (index >= 0) {
+                    subscribers.splice(index, 1);
+                }
+            }
+        };
+    };
     return result;
 };
 
