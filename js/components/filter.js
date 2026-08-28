@@ -140,12 +140,19 @@ define([
      * Gets actual primary filter value.
      */
     Filter.prototype._getValuePrimary = function() {
-        const asOf = this.asOfValue();
+        const asOf = this.asOfValue()
+            .filter((value) => value instanceof Date && !isNaN(value.getTime()))
+            .slice(0, 1);
+        const current = this.valuePrimary() || {};
+        const currentAsOf = (Array.isArray(current.asOf) ? current.asOf : [])
+            .filter((value) => value instanceof Date && !isNaN(value.getTime()))
+            .slice(0, 1);
 
-        // The parent model already starts with an empty primary filter. Do not
-        // publish another empty object while this computed is being created,
-        // because that would start a duplicate initial Query request.
-        if (ko.computedContext.isInitial() && !asOf.length) {
+        // The empty date control can be represented by [] or [null]. Treat
+        // both as the same value, and suppress equivalent date writes so the
+        // parent does not start another Query request.
+        if (asOf.length === currentAsOf.length
+            && (!asOf.length || asOf[0].getTime() === currentAsOf[0].getTime())) {
             return;
         }
         

@@ -90,7 +90,11 @@ define([
 
         this.filterPrimary = ko.observable({});
         this.filter = ko.observable({});
-        this.filteredPrimaryWits = ko.computed(this._getFilteredPrimaryWits, this);
+        // Primary-filter changes trigger an API reload, so observe them with a
+        // subscription rather than a computed. A computed would also track
+        // observables read synchronously by init() (such as backlogIndex), and
+        // those updates could recursively start another reload.
+        this.filteredPrimaryWits = this.filterPrimary.subscribe(this._getFilteredPrimaryWits, this);
         this.filteredWits = ko.computed(this._getFilteredWits, this);
         this.isBacklogOrder = ko.computed(() => (this.orderMode() === backlogOrderService.backlogOrder) && this.backlogAvailable());
         this.orderedWits = ko.computed(this._getOrderedWits, this);
@@ -1185,15 +1189,8 @@ define([
     /**
      * Gets the work items filtered by the primary filter, which triggers the query api.
      */
-    Model.prototype._getFilteredPrimaryWits = function() {
-        const filter = this.filterPrimary();
-
-        // The model is initialized explicitly after bindings are applied. Avoid
-        // starting the same Query and Backlog requests during the computed's
-        // eager first evaluation.
-        if (ko.computedContext.isInitial()) {
-            return;
-        }
+    Model.prototype._getFilteredPrimaryWits = function(filter) {
+        filter = filter && typeof(filter) === "object" ? filter : {};
         
         if (Array.isArray(filter.asOf) && (filter.asOf.length === 1) && (filter.asOf[0] instanceof Date)) {
             this.isLoading(true);

@@ -71,13 +71,23 @@ define([
 
         const [fromYear, fromMonth, fromDay] = (from || "").split("-").map(Number);
         const fromDate = new Date(Date.UTC(fromYear, fromMonth - 1, fromDay));
+        const nextValues = (fromDate + "") !== "Invalid Date" ? [fromDate] : [];
+        const currentValues = this.values();
+        const valuesMatch = nextValues.length === currentValues.length
+            && (!nextValues.length
+                || (currentValues[0] instanceof Date
+                    && currentValues[0].getTime() === nextValues[0].getTime()));
+
+        // Do not turn an untouched empty control into [null], or republish an
+        // unchanged date. Both writes unnecessarily notify the primary filter.
+        if (valuesMatch) {
+            return;
+        }
 
         if (this.valuesChanged) {
             this.valuesChanged.dispose();
         }
-        this.values([
-            (fromDate + "") !== "Invalid Date" ? fromDate : null
-        ]);
+        this.values(nextValues);
         this.valuesChanged = this.values.subscribe(this._valuesChanged.bind(this));
     };
 
