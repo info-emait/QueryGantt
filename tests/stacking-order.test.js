@@ -23,11 +23,13 @@ const filter = valueOf("z-index-filter");
 
 assert.ok(rootDropZone > floatingAxis, "the backlog root drop target should remain above the floating date axis");
 assert.ok(filter > rootDropZone, "filter callouts must remain above every fixed timeline layer");
-assert.ok(/&__filter\s*\{[^}]*position:\s*sticky;[^}]*top:\s*0;[^}]*z-index:\s*@z-index-filter;/s.test(tabLess),
-    "the sticky filter must establish the highest application stacking context");
+assert.ok(/&__sticky-region\s*\{[^}]*position:\s*sticky;[^}]*top:\s*0;[^}]*z-index:\s*@z-index-filter;/s.test(tabLess),
+    "the alert and filter region must establish the highest application stacking context");
+assert.ok(/class="querygantt-tab__sticky-region\b[^"]*"[^>]*>[\s\S]*?<my-message[\s\S]*?class="querygantt-tab__filter\b/s.test(tabHtml),
+    "alerts and filters should share one sticky region so variable alert height cannot cause overlap");
 assert.ok(/class="querygantt-tab__filter\b/.test(tabHtml), "the filter host must use the stacking-context class");
 assert.strictEqual(/querygantt-tab__filter[^>]*style="[^"]*z-index/.test(tabHtml), false,
-    "filter stacking should be owned by LESS rather than an inline magic number");
+    "filter stacking should be owned by the sticky region rather than an inline magic number");
 
 if (timelineLess.includes("&__floating-axis")) {
     assert.ok(/&__floating-axis\s*\{[^}]*z-index:\s*@z-index-timeline-floating-axis;/s.test(timelineLess),
