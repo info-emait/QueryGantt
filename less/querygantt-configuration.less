@@ -12,3 +12,35 @@ html, body {
 
 @import "bolt-textfield.less";
 @import "bolt-checkbox.less";
+
+.querygantt-configuration {
+    &__field-list {
+        min-height: 0;
+    }
+
+    &__field-row {
+        gap: rem(4px);
+        padding: rem(4px) 0;
+        border-bottom: 1px solid var(--component-border-color, rgba(0, 0, 0, .08));
+    }
+
+    &__field-handle,
+    &__field-remove {
+        flex: 0 0 rem(32px);
+        width: rem(32px);
+        height: rem(32px);
+        cursor: grab;
+
+        &[aria-grabbed="true"] {
+            background-color: rgba(var(--palette-primary-tint-30, 222, 236, 249), 1);
+        }
+    }
+
+    &__field-remove {
+        cursor: pointer;
+    }
+
+    &__add-field {
+        align-self: flex-start;
+    }
+}

@@ -10,6 +10,7 @@ define([
     "api/index",
     "api/WorkItemTracking/index",
     "services/data",
+    "services/field-columns",
     "services/icon",
     "my/templates/gantt",
     "my/components/legend",
@@ -18,7 +19,7 @@ define([
     "my/components/message",
     "my/components/filter",
     "my/components/zerodata"
-], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, dataService, iconService, ganttTemplate) {
+], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, dataService, fieldColumnsService, iconService, ganttTemplate) {
     //#region [ Fields ]
 
     const global = (function () { return this; })();
@@ -63,7 +64,8 @@ define([
         
         this.states = ko.computed(this._getStates, this);
         this.priorities = ko.observableArray(args.priorities);
-        this.fields = ko.observableArray(args.fields);
+        this._baseFields = Array.isArray(args.fields) ? args.fields.slice() : [];
+        this.fields = ko.observableArray(fieldColumnsService.mergeDefinitions(this._baseFields, [], this.showFields()));
 
         this.assigneesFilter = ko.observableArray();
         this.statesFilter = ko.observableArray();
@@ -127,11 +129,25 @@ define([
             })
             .then((token) => {
                 this.token = token;
-                return fetch(this.path + this.project.name + "/_apis/wit/workItemTypes", this._getFetchParams())
-                    .then((response) => response.ok ? response.json() : null);
+                const fieldRequest = typeof(client.getFields) === "function"
+                    ? client.getFields(this.project.id, (witApi.GetFieldsExpand || {}).ExtensionFields)
+                        .catch((error) => {
+                            console.warn("App : init() : Unable to load work item fields.");
+                            console.warn(error);
+                            return [];
+                        })
+                    : Promise.resolve([]);
+
+                return Promise.all([
+                    fetch(this.path + this.project.name + "/_apis/wit/workItemTypes", this._getFetchParams())
+                        .then((response) => response.ok ? response.json() : null),
+                    fieldRequest
+                ]);
             })
-            .then((types) => {
+            .then((response) => {
+                const types = response[0];
                 this.types(types.value);
+                this.fields(fieldColumnsService.mergeDefinitions(this._baseFields, response[1], this.showFields()));
                 
                 // https://learn.microsoft.com/en-us/azure/devops/boards/queries/wiql-syntax?view=azure-devops
                 // MODE (Recursive): Use for Tree queries ([System.Links.LinkType] = 'System.LinkTypes.Hierarchy-Forward').
@@ -189,6 +205,7 @@ define([
                         url: wit.url,
                         type: wit.fields["System.WorkItemType"],
                         title: wit.fields["System.Title"],
+                        fieldValues: Object.assign({}, wit.fields || {}),
                         description: wit.fields["System.Description"],
                         state: wit.fields["System.State"],
                         priority: wit.fields["Microsoft.VSTS.Common.Priority"],

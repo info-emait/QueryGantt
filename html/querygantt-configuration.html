@@ -8,14 +8,32 @@
     <body class="querygantt-configuration flex-column">
         <div class="flex-row flex-grow v-scroll-auto">
             <div class="flex-column full-width">
-                <label class="bolt-formitem-label body-m">Fields:</label>
-                <!-- ko foreach: fields -->
-                <label class="bolt-checkbox bolt-formitem-label body-m flex-row">
-                    <input type="checkbox" data-bind="checkedValue: value, checked: $parent.fieldsValue" />
-                    <span data-bind="text: name"></span>
-                </label>
-                <!-- /ko -->
-                <span class="bolt-formitem-message body-xs">Select which fields should be visible</span>
+                <label class="bolt-formitem-label body-m">Column options:</label>
+                <span class="bolt-formitem-message body-xs margin-bottom-8">Title and work-item hierarchy are always shown. Add, remove, or reorder the remaining columns.</span>
+                <div class="querygantt-configuration__field-list" data-bind="foreach: fieldRows">
+                    <div class="querygantt-configuration__field-row flex-row flex-center"
+                         data-bind="event: { dragover: $root.allowFieldDrop.bind($root), drop: $root.dropField.bind($root) }">
+                        <button class="querygantt-configuration__field-handle bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment fluent-icons-enabled"
+                                type="button" draggable="true" title="Drag to reorder. Press Space, then Up or Down, for keyboard reorder."
+                                data-bind="event: { dragstart: $root.startFieldDrag.bind($root), dragend: $root.endFieldDrag.bind($root), keydown: $root.onFieldKeyDown.bind($root) }, attr: { 'aria-grabbed': grabbed() ? 'true' : 'false', 'aria-label': 'Reorder column ' + ($index() + 1) }">
+                            <span aria-hidden="true" class="flex-noshrink fabric-icon ms-Icon--GripperDotsVertical"></span>
+                        </button>
+                        <div class="bolt-textfield bolt-textfield--select flex-row flex-center focus-treatment flex-grow">
+                            <select class="bolt-textfield-input flex-grow" tabindex="0"
+                                    data-bind="options: $root.fields, optionsText: 'name', optionsValue: 'value', value: value, event: { change: $root.changeField.bind($root) }, attr: { 'aria-label': 'Column ' + ($index() + 1) }"></select>
+                        </div>
+                        <button class="querygantt-configuration__field-remove bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment fluent-icons-enabled"
+                                type="button" title="Remove column" data-bind="click: $root.removeField.bind($root), attr: { 'aria-label': 'Remove column ' + ($index() + 1) }">
+                            <span aria-hidden="true" class="flex-noshrink fabric-icon ms-Icon--Cancel"></span>
+                        </button>
+                    </div>
+                </div>
+                <button class="querygantt-configuration__add-field bolt-button enabled subtle bolt-focus-treatment margin-top-8" role="button" tabindex="0" type="button"
+                        data-bind="click: addField, enable: fieldRows().length < fields().length">
+                    <span aria-hidden="true" class="fluent-icons-enabled fabric-icon ms-Icon--Add margin-right-8"></span>
+                    <span class="bolt-button-text body-m">Add a column</span>
+                </button>
+                <span class="bolt-formitem-message body-xs">Rollup columns are not supported.</span>
             </div>
         </div>
         <div class="flex-wrap bolt-button-group flex-row margin-top-16 margin-bottom-16 justify-end">
