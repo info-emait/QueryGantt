@@ -91,7 +91,8 @@ const backlogs = [
 ];
 const responses = {
     features: { workItems: [{ source: null, target: { id: 11 } }, { source: null, target: { id: 12 } }] },
-    stories: { workItems: [{ source: { id: 11 }, target: { id: 1 } }, { source: { id: 11 }, target: { id: 2 } }, { source: { id: 12 }, target: { id: 3 } }] }
+    stories: { workItems: [{ source: { id: 11 }, target: { id: 1 } }, { source: { id: 11 }, target: { id: 2 } }, { source: { id: 12 }, target: { id: 3 } }] },
+    hidden: { workItems: [{ source: { id: 1 }, target: { id: 31 } }, { source: { id: 1 }, target: { id: 32 } }] }
 };
 
 const makeModel = function () {
@@ -138,17 +139,30 @@ const makeModel = function () {
     const successfulWorkClient = workClient;
 
     const model = makeModel();
-    assert.strictEqual((await model._loadBacklogOrder(null)).size, 5, "current queries should load backlog order");
-    assert.deepStrictEqual(fetchedBacklogs, ["features", "stories"], "hidden backlog levels should not be fetched");
+    assert.strictEqual((await model._loadBacklogOrder(null)).size, 7, "current queries should load backlog order for every configured level");
+    assert.deepStrictEqual(fetchedBacklogs, ["features", "stories", "hidden"], "hidden Task backlogs must be fetched because native Backlogs still orders their work items");
     assert.strictEqual(model.backlogLoading(), false);
     assert.strictEqual(model.backlogAvailable(), true);
-    assert.strictEqual(model.backlogIndex().size, 5);
+    assert.strictEqual(model.backlogIndex().size, 7);
     assert.strictEqual(model.backlogIndex().orderField, "Microsoft.VSTS.Common.StackRank");
     assert.deepStrictEqual(JSON.parse(JSON.stringify(model.backlogIndex().teamFieldValues)), {
         referenceName: "System.AreaPath",
         defaultValue: "Project\\Team",
         values: [{ value: "Project\\Team", includeChildren: true }]
     }, "the current team's Area Paths should be retained for reorder validation");
+
+    const partialModel = makeModel();
+    workClient = Object.assign({}, successfulWorkClient, {
+        getBacklogLevelWorkItems: function (context, backlogId) {
+            return backlogId === "hidden"
+                ? Promise.reject(new Error("hidden level is unavailable"))
+                : Promise.resolve(responses[backlogId]);
+        }
+    });
+    assert.strictEqual((await partialModel._loadBacklogOrder(null)).size, 5,
+        "one unreadable hidden level should not discard usable backlog ordering from the other levels");
+    assert.strictEqual(partialModel.backlogAvailable(), true);
+    workClient = successfulWorkClient;
 
     fetchedBacklogs.length = 0;
     assert.strictEqual((await model._loadBacklogOrder("2026-01-01")).size, 0, "historical queries should not load current backlog state");

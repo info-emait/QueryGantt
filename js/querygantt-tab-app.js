@@ -961,7 +961,12 @@ define([
 
 
     /**
-     * Loads all visible backlog levels for the current team.
+     * Loads all configured backlog levels for the current team.
+     *
+     * Azure Boards can mark the Task backlog as hidden while still using its
+     * process Order field when it renders Tasks below requirement items. If
+     * that level is discarded here, those Tasks silently fall back to query
+     * order and no longer match the native Backlogs view.
      *
      * @param {string} asOf Historical query date, if any.
      * @param {boolean} preserveCurrent Keep the active index if refresh fails.
@@ -990,18 +995,33 @@ define([
                     : Promise.resolve(null)
             ])
             .then((response) => ({
-                backlogs: (response[0] || []).filter((backlog) => !backlog.isHidden),
+                backlogs: response[0] || [],
                 configuration: response[1],
                 teamFieldValues: response[2]
             }))
             .then(({ backlogs, configuration, teamFieldValues }) => Promise.all([
-                backlogs,
-                Promise.all(backlogs.map((backlog) => client.getBacklogLevelWorkItems(this._getTeamContext(), backlog.id))),
+                Promise.all(backlogs.map((backlog) => client.getBacklogLevelWorkItems(this._getTeamContext(), backlog.id)
+                    .then((items) => ({ backlog, items }))
+                    .catch((error) => {
+                        // A process can expose a disabled level that the team
+                        // endpoint cannot read. Keep every readable level so
+                        // one unavailable hidden backlog does not disable the
+                        // complete Backlog order mode.
+                        console.warn(`App : _loadBacklogOrder() : Unable to load backlog level ${backlog.id}.`);
+                        console.warn(error);
+                        return null;
+                    }))),
                 (((configuration || {}).backlogFields || {}).typeFields || {}).Order || null,
                 teamFieldValues
             ]))
             .then((response) => {
-                const index = backlogOrderService.createIndex(response[0], response[1], response[2], response[3]);
+                const levels = (response[0] || []).filter((entry) => entry !== null);
+                const index = backlogOrderService.createIndex(
+                    levels.map((entry) => entry.backlog),
+                    levels.map((entry) => entry.items),
+                    response[1],
+                    response[2]
+                );
                 if (requestId !== this._backlogRequestId) {
                     return preserveCurrent ? previousIndex : emptyIndex;
                 }
