@@ -635,7 +635,7 @@ define([
             assignedTo: wit.assignedTo,
             url: wit.url,
             treeLevel: wit.level,
-            content: wit.title.truncate(50, true),
+            content: wit.title,
             title: wit.title,
             type: wit.type,
             state: wit.state,

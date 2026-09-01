@@ -6,6 +6,8 @@
         font-weight: 400;
         color: var(--text-primary-color);
         display: flex;
+        width: 100%;
+        min-width: 0;
         height: rem(30px);
         line-height: rem(30px);
         align-items: center;
@@ -16,10 +18,14 @@
         }
 
         &__dividier {
-            flex: 1;
+            flex: 0 0 0;
         }
 
         &__title {
+            flex: 1 1 0;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: clip;
             cursor: pointer;
             white-space: nowrap;
             text-decoration: none;
@@ -69,6 +75,7 @@
         }
 
         &__content {
+            flex: 0 0 auto;
             color: var(--text-secondary-color);
             white-space: nowrap;
 
@@ -345,6 +352,9 @@
 
         &-inner {
             flex: 1;
+            box-sizing: border-box;
+            min-width: 0;
+            width: 100%;
         }
 
         &-tooltip {
