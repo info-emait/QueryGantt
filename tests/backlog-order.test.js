@@ -268,4 +268,33 @@ assert.deepStrictEqual(
     "completed items should generate the same reorder request as active items"
 );
 
+const mixedOrderIndex = service.createIndex([
+    { id: "tasks", rank: 0, workItemTypes: [{ name: "Task" }] }
+], [{ workItems: [
+    { source: { id: 50 }, target: { id: 101 } },
+    { source: { id: 50 }, target: { id: 102 } },
+    { source: { id: 50 }, target: { id: 103 } },
+    { source: { id: 50 }, target: { id: 104 } }
+] }], "Microsoft.VSTS.Common.StackRank");
+const mixedItems = [
+    Object.assign(item(101, "Task", "50/101", "50"), { parentId: 50, backlogOrderValue: 300 }),
+    Object.assign(item(102, "Task", "50/102", "50"), { parentId: 50, backlogOrderValue: null }),
+    Object.assign(item(103, "Task", "50/103", "50"), { parentId: 50, backlogOrderValue: 100 }),
+    Object.assign(item(104, "Task", "50/104", "50"), { parentId: 50, backlogOrderValue: null })
+];
+service.includeQueryItems(mixedOrderIndex, mixedItems);
+mixedItems.forEach((workItem) => {
+    workItem.backlogOrder = Object.assign({ eligible: true, targetEligible: true }, service.getEntry(mixedOrderIndex, workItem.id, workItem.type));
+});
+assert.deepStrictEqual(
+    JSON.parse(JSON.stringify(service.sortItems(mixedItems, mixedOrderIndex).map((workItem) => workItem.id))),
+    [103, 101, 102, 104],
+    "ranked siblings should be ordered by the process Order field before API-position fallbacks"
+);
+assert.deepStrictEqual(
+    JSON.parse(JSON.stringify(service.planMove(mixedOrderIndex, mixedItems[3], mixedItems[2], "after").operation)),
+    { ids: [104], parentId: 50, previousId: 103, nextId: 101 },
+    "reorder anchors should follow the same total sibling order shown in the Gantt"
+);
+
 console.log("backlog-order tests passed");

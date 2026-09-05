@@ -286,14 +286,11 @@ define([], () => {
                 if (leftEntry.backlogRank !== rightEntry.backlogRank) {
                     return rightEntry.backlogRank - leftEntry.backlogRank;
                 }
-                if (leftEntry.backlogId === rightEntry.backlogId
-                    && toNumber(leftEntry.orderValue) !== null
-                    && toNumber(rightEntry.orderValue) !== null
-                    && leftEntry.orderValue !== rightEntry.orderValue) {
-                    return leftEntry.orderValue - rightEntry.orderValue;
-                }
-                if (leftEntry.backlogId === rightEntry.backlogId && leftEntry.position !== rightEntry.position) {
-                    return leftEntry.position - rightEntry.position;
+                if (leftEntry.backlogId === rightEntry.backlogId) {
+                    const entryOrder = compareEntries(leftEntry, rightEntry);
+                    if (entryOrder !== 0) {
+                        return entryOrder;
+                    }
                 }
             }
 
@@ -495,10 +492,35 @@ define([], () => {
     };
 
 
+    /**
+     * Compares entries from one sibling group using the same total order that
+     * Azure Backlogs exposes. A process Order value is authoritative when it
+     * exists; entries without one follow the ranked entries in API order.
+     */
+    const compareEntries = function (left, right) {
+        const leftOrder = toNumber(left && left.orderValue);
+        const rightOrder = toNumber(right && right.orderValue);
+
+        if (leftOrder !== null && rightOrder !== null && leftOrder !== rightOrder) {
+            return leftOrder - rightOrder;
+        }
+        if (leftOrder !== null && rightOrder === null) {
+            return -1;
+        }
+        if (leftOrder === null && rightOrder !== null) {
+            return 1;
+        }
+        if (left.position !== right.position) {
+            return left.position - right.position;
+        }
+        return left.id - right.id;
+    };
+
+
     const getSiblings = function (index, backlogId, parentId, excludedId) {
         return ((index || {}).allEntries || [])
             .filter((entry) => (entry.backlogId === backlogId) && (entry.parentId === parentId) && (entry.id !== excludedId))
-            .sort((left, right) => left.position - right.position);
+            .sort(compareEntries);
     };
 
 
