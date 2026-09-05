@@ -20,6 +20,8 @@ assert.ok(tabApp.includes("fieldValues: Object.assign({}, wit.fields || {})"),
     "all returned work-item field values should reach the timeline model");
 assert.ok(tabHtml.includes("fieldDefinitions: fields"),
     "the timeline component should receive discovered field metadata");
+assert.ok(tabHtml.includes("ms-Icon--Repair") && tabHtml.includes(">Column Options</span>"),
+    "the settings entry point should match the native Backlogs wrench-and-label affordance");
 assert.ok(timeline.includes("showFields.filter((value) => value !== \"id\").forEach"),
     "configured columns should render in the persisted user order");
 assert.ok(timeline.includes("fieldColumnsService.escapeHtml"),
