@@ -9,7 +9,9 @@ define([
     "dom-to-image",
     "api/index",
     "api/WorkItemTracking/index",
+    "api/Work/index",
     "services/data",
+    "services/backlog-order",
     "services/icon",
     "my/templates/gantt",
     "my/components/legend",
@@ -18,7 +20,7 @@ define([
     "my/components/message",
     "my/components/filter",
     "my/components/zerodata"
-], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, dataService, iconService, ganttTemplate) {
+], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, workApi, dataService, backlogOrderService, iconService, ganttTemplate) {
     //#region [ Fields ]
 
     const global = (function () { return this; })();
@@ -41,10 +43,19 @@ define([
         this.version = args.version;
         this.user = args.user;
         this.project = args.project;
+        this.team = args.team;
         this.query = args.query;
+        this.manager = args.manager || null;
+        this.settingsKey = args.settingsKey || null;
+        this.settings = args.settings && (typeof(args.settings) === "object") && !Array.isArray(args.settings) ? args.settings : {};
+        this._settingsSavePromise = Promise.resolve();
+        this._queryStringUpdatePromise = Promise.resolve();
 
         this.token = null;
         this.path = null;
+        this._backlogRequestId = 0;
+        this._backlogReorderInFlight = false;
+        this._workItemFieldValues = {};
 
         this.zero = ko.observable(null);
 
@@ -58,6 +69,11 @@ define([
         this.witIds = ko.observableArray([]);
         this.relations = ko.observableArray([]);
         this.wits = ko.observableArray([]);
+        this.backlogIndex = ko.observable(backlogOrderService.empty());
+        this.backlogAvailable = ko.observable(false);
+        this.backlogLoading = ko.observable(false);
+        this.isHistorical = ko.observable(false);
+        this.orderMode = ko.observable(args.orderMode === backlogOrderService.backlogOrder ? backlogOrderService.backlogOrder : backlogOrderService.queryOrder);
         this.current = ko.observable(null);
         this.currentId = ko.observable(null);
         
@@ -74,8 +90,15 @@ define([
 
         this.filterPrimary = ko.observable({});
         this.filter = ko.observable({});
-        this.filteredPrimaryWits = ko.computed(this._getFilteredPrimaryWits, this);
+        // Primary-filter changes trigger an API reload, so observe them with a
+        // subscription rather than a computed. A computed would also track
+        // observables read synchronously by init() (such as backlogIndex), and
+        // those updates could recursively start another reload.
+        this.filteredPrimaryWits = this.filterPrimary.subscribe(this._getFilteredPrimaryWits, this);
         this.filteredWits = ko.computed(this._getFilteredWits, this);
+        this.isBacklogOrder = ko.computed(() => (this.orderMode() === backlogOrderService.backlogOrder) && this.backlogAvailable());
+        this.orderedWits = ko.computed(this._getOrderedWits, this);
+        this.backlogOrderTitle = ko.computed(this._getBacklogOrderTitle, this);
 
         this.isTotalEffortVisible = ko.computed(() => this.showFields().includes("effort"));  
         this.isTotalRemainingWorkVisible = ko.computed(() => this.showFields().includes("remainingWork"));
@@ -105,6 +128,7 @@ define([
         this.getAreasFilter = ko.computed(this._getAreasFilter, this);
         this.getParentsFilter = ko.computed(this._getParentsFilter, this);
         this.showDetail = ko.computed(this._showDetail, this);
+        this._orderModeSubscribe = this.orderMode.subscribe(this._onOrderModeChanged, this);
     };
 
     //#endregion
@@ -120,6 +144,11 @@ define([
     Model.prototype.init = function (asOf = null) {
         const client = api.getClient(witApi.WorkItemTrackingRestClient);
         let queryAsOf = null;
+        const historical = asOf !== null;
+        this._workItemFieldValues = {};
+        this.isHistorical(historical);
+        const backlogPromise = this._loadBacklogOrder(asOf);
+        const backlogRequestId = this._backlogRequestId;
 
         return client._options.rootPath.then((path) => {
                 this.path = path;
@@ -181,8 +210,15 @@ define([
                 
                 // Normalize results
                 wits.forEach((wit) => {
+                    this._workItemFieldValues[wit.id] = Object.keys(wit.fields || {}).reduce((values, name) => {
+                        if (typeof(wit.fields[name]) === "number" && Number.isFinite(wit.fields[name])) {
+                            values[name] = wit.fields[name];
+                        }
+                        return values;
+                    }, {});
                     var w = {
                         id: wit.fields["System.Id"],
+                        originalId: wit.fields["System.Id"],
                         parentId: wit.fields["System.Parent"] || null,
                         rev: wit.fields["System.Rev"],
                         project: wit.fields["System.TeamProject"],
@@ -205,6 +241,7 @@ define([
                         completedWork: (wit.fields["Microsoft.VSTS.Scheduling.CompletedWork"] || 0),
                         remainingWork: (wit.fields["Microsoft.VSTS.Scheduling.RemainingWork"] || 0),
                         effort: (wit.fields["Microsoft.VSTS.Scheduling.Effort"] || 0),
+                        backlogOrderValue: null,
                         tags: (wit.fields["System.Tags"] || "").split("; ").filter((t) => (t || "").length),
                         attachments: (wit.relations || []).filter((a) => a.rel === "AttachedFile"),
                         dependencies: (wit.relations || []).filter((a) => (a.rel === "System.LinkTypes.Dependency-Forward") && ((a.attributes || {}).name === "Successor")).map((r) => parseInt(r.url.split("/").pop()))
@@ -249,9 +286,18 @@ define([
                 return this._markCompletedWits(wits);
             })
             .then((wits) => {
-                // Get unique parent ids
-                let parentIds = [...new Set(wits.map((w) => w.parentId).filter((p) => p))];
+                // Reuse parent details already returned by a tree query and
+                // fetch only parents that are outside the result set.
+                let parentMap = {};
+                wits.forEach((w) => parentMap[w.originalId] = { title: w.title, type: w.type });
+                const applyParentDetails = () => wits.forEach((w) => {
+                    const parent = parentMap[w.parentId] || {};
+                    w.parentTitle = parent.title || "";
+                    w.parentType = parent.type || null;
+                });
+                let parentIds = [...new Set(wits.map((w) => w.parentId).filter((p) => p && !parentMap[p]))];
                 if (!parentIds.length) {
+                    applyParentDetails();
                     return wits;
                 }
 
@@ -268,13 +314,27 @@ define([
                 return Promise.all(xhrs)
                     .then((chunks) => Array.prototype.concat.apply([], chunks))
                     .then((parents) => {
-                        let parentIdTitleMap = {};
-                        parents.forEach((p) => parentIdTitleMap[p.id] = p.fields["System.Title"]);
-                        wits.forEach((w) => w.parentTitle = parentIdTitleMap[w.parentId] || "");
+                        parents.forEach((p) => parentMap[p.id] = {
+                            title: p.fields["System.Title"],
+                            type: p.fields["System.WorkItemType"]
+                        });
+                        applyParentDetails();
                         return wits;
                     });
             })
             .then((wits) => {
+                const decorated = this._decorateBacklogItems(wits, this.backlogIndex(), historical);
+                this.wits(decorated);
+
+                // Backlog APIs can be much slower than WIQL and work-item
+                // retrieval. Render query results first, then activate backlog
+                // ordering as soon as the independent request completes.
+                backlogPromise.then((index) => {
+                    if (!historical && backlogRequestId === this._backlogRequestId) {
+                        this._activateBacklogIndex(index);
+                    }
+                });
+
                 let icons = this.types().map((t) => t.icon.url);
                 let other = this.typesOther() || [];
                 if (other.length) {
@@ -287,8 +347,12 @@ define([
                     let tmp = {};
                     response.forEach((svg, index) => tmp[icons[index]] = svg);
                     this.icons(tmp);
-                    this.wits(wits);
+                }).catch((error) => {
+                    console.warn("App : init() : Unable to load work item icons.");
+                    console.warn(error);
                 });
+
+                return decorated;
             });
     };
 
@@ -369,6 +433,219 @@ define([
 
 
     /**
+     * Adds process-aware backlog metadata to normalized query work items.
+     * Raw fields are retained by the model so a backlog request that finishes
+     * after first paint can still read the process-specific Order field.
+     */
+    Model.prototype._decorateBacklogItems = function (items, index, historical) {
+        index = index || backlogOrderService.empty();
+        historical = typeof(historical) === "boolean" ? historical : this.isHistorical();
+        const results = (items || []).map((source) => Object.assign({}, source));
+
+        results.forEach((wit) => {
+            const fields = this._workItemFieldValues[wit.originalId] || {};
+            wit.backlogOrderValue = index.orderField ? fields[index.orderField] : wit.backlogOrderValue;
+        });
+        backlogOrderService.includeQueryItems(index, results);
+
+        const duplicateCount = {};
+        results.forEach((wit) => duplicateCount[wit.originalId] = (duplicateCount[wit.originalId] || 0) + 1);
+        results.forEach((wit) => {
+            const entry = backlogOrderService.getEntry(index, wit.originalId, wit.type);
+            const targetEligible = !historical && (wit.project === this.project.name) && (duplicateCount[wit.originalId] === 1);
+            wit.backlogOrder = entry ? {
+                eligible: targetEligible && entry.teamOwned !== false,
+                targetEligible: targetEligible,
+                parentId: entry.parentId,
+                backlogId: entry.backlogId,
+                backlogRank: entry.backlogRank,
+                position: entry.position,
+                parentValid: backlogOrderService.isValidParent(index, entry, entry.parentId)
+            } : {
+                eligible: false,
+                targetEligible: false
+            };
+        });
+
+        return results;
+    };
+
+
+    /**
+     * Activates a freshly loaded backlog index without re-running the query.
+     */
+    Model.prototype._activateBacklogIndex = function (index) {
+        index = index || backlogOrderService.empty();
+        if (this.isHistorical()) {
+            return;
+        }
+
+        this.backlogIndex(index);
+        const available = Object.keys(index.levels || {}).length > 0;
+        this.backlogAvailable(available);
+        if (available && this.message() === "Backlog order is unavailable for the current team.") {
+            this.message("");
+        }
+        if (this.wits().length) {
+            this.wits(this._decorateBacklogItems(this.wits(), index, false));
+        }
+    };
+
+
+    /**
+     * Reorders a work item in the current team's backlog.
+     *
+     * @param {object} move Drag and drop description.
+     */
+    Model.prototype.reorderWit = function (move) {
+        if (this._backlogReorderInFlight) {
+            this.message("Please wait for the current backlog move to finish.");
+            return Promise.resolve(false);
+        }
+
+        const findItems = () => ({
+            dragged: this.wits().find((wit) => (wit.id + "") === (move.draggedId + "")),
+            target: move.targetId === null || move.targetId === undefined
+                ? null
+                : this.wits().find((wit) => (wit.id + "") === (move.targetId + ""))
+        });
+        const initialItems = findItems();
+        const plan = backlogOrderService.planMove(this.backlogIndex(), initialItems.dragged, initialItems.target, move.position);
+
+        if (!plan.valid) {
+            this.message(plan.reason);
+            return Promise.resolve(false);
+        }
+
+        this._backlogReorderInFlight = true;
+        const client = api.getClient(workApi.WorkRestClient);
+        const fail = (failedPlan, error) => {
+            const detail = this._getBacklogErrorMessage(error);
+            this.message(`Unable to reorder work item #${failedPlan.operation.ids[0]}.${detail ? " " + detail : ""}`);
+            console.warn(`App : reorderWit() : Unable to reorder work item #${failedPlan.operation.ids[0]}.`);
+            console.warn(error);
+            return false;
+        };
+        const execute = (currentPlan, items, canRetry) => Promise.resolve()
+            .then(() => client.reorderBacklogWorkItems(currentPlan.operation, this._getTeamContext()))
+            .then(() => {
+                try {
+                    this._applyBacklogMove(currentPlan, items.dragged, items.target);
+                    return true;
+                }
+                catch (error) {
+                    this.message(`Work item #${currentPlan.operation.ids[0]} was reordered, but the local view could not be updated. Please refresh the data.`);
+                    console.warn(`App : reorderWit() : Unable to apply reordered work item #${currentPlan.operation.ids[0]} locally.`);
+                    console.warn(error);
+                    return false;
+                }
+            })
+            .catch((error) => {
+                if (!canRetry || !this._isRetryableBacklogError(error)) {
+                    return fail(currentPlan, error);
+                }
+
+                // TF400486 commonly means the local sibling anchors became
+                // stale. Refresh only the backlog index and retry the exact
+                // user action once; deterministic hierarchy failures are not
+                // retried.
+                const previousIndex = this.backlogIndex();
+                return this._loadBacklogOrder(null, true).then((freshIndex) => {
+                    if (freshIndex === previousIndex || !Object.keys((freshIndex || {}).levels || {}).length) {
+                        return fail(currentPlan, error);
+                    }
+                    this._activateBacklogIndex(freshIndex);
+                    const freshItems = findItems();
+                    const retryPlan = backlogOrderService.planMove(freshIndex, freshItems.dragged, freshItems.target, move.position);
+                    if (!retryPlan.valid) {
+                        this.message(retryPlan.reason);
+                        return false;
+                    }
+                    return execute(retryPlan, freshItems, false);
+                });
+            });
+
+        return execute(plan, initialItems, true).then(
+            (result) => {
+                this._backlogReorderInFlight = false;
+                return result;
+            },
+            (error) => {
+                this._backlogReorderInFlight = false;
+                return fail(plan, error);
+            }
+        );
+    };
+
+
+    /**
+     * Updates query hierarchy and backlog metadata after a successful move.
+     */
+    Model.prototype._applyBacklogMove = function (plan, dragged, target) {
+        const index = backlogOrderService.applyMove(this.backlogIndex(), plan.operation);
+        const oldPath = (dragged.path === null || typeof(dragged.path) === "undefined") ? dragged.id + "" : dragged.path + "";
+        let parentPath = "";
+        if (plan.position === "inside" && target) {
+            parentPath = target.path + "";
+        }
+        else if ((plan.position === "before" || plan.position === "after") && target && target.parent) {
+            parentPath = target.parent + "";
+        }
+        const newPath = parentPath ? `${parentPath}/${dragged.originalId}` : dragged.originalId + "";
+        const parent = parentPath ? this.wits().find((wit) => (wit.path + "") === parentPath) : null;
+
+        const updated = this.wits().map((source) => {
+            const wit = Object.assign({}, source);
+            const path = (wit.path === null || typeof(wit.path) === "undefined") ? "" : wit.path + "";
+            if (path === oldPath || path.indexOf(oldPath + "/") === 0) {
+                wit.path = newPath + path.substring(oldPath.length);
+                const separator = wit.path.lastIndexOf("/");
+                wit.parent = separator >= 0 ? wit.path.substring(0, separator) : "";
+                wit.level = wit.path.split("/").length;
+            }
+            if ((wit.id + "") === (dragged.id + "")) {
+                wit.parentId = plan.operation.parentId || null;
+                wit.parentTitle = parent ? parent.title : "";
+            }
+
+            const entry = backlogOrderService.getEntry(index, wit.originalId, wit.type);
+            const targetEligible = Boolean(wit.backlogOrder && wit.backlogOrder.targetEligible !== false);
+            wit.backlogOrder = entry ? Object.assign({}, wit.backlogOrder || {}, {
+                eligible: targetEligible && entry.teamOwned !== false,
+                targetEligible: targetEligible,
+                parentId: entry.parentId,
+                backlogId: entry.backlogId,
+                backlogRank: entry.backlogRank,
+                position: entry.position,
+                parentValid: backlogOrderService.isValidParent(index, entry, entry.parentId)
+            }) : { eligible: false, targetEligible: false };
+            wit.backlogOrderValue = entry && Number.isFinite(Number(entry.orderValue)) ? Number(entry.orderValue) : wit.backlogOrderValue;
+            return wit;
+        });
+
+        const childCounts = {};
+        updated.forEach((wit) => {
+            const key = wit.parent + "";
+            childCounts[key] = childCounts[key] || { all: 0, completed: 0 };
+            childCounts[key].all += 1;
+            childCounts[key].completed += wit.isCompleted ? 1 : 0;
+        });
+        updated.forEach((wit) => {
+            const counts = childCounts[wit.path + ""] || { all: 0, completed: 0 };
+            wit.childCount = counts.all;
+            wit.childCompletedCount = counts.completed;
+        });
+
+        this.backlogIndex(index);
+        this.wits(updated);
+        if (this.current && typeof(this.current) === "function" && this.current()) {
+            const currentId = this.current().id;
+            this.current(updated.find((wit) => (wit.id + "") === (currentId + "")) || null);
+        }
+    };
+
+
+    /**
      * Downloads the timeline as an png image.
      */
     Model.prototype.downloadImage = function () {
@@ -402,9 +679,12 @@ define([
             .then((workbook) => {
                 // Get the right sheet
                 let sheet = workbook.sheet("GANTT");
+                const wits = this.isBacklogOrder()
+                    ? backlogOrderService.sortItems(this.wits(), this.backlogIndex())
+                    : this.wits();
 
                 // Set output data
-                this.wits().forEach((wit, i) => {
+                wits.forEach((wit, i) => {
                     sheet.cell(`B${i + 8}`).value(wit.id);
                     sheet.cell(`C${i + 8}`).value(wit.level);
                     sheet.cell(`D${i + 8}`).value(wit.type);
@@ -557,7 +837,7 @@ define([
         this.sortColumns([]);
         this.types([]);
 
-        this.init().then(() => this.isLoading(false));
+        return this.init().then(() => this.isLoading(false));
     };
 
 
@@ -579,6 +859,7 @@ define([
                 onClose: (result = {}) => {
                     if (Array.isArray(result.fieldsValue)) {
                         this.showFields(result.fieldsValue);
+                        this.settings.showFields = result.fieldsValue;
                     }
                 }
             });
@@ -609,6 +890,9 @@ define([
         this.states.dispose();
         this.filteredPrimaryWits.dispose();
         this.filteredWits.dispose();
+        this.orderedWits.dispose();
+        this.isBacklogOrder.dispose();
+        this.backlogOrderTitle.dispose();
         this.updateQueryString.dispose();
         this.getAssigneesFilter.dispose();
         this.getStatesFilter.dispose();
@@ -619,6 +903,7 @@ define([
         this.isTotalEffortVisible.dispose();
         this.isTotalRemainingWorkVisible.dispose();
         this.isTotalCompletedWorkVisible.dispose();
+        this._orderModeSubscribe.dispose();
     };
 
     //#endregion
@@ -636,6 +921,131 @@ define([
                 "Authorization": "Bearer " + this.token
             }
         };
+    };
+
+
+    /**
+     * Returns the current Azure DevOps team context in the format expected by the Work API.
+     */
+    Model.prototype._getTeamContext = function () {
+        return {
+            projectId: this.project.id,
+            teamId: this.team && this.team.id
+        };
+    };
+
+
+    /**
+     * Extracts an actionable Azure DevOps message without exposing a stack.
+     */
+    Model.prototype._getBacklogErrorMessage = function (error) {
+        const message = error && (error.message || ((error.serverError || {}).message));
+        if (!message || typeof(message) !== "string") {
+            return "";
+        }
+        return message.replace(/\s+/g, " ").trim();
+    };
+
+
+    /**
+     * Returns whether Azure reported a stale backlog snapshot. These failures
+     * can succeed after rebuilding parent and sibling anchors; hierarchy and
+     * category validation errors are deterministic and must remain visible.
+     */
+    Model.prototype._isRetryableBacklogError = function (error) {
+        const message = this._getBacklogErrorMessage(error).toLowerCase();
+        return message.indexOf("tf400486") >= 0
+            || message.indexOf("another user has modified") >= 0
+            || message.indexOf("outside of its immediate parent") >= 0;
+    };
+
+
+    /**
+     * Loads all configured backlog levels for the current team.
+     *
+     * Azure Boards can mark the Task backlog as hidden while still using its
+     * process Order field when it renders Tasks below requirement items. If
+     * that level is discarded here, those Tasks silently fall back to query
+     * order and no longer match the native Backlogs view.
+     *
+     * @param {string} asOf Historical query date, if any.
+     * @param {boolean} preserveCurrent Keep the active index if refresh fails.
+     */
+    Model.prototype._loadBacklogOrder = function (asOf, preserveCurrent = false) {
+        const requestId = ++this._backlogRequestId;
+        const emptyIndex = backlogOrderService.empty();
+        const previousIndex = this.backlogIndex();
+        if (!preserveCurrent) {
+            this.backlogAvailable(false);
+            this.backlogIndex(emptyIndex);
+        }
+
+        if (asOf !== null || !this.team || !this.team.id) {
+            this.backlogLoading(false);
+            return Promise.resolve(emptyIndex);
+        }
+
+        this.backlogLoading(true);
+        const client = api.getClient(workApi.WorkRestClient);
+        return Promise.all([
+                client.getBacklogs(this._getTeamContext()),
+                client.getBacklogConfigurations(this._getTeamContext()).catch(() => null),
+                typeof(client.getTeamFieldValues) === "function"
+                    ? client.getTeamFieldValues(this._getTeamContext()).catch(() => null)
+                    : Promise.resolve(null)
+            ])
+            .then((response) => ({
+                backlogs: response[0] || [],
+                configuration: response[1],
+                teamFieldValues: response[2]
+            }))
+            .then(({ backlogs, configuration, teamFieldValues }) => Promise.all([
+                Promise.all(backlogs.map((backlog) => client.getBacklogLevelWorkItems(this._getTeamContext(), backlog.id)
+                    .then((items) => ({ backlog, items }))
+                    .catch((error) => {
+                        // A process can expose a disabled level that the team
+                        // endpoint cannot read. Keep every readable level so
+                        // one unavailable hidden backlog does not disable the
+                        // complete Backlog order mode.
+                        console.warn(`App : _loadBacklogOrder() : Unable to load backlog level ${backlog.id}.`);
+                        console.warn(error);
+                        return null;
+                    }))),
+                (((configuration || {}).backlogFields || {}).typeFields || {}).Order || null,
+                teamFieldValues
+            ]))
+            .then((response) => {
+                const levels = (response[0] || []).filter((entry) => entry !== null);
+                const index = backlogOrderService.createIndex(
+                    levels.map((entry) => entry.backlog),
+                    levels.map((entry) => entry.items),
+                    response[1],
+                    response[2]
+                );
+                if (requestId !== this._backlogRequestId) {
+                    return preserveCurrent ? previousIndex : emptyIndex;
+                }
+                this.backlogIndex(index);
+                this.backlogAvailable(Object.keys(index.levels).length > 0);
+                this.backlogLoading(false);
+                return index;
+            })
+            .catch((error) => {
+                if (requestId !== this._backlogRequestId) {
+                    return preserveCurrent ? previousIndex : emptyIndex;
+                }
+                this.backlogLoading(false);
+                if (!preserveCurrent) {
+                    this.backlogAvailable(false);
+                    this.backlogIndex(emptyIndex);
+                }
+                if (this.orderMode() === backlogOrderService.backlogOrder) {
+                    this.message("Backlog order is unavailable for the current team.");
+                }
+                console.warn("App : _loadBacklogOrder() : Unable to load backlog order.");
+                console.warn(error);
+                return preserveCurrent ? previousIndex : emptyIndex;
+            });
     };
 
 
@@ -799,8 +1209,8 @@ define([
     /**
      * Gets the work items filtered by the primary filter, which triggers the query api.
      */
-    Model.prototype._getFilteredPrimaryWits = function() {
-        const filter = this.filterPrimary();
+    Model.prototype._getFilteredPrimaryWits = function(filter) {
+        filter = filter && typeof(filter) === "object" ? filter : {};
         
         if (Array.isArray(filter.asOf) && (filter.asOf.length === 1) && (filter.asOf[0] instanceof Date)) {
             this.isLoading(true);
@@ -879,6 +1289,42 @@ define([
 
         return items;
     };
+
+
+    /**
+     * Gets the filtered work items in the selected display order.
+     */
+    Model.prototype._getOrderedWits = function () {
+        const items = this.filteredWits();
+        if (!this.isBacklogOrder()) {
+            return items;
+        }
+
+        return backlogOrderService.sortItems(items, this.backlogIndex());
+    };
+
+
+    /**
+     * Gets a tooltip describing backlog-order availability and drag support.
+     */
+    Model.prototype._getBacklogOrderTitle = function () {
+        if (this.backlogLoading()) {
+            return "Loading the current team's backlog order.";
+        }
+        if (this.isHistorical()) {
+            return "Backlog order is unavailable for historical query results.";
+        }
+        if (!this.team || !this.team.id) {
+            return "Backlog order requires an Azure DevOps team context.";
+        }
+        if (!this.backlogAvailable()) {
+            return "No backlog order is available for the current team.";
+        }
+
+        const items = this.wits();
+        const eligible = items.filter((wit) => wit.backlogOrder && wit.backlogOrder.eligible).length;
+        return `${this.team.name} backlog order. ${eligible} of ${items.length} query items can be dragged.`;
+    };
     
 
     /**
@@ -902,25 +1348,103 @@ define([
      * Updates query string to the actual values.
      */
     Model.prototype._updateQueryString = function() {
-        const showFields = this.showFields();
+        const showFields = this.showFields().join(",");
         
         if (ko.computedContext.isInitial()) {
-            return;
+            return Promise.resolve(false);
         }
 
-        sdk.getService(api.CommonServiceIds.HostNavigationService)
+        // Azure DevOps may reload the extension iframe after setQueryParams,
+        // including when the supplied value is identical to the current URL.
+        // Serialize writes and skip the no-op case so the model's initial
+        // Knockout notification cannot turn into a reload loop.
+        this._queryStringUpdatePromise = this._queryStringUpdatePromise
+            .catch(() => false)
+            .then(() => sdk.getService(api.CommonServiceIds.HostNavigationService))
             .then((host) => Promise.all([
-                host, 
+                host,
                 host.getQueryParams()
             ]))
-            .then((response) => ({ 
-                host: response[0], 
-                state: response[1]
+            .then((response) => ({
+                host: response[0],
+                state: response[1] || {}
             }))
             .then(({ host, state }) => {
-                state.showFields = showFields.join(",");
-                host.setQueryParams(state);
+                if ((state.showFields || "") === showFields) {
+                    return false;
+                }
+
+                const nextState = Object.assign({}, state, { showFields: showFields });
+                return Promise.resolve(host.setQueryParams(nextState)).then(() => true);
+            })
+            .catch((error) => {
+                console.warn("App : _updateQueryString() : Unable to update query parameters.");
+                console.warn(error);
+                return false;
             });
+
+        return this._queryStringUpdatePromise;
+    };
+
+
+    /**
+     * Persists the selected display order in the existing per-user/project settings.
+     *
+     * @param {string} value Selected order mode.
+     */
+    Model.prototype._saveOrderMode = function(value) {
+        if (!this.manager || !this.settingsKey) {
+            return Promise.resolve(false);
+        }
+
+        this._settingsSavePromise = this._settingsSavePromise
+            .catch(() => false)
+            .then(() => this.manager.getValue(this.settingsKey, { scopeType: "User" }))
+            .then((stored) => {
+                let settings = this.settings;
+                try {
+                    if (stored) {
+                        const parsed = JSON.parse(stored);
+                        settings = parsed && (typeof(parsed) === "object") && !Array.isArray(parsed) ? parsed : {};
+                    }
+                }
+                catch (error) {
+                }
+                settings.orderMode = value;
+                this.settings = settings;
+                return this.manager.setValue(this.settingsKey, JSON.stringify(settings), { scopeType: "User" });
+            })
+            .then(() => true)
+            .catch((error) => {
+                console.warn("App : _saveOrderMode() : Unable to save display order.");
+                console.warn(error);
+                return false;
+            });
+
+        return this._settingsSavePromise;
+    };
+
+
+    /**
+     * Persists the selected order and retries backlog discovery when a prior
+     * transient failure left a remembered Backlog order marked Unavailable.
+     */
+    Model.prototype._onOrderModeChanged = function(value) {
+        const save = this._saveOrderMode(value);
+        if (value !== backlogOrderService.backlogOrder) {
+            if (this.message() === "Backlog order is unavailable for the current team.") {
+                this.message("");
+            }
+            return save;
+        }
+        if (this.isHistorical() || this.backlogAvailable() || this.backlogLoading()) {
+            return save;
+        }
+
+        return Promise.all([
+            save,
+            this._loadBacklogOrder(null, true).then((index) => this._activateBacklogIndex(index))
+        ]);
     };
 
 
@@ -996,29 +1520,44 @@ define([
                 dataService.getManager()
             ]))
             .then((response) => ({ project: response[0], host: response[1], manager: response[2] }))
-            .then(({ project, host, manager }) => Promise.all([
-                project.getProject(),
+            .then(({ project, host, manager }) => project.getProject().then((currentProject) => Promise.all([
+                currentProject,
                 host.getQueryParams(),
-                project.getProject().then((p) => manager.getValue(`gantt_${p.id}`, { scopeType: "User" }))
-            ]))
-            .then((response) => ({ project: response[0], state: response[1], settings: response[2] }))
-            .then(({ project, state, settings }) => {
+                manager.getValue(`gantt_${currentProject.id}`, { scopeType: "User" }),
+                manager
+            ])))
+            .then((response) => ({ project: response[0], state: response[1], settings: response[2], manager: response[3] }))
+            .then(({ project, state, settings, manager }) => {
                 let showFields = null;
+                let orderMode = backlogOrderService.queryOrder;
+                let parsedSettings = {};
+                let team = null;
+
+                try {
+                    team = sdk.getTeamContext();
+                }
+                catch (error) {
+                }
                 
                 // Read some initial data from settings first
                 if (settings) {
                     try {
-                        const parsedSettings = JSON.parse(settings);
+                        const value = JSON.parse(settings);
+                        parsedSettings = value && (typeof(value) === "object") && !Array.isArray(value) ? value : {};
                         if (parsedSettings.showFields) {
                             showFields = parsedSettings.showFields;
                         }
+                        if (parsedSettings.orderMode === backlogOrderService.backlogOrder) {
+                            orderMode = backlogOrderService.backlogOrder;
+                        }
                     } 
                     catch (error) {
+                        parsedSettings = {};
                     }
                 }
 
                 // Read some initial data from query string
-                if (state["showFields"]) {
+                if (!Array.isArray(showFields) && state["showFields"]) {
                     showFields = state["showFields"].split(",").filter((f) => f.length > 0);
                 }
 
@@ -1029,8 +1568,13 @@ define([
                     fields: cnf.fields,
                     user: sdk.getUser().displayName,
                     project: project,
+                    team,
                     query: sdk.getConfiguration().query,
-                    showFields
+                    showFields,
+                    orderMode,
+                    manager,
+                    settings: parsedSettings,
+                    settingsKey: `gantt_${project.id}`
                 });
                 console.debug("QueryGanttTabApp : ready() : %o", model);
                 

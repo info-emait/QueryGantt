@@ -22,8 +22,11 @@ define([
     let Timeline = function (args = {}) {
         console.debug("Timeline()");
 
-        this.node = args.element.firstChild;
+        this.root = args.element.firstChild;
+        this.node = this.root.querySelector(".my-timeline__chart");
+        this.rootDropZone = this.root.querySelector(".my-timeline__root-drop-zone");
         this.items = ko.isObservable(args.items) ? args.items : ko.observable(args.items || []);
+        this.backlogOrder = ko.isObservable(args.backlogOrder) ? args.backlogOrder : ko.observable(Boolean(args.backlogOrder));
         this.states = ko.isObservable(args.states) ? args.states : ko.observable(args.states || []);
         this.priorities = ko.isObservable(args.priorities) ? args.priorities : ko.observable(args.priorities || []);
         this.types = ko.isObservable(args.types) ? args.types : ko.observable(args.types || []);
@@ -39,6 +42,14 @@ define([
         this.groups = null;
         this.records = null;
         this.arrows = null;
+        this._renderContext = null;
+        this._dependenciesKey = null;
+        this.scrollContainer = typeof(this.root.closest) === "function" ? this.root.closest(".v-scroll-auto") : null;
+        this._backlogDraggedId = null;
+        this._backlogPointerId = null;
+        this._backlogPointerHandle = null;
+        this._onBacklogPointerMoveBound = this._onBacklogPointerMove.bind(this);
+        this._onBacklogPointerUpBound = this._onBacklogPointerUp.bind(this);
 
         // Callbacks
         this.callbacks = args.callbacks;
@@ -70,48 +81,90 @@ define([
 
 
     /**
-     * Expand all.
+     * Expands one visible hierarchy level.
      */
     Timeline.prototype.expand = function () {
         if (!this.timeline || !this.groups) {
             return;
         }
 
+        const groups = [];
         this.groups.forEach((g) => {
-            this.groups.update({
-                id: g.id,
-                visible: true,
-                showNested: true
+            groups.push(g);
+        });
+        const collapsed = groups.filter((group) => group.visible !== false
+            && group.nestedGroups instanceof Array
+            && group.nestedGroups.length
+            && group.showNested === false);
+        if (!collapsed.length) {
+            return;
+        }
+
+        const level = Math.min.apply(null, collapsed.map((group) => group.treeLevel || 1));
+        const updates = new Map();
+        collapsed.filter((group) => (group.treeLevel || 1) === level).forEach((group) => {
+            updates.set(group.id, { id: group.id, showNested: true });
+            group.nestedGroups.forEach((id) => {
+                const child = this.groups.get(id);
+                if (!child) {
+                    return;
+                }
+                const update = { id: child.id, visible: true };
+                if (child.nestedGroups instanceof Array && child.nestedGroups.length) {
+                    update.showNested = false;
+                }
+                updates.set(child.id, update);
             });
         });
+        if (updates.size) {
+            this.groups.update(Array.from(updates.values()));
+        }
     };
 
 
     /**
-     * Collapse all.
+     * Collapses one visible hierarchy level.
      */
     Timeline.prototype.collapse = function () {
         if (!this.timeline || !this.groups) {
             return;
         }
 
+        const groups = [];
         this.groups.forEach((g) => {
-            // Hide groups with nested groups
-            if (g.nestedGroups instanceof Array) {
-                this.groups.update({
-                    id: g.id,
-                    showNested: false
-                });
-            }
-
-            // Hide nested groups
-            if (g.treeLevel > 1) {
-                this.groups.update({
-                    id: g.id,
-                    visible: false
-                });
-            }
+            groups.push(g);
         });
+        const expanded = groups.filter((group) => group.visible !== false
+            && group.nestedGroups instanceof Array
+            && group.nestedGroups.length
+            && group.showNested !== false);
+        if (!expanded.length) {
+            return;
+        }
+
+        const level = Math.max.apply(null, expanded.map((group) => group.treeLevel || 1));
+        const updates = new Map();
+        const hideDescendants = (group) => {
+            (group.nestedGroups || []).forEach((id) => {
+                const child = this.groups.get(id);
+                if (!child) {
+                    return;
+                }
+                const update = { id: child.id, visible: false };
+                if (child.nestedGroups instanceof Array && child.nestedGroups.length) {
+                    update.showNested = false;
+                    hideDescendants(child);
+                }
+                updates.set(child.id, update);
+            });
+        };
+        expanded.filter((group) => (group.treeLevel || 1) === level).forEach((group) => {
+            updates.set(group.id, { id: group.id, showNested: false });
+            hideDescendants(group);
+        });
+        if (updates.size) {
+            this.groups.update(Array.from(updates.values()));
+        }
     };
 
 
@@ -265,6 +318,7 @@ define([
 
         this._onItemsChangedSubscribe.dispose();
         this._onSelectedIdChangedSubscribe.dispose();
+        this._clearBacklogDrag();
     };
 
     //#endregion
@@ -329,6 +383,250 @@ define([
         this.timeline = null;
         this.groups = null;
         this.records = null;
+        this._renderContext = null;
+        this._dependenciesKey = null;
+    };
+
+
+    /**
+     * Starts a pointer-driven row drag. vis-timeline handles mouse gestures on
+     * its root element, so native HTML Drag and Drop is unreliable inside the
+     * label panel. Pointer events are stopped at the handle and tracked by this
+     * component instead.
+     */
+    Timeline.prototype._onBacklogPointerDown = function (record, handle, e) {
+        if (!this.backlogOrder() || !record.backlogEligible || (e.pointerType === "mouse" && e.button !== 0)) {
+            return;
+        }
+
+        this._clearBacklogDrag();
+        this._backlogDraggedId = record.id;
+        this._backlogPointerId = e.pointerId;
+        this._backlogPointerHandle = handle;
+        this.root.classList.add("my-timeline--dragging");
+
+        const rootBounds = typeof(this.root.getBoundingClientRect) === "function"
+            ? this.root.getBoundingClientRect()
+            : { top: 0, left: 0 };
+        this.rootDropZone.style.top = (rootBounds.top + 4) + "px";
+        this.rootDropZone.style.left = (rootBounds.left + 4) + "px";
+        if (typeof(global.document.addEventListener) === "function") {
+            global.document.addEventListener("pointermove", this._onBacklogPointerMoveBound, true);
+            global.document.addEventListener("pointerup", this._onBacklogPointerUpBound, true);
+            global.document.addEventListener("pointercancel", this._onBacklogPointerUpBound, true);
+        }
+
+        if (typeof(handle.setPointerCapture) === "function") {
+            try {
+                handle.setPointerCapture(e.pointerId);
+            }
+            catch (error) {
+            }
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof(e.stopImmediatePropagation) === "function") {
+            e.stopImmediatePropagation();
+        }
+    };
+
+
+    /**
+     * Updates the drop target beneath the active pointer.
+     */
+    Timeline.prototype._onBacklogPointerMove = function (e) {
+        if (this._backlogDraggedId === null || e.pointerId !== this._backlogPointerId) {
+            return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+        this._clearBacklogDropClasses();
+        this.rootDropZone.classList.remove("my-timeline__root-drop-zone--active");
+
+        const hit = global.document.elementFromPoint(e.clientX, e.clientY);
+        if (!hit || typeof(hit.closest) !== "function") {
+            return;
+        }
+
+        if (hit.closest(".my-timeline__root-drop-zone") === this.rootDropZone) {
+            this.rootDropZone.classList.add("my-timeline__root-drop-zone--active");
+            return;
+        }
+
+        const element = hit.closest(".my-timeline-group");
+        if (!element || !this.root.contains(element)) {
+            return;
+        }
+
+        const id = element.getAttribute("data-work-item-id");
+        const target = this.groups && (this.groups.get(id) || this.groups.get(Number(id)));
+        const dragged = this.groups && this.groups.get(this._backlogDraggedId);
+        const position = this._getBacklogDropPosition(dragged, target, element, e);
+        if (!position) {
+            return;
+        }
+
+        const drop = this._canonicalizeBacklogDrop(dragged, target, element, position);
+        drop.element.classList.add(`my-timeline-group--drop-${drop.position}`);
+        drop.element.setAttribute("data-backlog-drop-position", drop.position);
+    };
+
+
+    /**
+     * Commits the highlighted pointer drop, or cancels when no valid target is
+     * highlighted.
+     */
+    Timeline.prototype._onBacklogPointerUp = function (e) {
+        if (this._backlogDraggedId === null || e.pointerId !== this._backlogPointerId) {
+            return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.type === "pointercancel") {
+            this._clearBacklogDrag();
+            return;
+        }
+
+        if (this.rootDropZone.classList.contains("my-timeline__root-drop-zone--active")) {
+            this._runBacklogMove(null, "root");
+            return;
+        }
+
+        const element = this.root.querySelector("[data-backlog-drop-position]");
+        if (!element) {
+            this._clearBacklogDrag();
+            return;
+        }
+
+        const id = element.getAttribute("data-work-item-id");
+        const target = this.groups && (this.groups.get(id) || this.groups.get(Number(id)));
+        if (!target) {
+            this._clearBacklogDrag();
+            return;
+        }
+
+        this._runBacklogMove(target.id, element.getAttribute("data-backlog-drop-position"));
+    };
+
+
+    /**
+     * Resolves the meaning of a row drop from the participating backlog levels.
+     */
+    Timeline.prototype._getBacklogDropPosition = function (dragged, target, element, e) {
+        if (!dragged || !target || !dragged.backlogEligible || !target.backlogEligible
+            || target.backlogTargetEligible === false || (dragged.id === target.id)) {
+            return null;
+        }
+
+        if (dragged.backlogId === target.backlogId) {
+            if (target.backlogParentValid === false) {
+                return null;
+            }
+            const bounds = element.getBoundingClientRect();
+            return e.clientY < bounds.top + (bounds.height / 2) ? "before" : "after";
+        }
+
+        if (target.backlogRank === dragged.backlogRank + 1) {
+            return "inside";
+        }
+
+        return null;
+    };
+
+
+    /**
+     * Uses one DOM boundary for one logical insertion point. The lower half of
+     * a row and the upper half of its next sibling otherwise produce two blue
+     * lines for the same backlog position.
+     */
+    Timeline.prototype._canonicalizeBacklogDrop = function (dragged, target, element, position) {
+        const result = { target: target, element: element, position: position };
+        if (position !== "after" || !this.groups || typeof(this.root.querySelectorAll) !== "function") {
+            return result;
+        }
+
+        const elements = Array.from(this.root.querySelectorAll(".my-timeline-group"));
+        const currentIndex = elements.indexOf(element);
+        const nextElement = currentIndex >= 0 ? elements[currentIndex + 1] : null;
+        if (!nextElement) {
+            return result;
+        }
+
+        const id = nextElement.getAttribute("data-work-item-id");
+        const next = this.groups.get(id) || this.groups.get(Number(id));
+        if (!next || next.id === dragged.id || !next.backlogEligible || next.backlogParentValid === false
+            || next.backlogId !== target.backlogId
+            || (next.backlogParentId || 0) !== (target.backlogParentId || 0)) {
+            return result;
+        }
+
+        return { target: next, element: nextElement, position: "before" };
+    };
+
+
+    /**
+     * Sends a backlog move to the application model.
+     */
+    Timeline.prototype._runBacklogMove = function (targetId, position) {
+        const draggedId = this._backlogDraggedId;
+        this._clearBacklogDrag();
+
+        const result = this.callback("reorderWit", {
+            draggedId: draggedId,
+            targetId: targetId,
+            position: position
+        });
+        if (result && (typeof (result.catch) === "function")) {
+            result.catch((error) => {
+                console.warn("Timeline : _runBacklogMove() : Unable to reorder work item.");
+                console.warn(error);
+            });
+        }
+    };
+
+
+    /**
+     * Clears drag state and all drop indicators.
+     */
+    Timeline.prototype._clearBacklogDrag = function () {
+        if (typeof(global.document.removeEventListener) === "function") {
+            global.document.removeEventListener("pointermove", this._onBacklogPointerMoveBound, true);
+            global.document.removeEventListener("pointerup", this._onBacklogPointerUpBound, true);
+            global.document.removeEventListener("pointercancel", this._onBacklogPointerUpBound, true);
+        }
+        if (this._backlogPointerHandle && this._backlogPointerId !== null
+            && typeof(this._backlogPointerHandle.releasePointerCapture) === "function") {
+            try {
+                if (typeof(this._backlogPointerHandle.hasPointerCapture) !== "function"
+                    || this._backlogPointerHandle.hasPointerCapture(this._backlogPointerId)) {
+                    this._backlogPointerHandle.releasePointerCapture(this._backlogPointerId);
+                }
+            }
+            catch (error) {
+            }
+        }
+        this._backlogDraggedId = null;
+        this._backlogPointerId = null;
+        this._backlogPointerHandle = null;
+        this.root.classList.remove("my-timeline--dragging");
+        this.rootDropZone.classList.remove("my-timeline__root-drop-zone--active");
+        this.rootDropZone.style.top = "";
+        this.rootDropZone.style.left = "";
+        this._clearBacklogDropClasses();
+    };
+
+
+    /**
+     * Clears row drop indicators.
+     */
+    Timeline.prototype._clearBacklogDropClasses = function () {
+        this.root.querySelectorAll("[data-backlog-drop-position]").forEach((element) => {
+            element.classList.remove("my-timeline-group--drop-before", "my-timeline-group--drop-after", "my-timeline-group--drop-inside");
+            element.removeAttribute("data-backlog-drop-position");
+        });
     };
 
 
@@ -444,6 +742,121 @@ define([
 
 
     /**
+     * Checks whether non-item rendering inputs still match the live timeline.
+     */
+    Timeline.prototype._hasSameRenderContext = function (context) {
+        if (!this._renderContext) {
+            return false;
+        }
+
+        return Object.keys(context).every((name) => this._renderContext[name] === context[name]);
+    };
+
+
+    /**
+     * Gets a stable signature for dependency arrows. A changed relationship
+     * requires rebuilding the arrow helper, while a hierarchy-only reorder
+     * can safely update the existing DataSets in place.
+     */
+    Timeline.prototype._getDependenciesKey = function (items) {
+        return items
+            .map((item) => `${item.id}:${(item.dependencies || []).map((id) => id + "").sort().join(",")}`)
+            .sort()
+            .join("|");
+    };
+
+
+    /**
+     * Checks whether the next data can replace the current DataSets without
+     * constructing another vis-timeline instance.
+     */
+    Timeline.prototype._hasSameTimelineIds = function (groups, records) {
+        if (!this.groups || !this.records || (typeof(this.groups.getIds) !== "function") || (typeof(this.records.getIds) !== "function")) {
+            return false;
+        }
+
+        const sameIds = (current, next) => {
+            const currentIds = current.getIds().map((id) => id + "").sort();
+            const nextIds = next.map((item) => item.id + "").sort();
+            return currentIds.length === nextIds.length && currentIds.every((id, index) => id === nextIds[index]);
+        };
+
+        return sameIds(this.groups, groups) && sameIds(this.records, records);
+    };
+
+
+    /**
+     * Updates hierarchy/order data while preserving the live timeline, the
+     * user's expanded/collapsed nodes, the visible date window, and page
+     * scroll position.
+     */
+    Timeline.prototype._syncTimelineData = function (groups, records) {
+        const scrollTop = this.scrollContainer ? this.scrollContainer.scrollTop : null;
+        const previous = new Map();
+        this.groups.forEach((group) => previous.set(group.id + "", group));
+
+        const parentByChild = new Map();
+        groups.forEach((group) => (group.nestedGroups || []).forEach((id) => parentByChild.set(id + "", group.id)));
+
+        const groupsById = new Map();
+        groups.forEach((group) => {
+            const oldGroup = previous.get(group.id + "");
+            group.nestedInGroup = parentByChild.has(group.id + "") ? parentByChild.get(group.id + "") : null;
+            group.selected = oldGroup ? Boolean(oldGroup.selected) : Boolean(group.selected);
+
+            if (group.nestedGroups && group.nestedGroups.length) {
+                group.showNested = oldGroup ? oldGroup.showNested !== false : true;
+            }
+            else {
+                // DataSet.update merges objects, so explicit null/true values
+                // clear hierarchy state left over from an earlier parent role.
+                group.nestedGroups = null;
+                group.showNested = true;
+            }
+
+            groupsById.set(group.id + "", group);
+        });
+
+        const visited = new Set();
+        const updateVisibility = (id, visible) => {
+            const key = id + "";
+            const group = groupsById.get(key);
+            if (!group || visited.has(key)) {
+                return;
+            }
+
+            visited.add(key);
+            group.visible = visible;
+            const childrenVisible = visible && group.showNested !== false;
+            (group.nestedGroups || []).forEach((childId) => updateVisibility(childId, childrenVisible));
+        };
+        groups
+            .filter((group) => group.nestedInGroup === null)
+            .forEach((group) => updateVisibility(group.id, true));
+        groups
+            .filter((group) => !visited.has(group.id + ""))
+            .forEach((group) => updateVisibility(group.id, true));
+
+        const nextGroupIds = new Set(groups.map((group) => group.id + ""));
+        const nextRecordIds = new Set(records.map((record) => record.id + ""));
+        const removedGroups = this.groups.getIds().filter((id) => !nextGroupIds.has(id + ""));
+        const removedRecords = this.records.getIds().filter((id) => !nextRecordIds.has(id + ""));
+        if (removedGroups.length) {
+            this.groups.remove(removedGroups);
+        }
+        if (removedRecords.length) {
+            this.records.remove(removedRecords);
+        }
+
+        this.groups.update(groups);
+        this.records.update(records);
+        if (this.scrollContainer && Number.isFinite(scrollTop)) {
+            this.scrollContainer.scrollTop = scrollTop;
+        }
+    };
+
+
+    /**
      * Initializes or destroys the timeline after the items are ready.
      **/
     Timeline.prototype._onItemsChanged = function () {
@@ -454,25 +867,34 @@ define([
         var typesOther = this.typesOther();
         var icons = this.icons();
         var showFields = this.showFields();
+        var backlogOrder = this.backlogOrder();
         var now = new Date();
-
-        this._createStyles(types, typesOther);
-        this._destroyTimeline();
+        var renderContext = {
+            states: states,
+            priorities: priorities,
+            types: types,
+            typesOther: typesOther,
+            icons: icons,
+            showFields: showFields,
+            backlogOrder: backlogOrder
+        };
 
         if (!items || !items.length) {
+            this._createStyles(types, typesOther);
+            this._destroyTimeline();
             return;
         }
 
         // Create groups
         var markerGroup = null;
         var groups = items
-            .map((wit) => {
+            .map((wit, index) => {
                 if (isMarker(wit)) {
-                    markerGroup = markerGroup || createMarkerGroup();
+                    markerGroup = markerGroup || createMarkerGroup(-1);
                     return null;
                 }
 
-                return createGroup(wit, items, now);
+                return createGroup(wit, items, now, index);
             })
             .filter((group) => group !== null);
 
@@ -485,6 +907,17 @@ define([
         var records = items
             .map((wit) => createRecord(wit, now))
             .filter((record) => record !== null);
+        var dependenciesKey = this._getDependenciesKey(items);
+
+        if (this.timeline && this._hasSameRenderContext(renderContext) && this._dependenciesKey === dependenciesKey && this._hasSameTimelineIds(groups, records)) {
+            this._syncTimelineData(groups, records);
+            return;
+        }
+
+        this._createStyles(types, typesOther);
+        this._destroyTimeline();
+        this._renderContext = renderContext;
+        this._dependenciesKey = dependenciesKey;
 
         // Options for the Timeline
         var options = {
@@ -501,6 +934,7 @@ define([
             xss: {
                 disabled: true
             },
+            groupOrder: "order",
             groupHeightMode: "fixed",
             orientation: "both",
             horizontalScroll: true,
@@ -511,7 +945,7 @@ define([
                 updateGroup: false,
                 updateTime: true
             },
-            groupTemplate: (record, element) => createGroupTemplate(this, record, element, states, priorities, types, typesOther, icons, showFields),
+            groupTemplate: (record, element) => createGroupTemplate(this, record, element, states, priorities, types, typesOther, icons, showFields, backlogOrder),
             visibleFrameTemplate: (record, element) => createVisibleFrameTemplate(this, record, element),
             onMove: (record, callback) => updateWit(this, record, callback)
             //template: function (item, element, data) { return '<h1>' + item.header + data.moving?' '+ data.start:'' + '</h1><p>' + item.description + '</p>'; }
@@ -597,11 +1031,13 @@ define([
     /**
      * Creates and gets marker group.
      * 
+     * @param {number} order Stable visual position in the group DataSet.
      * @returns Returns object, which represents marker group.
      */
-    let createMarkerGroup = function () {
+    let createMarkerGroup = function (order) {
         return {
             id: "markers",
+            order: order,
             treeLevel: 1,
             content: "MARKERS",
             type: "markers",
@@ -616,10 +1052,13 @@ define([
      * @param {object} wit Current work item.
      * @param {array} items List of all work items. 
      * @param {number} now Current date. 
+     * @param {number} order Stable visual position in the group DataSet.
      */
-    let createGroup = function (wit, items, now) {
+    let createGroup = function (wit, items, now, order) {
         var group = {
             id: wit.id,
+            order: order,
+            originalId: wit.originalId,
             parentId: wit.parentId,
             parentTitle: wit.parentTitle,
             project: wit.project,
@@ -645,6 +1084,12 @@ define([
             tags: wit.tags,
             startDate: wit.startDate,
             endDate: wit.targetDate,
+            backlogEligible: Boolean(wit.backlogOrder && wit.backlogOrder.eligible),
+            backlogTargetEligible: Boolean(wit.backlogOrder && wit.backlogOrder.targetEligible !== false),
+            backlogId: wit.backlogOrder && wit.backlogOrder.backlogId,
+            backlogRank: wit.backlogOrder && wit.backlogOrder.backlogRank,
+            backlogParentId: wit.backlogOrder && wit.backlogOrder.parentId,
+            backlogParentValid: !wit.backlogOrder || wit.backlogOrder.parentValid !== false,
             nestedGroups: items
                 .filter((child) => (child.parent === wit.path) && !isMarker(child))
                 .map((child) => child.id)
@@ -707,8 +1152,9 @@ define([
      * @param {array} typesOthers List of supported types for other projects in the across project query.
      * @param {array} icons List of icons.
      * @param {array} showFields List of fields which should be rendered.
+     * @param {boolean} backlogOrder True when backlog ordering is active.
      */
-    let createGroupTemplate = function (vm, record, element, states, priorities, types, typesOther, icons, showFields) {
+    let createGroupTemplate = function (vm, record, element, states, priorities, types, typesOther, icons, showFields, backlogOrder) {
         // Do not create group label for markers group
         if (!record || (record.type === "markers")) {
             return "";
@@ -722,6 +1168,14 @@ define([
             `<a class="my-timeline-group__title ${record.isCompleted ? "my-timeline-group__title--completed" : ""}" data-id="${record.id}" title="${record.title}" href="${record.url.replace('/_apis/wit/workItems/', '/_workitems/edit/')}">${showFields.includes("id") ? "<span class='font-weight-semibold'>#" + record.id + "</span>&nbsp" : ""}${record.content}</a>`,
             `<div class="my-timeline-group__state" title="${record.state}" style="background-color: #${state.color}"></div>`
         ];
+
+        if (backlogOrder && record.backlogEligible) {
+            result.unshift(
+                `<div class="my-timeline-group__button my-timeline-group__button--drag fluent-icons-enabled text-center" title="Drag to reorder in the team backlog" data-noexport="true">
+                    <span aria-hidden="true" class="flex-noshrink fabric-icon ms-Icon--GripperDotsVertical large"></span>
+                 </div>`
+            );
+        }
 
         if (showFields.includes("tags")) {
             const tags = record.tags.length ? record.tags.map((t) => `<div>${t}</div>`).join("") : "";
@@ -804,11 +1258,17 @@ define([
         // Create element
         let el = global.document.createElement("div");
         el.classList.add("my-timeline-group");
+        el.setAttribute("data-work-item-id", record.id);
         el.innerHTML = result.join("");
 
         el.querySelector(".my-timeline-group__title").addEventListener("pointerdown", vm._onGroupTitleSelect.bind(vm), false);
         el.querySelector(".my-timeline-group__button--checkbox").addEventListener("pointerdown", vm._onGroupSelect.bind(vm), false);
         el.querySelector(".my-timeline-group__button--edit").addEventListener("pointerdown", vm._onGroupEdit.bind(vm), false);
+
+        const dragHandle = el.querySelector(".my-timeline-group__button--drag");
+        if (dragHandle) {
+            dragHandle.addEventListener("pointerdown", vm._onBacklogPointerDown.bind(vm, record, dragHandle), false);
+        }
 
         return el;
     };
@@ -964,7 +1424,10 @@ define([
             createViewModel: Timeline.createViewModel 
         },
         template: 
-            `<div class="my-timeline"></div>`
+            `<div class="my-timeline">
+                <div class="my-timeline__root-drop-zone" data-noexport="true">Move to backlog root</div>
+                <div class="my-timeline__chart"></div>
+             </div>`
     });
 
     //#endregion

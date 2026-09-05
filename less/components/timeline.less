@@ -1,6 +1,34 @@
 @import "../_variables.less";
 
 .my-timeline {
+    position: relative;
+
+    &__root-drop-zone {
+        display: none;
+        position: fixed;
+        z-index: @z-index-backlog-root-drop-zone;
+        min-width: rem(180px);
+        padding: rem(6px) rem(12px);
+        border: 1px dashed rgba(var(--palette-primary-shade-10, 0, 90, 158), 1);
+        border-radius: rem(2px);
+        color: var(--text-primary-color);
+        background-color: var(--background-color);
+        font-size: rem(12px);
+        text-align: center;
+        pointer-events: auto;
+
+        &--active {
+            border-style: solid;
+            background-color: rgba(var(--palette-primary-tint-30, 222, 236, 249), 1);
+        }
+    }
+
+    &--dragging {
+        .my-timeline__root-drop-zone {
+            display: block;
+        }
+    }
+
     &-group {
         font-size: rem(13px);
         font-weight: 400;
@@ -160,6 +188,19 @@
                 }
             }
 
+            &--drag {
+                visibility: visible;
+                flex: 0 0 rem(24px);
+                cursor: grab;
+                margin-right: rem(2px);
+                touch-action: none;
+                user-select: none;
+
+                &:active {
+                    cursor: grabbing;
+                }
+            }
+
             &--selected {
                 visibility: visible;
 
@@ -180,6 +221,22 @@
         &:hover {
             .my-timeline-group__button {
                 visibility: visible;
+            }
+        }
+
+        &--drop-before {
+            box-shadow: inset 0 rem(2px) 0 rgba(var(--palette-primary-shade-10, 0, 90, 158), 1);
+        }
+
+        &--drop-after {
+            box-shadow: inset 0 rem(-2px) 0 rgba(var(--palette-primary-shade-10, 0, 90, 158), 1);
+        }
+
+        &--drop-inside {
+            .my-timeline-group__title {
+                background-color: var(--status-success-background, rgba(85, 163, 98, .20));
+                border-radius: rem(2px);
+                box-shadow: 0 0 0 rem(3px) var(--status-success-background, rgba(85, 163, 98, .20));
             }
         }
     }

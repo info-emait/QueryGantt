@@ -1,0 +1,358 @@
+"use strict";
+
+const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
+const vm = require("vm");
+
+const loadAmd = function (filename, dependencies) {
+    let result = null;
+    let source = fs.readFileSync(filename, "utf8");
+    source = source.replace(/\n\}\);\s*$/, "\n    return { Model: Model };\n});\n");
+    const context = {
+        console: {
+            debug: function () {},
+            log: function () {},
+            warn: function () {}
+        },
+        document: {
+            readyState: "loading",
+            addEventListener: function () {}
+        },
+        fetch: function () { throw new Error("Unexpected fetch"); },
+        Map: Map,
+        Number: Number,
+        Promise: Promise,
+        Set: Set,
+        define: function (names, factory) {
+            result = factory.apply(null, names.map((name) => dependencies[name] || {}));
+        }
+    };
+    vm.runInNewContext(source, context, { filename: path.basename(filename) });
+    return result;
+};
+
+const loadBacklogService = function () {
+    let result = null;
+    const source = fs.readFileSync(path.join(__dirname, "../js/services/backlog-order.js"), "utf8");
+    vm.runInNewContext(source, {
+        define: function (dependencies, factory) { result = factory(); },
+        Map: Map,
+        Number: Number,
+        Set: Set
+    });
+    return result;
+};
+
+const observable = function (initial) {
+    return function (value) {
+        if (arguments.length) {
+            initial = value;
+            return this;
+        }
+        return initial;
+    };
+};
+
+const backlogOrderService = loadBacklogService();
+const workApi = { WorkRestClient: function WorkRestClient() {} };
+let workClient = null;
+const api = {
+    getClient: function (clientType) {
+        assert.strictEqual(clientType, workApi.WorkRestClient, "the Work REST client should be requested");
+        return workClient;
+    },
+    CommonServiceIds: {}
+};
+const app = loadAmd(path.join(__dirname, "../js/querygantt-tab-app.js"), {
+    module: { config: function () { return {}; } },
+    knockout: {},
+    sdk: {},
+    "api/index": api,
+    "api/Work/index": workApi,
+    "services/backlog-order": backlogOrderService
+});
+const Model = app.Model;
+let settingsManager = null;
+const configurationApp = loadAmd(path.join(__dirname, "../js/querygantt-configuration-app.js"), {
+    module: { config: function () { return {}; } },
+    knockout: {},
+    sdk: {},
+    "api/index": { CommonServiceIds: {} },
+    "services/data": {
+        getManager: function () { return Promise.resolve(settingsManager); }
+    }
+});
+
+const backlogs = [
+    { id: "features", rank: 2, isHidden: false, workItemTypes: [{ name: "Feature" }] },
+    { id: "stories", rank: 1, isHidden: false, workItemTypes: [{ name: "User Story" }] },
+    { id: "hidden", rank: 0, isHidden: true, workItemTypes: [{ name: "Task" }] }
+];
+const responses = {
+    features: { workItems: [{ source: null, target: { id: 11 } }, { source: null, target: { id: 12 } }] },
+    stories: { workItems: [{ source: { id: 11 }, target: { id: 1 } }, { source: { id: 11 }, target: { id: 2 } }, { source: { id: 12 }, target: { id: 3 } }] },
+    hidden: { workItems: [{ source: { id: 1 }, target: { id: 31 } }, { source: { id: 1 }, target: { id: 32 } }] }
+};
+
+const makeModel = function () {
+    const model = Object.create(Model.prototype);
+    model.project = { id: "project-id", name: "Project" };
+    model.team = { id: "team-id", name: "Team" };
+    model._backlogRequestId = 0;
+    model._backlogReorderInFlight = false;
+    model._workItemFieldValues = {};
+    model.backlogIndex = observable(backlogOrderService.empty());
+    model.backlogAvailable = observable(false);
+    model.backlogLoading = observable(false);
+    model.isHistorical = observable(false);
+    model.orderMode = observable(backlogOrderService.queryOrder);
+    model.message = observable("");
+    model.isLoading = observable(false);
+    model.wits = observable([]);
+    model._settingsSavePromise = Promise.resolve();
+    return model;
+};
+
+(async function () {
+    const fetchedBacklogs = [];
+    workClient = {
+        getBacklogs: function (context) {
+            assert.deepStrictEqual(JSON.parse(JSON.stringify(context)), { projectId: "project-id", teamId: "team-id" });
+            return Promise.resolve(backlogs);
+        },
+        getBacklogConfigurations: function () {
+            return Promise.resolve({ backlogFields: { typeFields: { Order: "Microsoft.VSTS.Common.StackRank" } } });
+        },
+        getTeamFieldValues: function () {
+            return Promise.resolve({
+                field: { referenceName: "System.AreaPath" },
+                defaultValue: "Project\\Team",
+                values: [{ value: "Project\\Team", includeChildren: true }]
+            });
+        },
+        getBacklogLevelWorkItems: function (context, backlogId) {
+            fetchedBacklogs.push(backlogId);
+            return Promise.resolve(responses[backlogId]);
+        }
+    };
+    const successfulWorkClient = workClient;
+
+    const model = makeModel();
+    assert.strictEqual((await model._loadBacklogOrder(null)).size, 7, "current queries should load backlog order for every configured level");
+    assert.deepStrictEqual(fetchedBacklogs, ["features", "stories", "hidden"], "hidden Task backlogs must be fetched because native Backlogs still orders their work items");
+    assert.strictEqual(model.backlogLoading(), false);
+    assert.strictEqual(model.backlogAvailable(), true);
+    assert.strictEqual(model.backlogIndex().size, 7);
+    assert.strictEqual(model.backlogIndex().orderField, "Microsoft.VSTS.Common.StackRank");
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(model.backlogIndex().teamFieldValues)), {
+        referenceName: "System.AreaPath",
+        defaultValue: "Project\\Team",
+        values: [{ value: "Project\\Team", includeChildren: true }]
+    }, "the current team's Area Paths should be retained for reorder validation");
+
+    const partialModel = makeModel();
+    workClient = Object.assign({}, successfulWorkClient, {
+        getBacklogLevelWorkItems: function (context, backlogId) {
+            return backlogId === "hidden"
+                ? Promise.reject(new Error("hidden level is unavailable"))
+                : Promise.resolve(responses[backlogId]);
+        }
+    });
+    assert.strictEqual((await partialModel._loadBacklogOrder(null)).size, 5,
+        "one unreadable hidden level should not discard usable backlog ordering from the other levels");
+    assert.strictEqual(partialModel.backlogAvailable(), true);
+    workClient = successfulWorkClient;
+
+    fetchedBacklogs.length = 0;
+    assert.strictEqual((await model._loadBacklogOrder("2026-01-01")).size, 0, "historical queries should not load current backlog state");
+    assert.deepStrictEqual(fetchedBacklogs, []);
+    assert.strictEqual(model.backlogAvailable(), false);
+
+    let resolveBacklogs = null;
+    const delayedBacklogs = new Promise((resolve) => resolveBacklogs = resolve);
+    const raceModel = makeModel();
+    workClient = {
+        getBacklogs: function () { return delayedBacklogs; },
+        getBacklogConfigurations: function () { return Promise.resolve({ backlogFields: { typeFields: { Order: "Microsoft.VSTS.Common.StackRank" } } }); },
+        getTeamFieldValues: function () { return Promise.resolve(null); },
+        getBacklogLevelWorkItems: function (context, backlogId) { return Promise.resolve(responses[backlogId]); }
+    };
+    const currentLoad = raceModel._loadBacklogOrder(null);
+    await raceModel._loadBacklogOrder("2026-01-01");
+    resolveBacklogs(backlogs);
+    assert.strictEqual((await currentLoad).size, 0, "a stale current-order request should be ignored after switching to a historical query");
+    assert.strictEqual(raceModel.backlogAvailable(), false, "stale data must not enable drag operations on a historical query");
+
+    workClient = successfulWorkClient;
+    await model._loadBacklogOrder(null);
+    const entry1 = backlogOrderService.getEntry(model.backlogIndex(), 1, "User Story");
+    const entry2 = backlogOrderService.getEntry(model.backlogIndex(), 2, "User Story");
+    const story1 = { id: 1, originalId: 1, type: "User Story", title: "Story 1", path: "11/1", parent: "11", parentId: 11, level: 2, isCompleted: false, backlogOrder: Object.assign({ eligible: true }, entry1) };
+    const story2 = { id: 2, originalId: 2, type: "User Story", title: "Story 2", path: "11/2", parent: "11", parentId: 11, level: 2, isCompleted: false, backlogOrder: Object.assign({ eligible: true }, entry2) };
+    model.wits = observable([story1, story2]);
+    let operation = null;
+    let refreshed = 0;
+    workClient.reorderBacklogWorkItems = function (value, context) {
+        operation = value;
+        assert.deepStrictEqual(JSON.parse(JSON.stringify(context)), { projectId: "project-id", teamId: "team-id" });
+        return Promise.resolve([]);
+    };
+    model.refresh = function () { refreshed += 1; return Promise.resolve(); };
+
+    assert.strictEqual(await model.reorderWit({ draggedId: 2, targetId: 1, position: "before" }), true);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(operation)), { ids: [2], parentId: 11, previousId: 0, nextId: 1 });
+    assert.strictEqual(refreshed, 0, "a successful reorder should not reload the entire query");
+    assert.strictEqual(model.isLoading(), false, "a successful reorder should not replace the page with a loading screen");
+    assert.deepStrictEqual(
+        JSON.parse(JSON.stringify(backlogOrderService.sortItems(model.wits(), model.backlogIndex()).map((wit) => wit.id))),
+        [2, 1],
+        "the successful order should be visible immediately from local state"
+    );
+
+    const feature12Entry = backlogOrderService.getEntry(model.backlogIndex(), 12, "Feature");
+    const feature12 = { id: 12, originalId: 12, type: "Feature", title: "Feature 12", path: "12", parent: "", parentId: null, level: 1, isCompleted: false, backlogOrder: Object.assign({ eligible: true }, feature12Entry) };
+    model.wits(model.wits().concat([feature12]));
+    assert.strictEqual(await model.reorderWit({ draggedId: 1, targetId: 12, position: "inside" }), true);
+    const reparented = model.wits().find((wit) => wit.id === 1);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify({
+        parentId: reparented.parentId,
+        parentTitle: reparented.parentTitle,
+        parent: reparented.parent,
+        path: reparented.path,
+        level: reparented.level
+    })), {
+        parentId: 12,
+        parentTitle: "Feature 12",
+        parent: "12",
+        path: "12/1",
+        level: 2
+    }, "a successful reparent should update the local query hierarchy without a reload");
+    assert.strictEqual(refreshed, 0);
+
+    operation = null;
+    const unsupported = { id: 999, originalId: 999, type: "User Story", backlogOrder: { eligible: false } };
+    model.wits = observable([story1, unsupported]);
+    assert.strictEqual(await model.reorderWit({ draggedId: 999, targetId: 1, position: "before" }), false);
+    assert.strictEqual(operation, null, "invalid moves must not call Azure DevOps");
+
+    model.wits = observable([story1, story2]);
+    workClient.reorderBacklogWorkItems = function () { return Promise.reject(new Error("reorder rejected")); };
+    assert.strictEqual(await model.reorderWit({ draggedId: 2, targetId: 1, position: "before" }), false);
+    assert.strictEqual(model.isLoading(), false, "a failed request should leave the UI usable");
+    assert.ok(model.message().includes("#2"), "a failed request should identify the work item");
+    assert.ok(model.message().includes("reorder rejected"), "the Azure DevOps reason should be shown instead of a generic error only");
+    assert.strictEqual(refreshed, 0, "a failed request should not refresh or apply an uncommitted order");
+
+    const makeOrderedStory = function (id, title, order, parentType) {
+        return {
+            id: id, originalId: id, type: "User Story", title: title,
+            project: "Project", areaPath: "Project\\Team", parentId: 11, parentType: parentType || "Feature",
+            parentTitle: "Feature 11", path: `11/${id}`, parent: "11", level: 2, isCompleted: false,
+            backlogOrderValue: order
+        };
+    };
+    let retryBacklogLoads = 0;
+    let reorderAttempts = 0;
+    workClient = {
+        getBacklogs: function () { retryBacklogLoads += 1; return Promise.resolve(backlogs); },
+        getBacklogConfigurations: function () { return Promise.resolve({ backlogFields: { typeFields: { Order: "Microsoft.VSTS.Common.StackRank" } } }); },
+        getTeamFieldValues: function () { return Promise.resolve({ field: { referenceName: "System.AreaPath" }, defaultValue: "Project\\Team", values: [{ value: "Project\\Team", includeChildren: true }] }); },
+        getBacklogLevelWorkItems: function (context, backlogId) { return Promise.resolve(responses[backlogId]); },
+        reorderBacklogWorkItems: function () {
+            reorderAttempts += 1;
+            return reorderAttempts === 1
+                ? Promise.reject(new Error("TF400486: another user has modified items, or the item is outside of its immediate parent."))
+                : Promise.resolve([]);
+        }
+    };
+    const retryModel = makeModel();
+    retryModel._workItemFieldValues = {
+        1: { "Microsoft.VSTS.Common.StackRank": 100 },
+        2: { "Microsoft.VSTS.Common.StackRank": 200 }
+    };
+    retryModel.wits([makeOrderedStory(1, "Story 1", 100), makeOrderedStory(2, "Story 2", 200)]);
+    retryModel._activateBacklogIndex(await retryModel._loadBacklogOrder(null));
+    assert.strictEqual(await retryModel.reorderWit({ draggedId: 2, targetId: 1, position: "before" }), true, "a stale sibling snapshot should be rebuilt and retried once");
+    assert.strictEqual(reorderAttempts, 2, "TF400486 should cause exactly one reorder retry");
+    assert.strictEqual(retryBacklogLoads, 2, "retrying should refresh only the backlog index, not the full query");
+
+    const invalidParentModel = makeModel();
+    invalidParentModel._workItemFieldValues = retryModel._workItemFieldValues;
+    invalidParentModel.wits([
+        makeOrderedStory(1, "Story 1", 100, "User Story"),
+        makeOrderedStory(2, "Story 2", 200, "User Story")
+    ]);
+    invalidParentModel._activateBacklogIndex(await invalidParentModel._loadBacklogOrder(null));
+    const callsBeforeInvalidMove = reorderAttempts;
+    assert.strictEqual(await invalidParentModel.reorderWit({ draggedId: 2, targetId: 1, position: "before" }), false, "same-category parent links should be blocked locally");
+    assert.strictEqual(reorderAttempts, callsBeforeInvalidMove, "a deterministic process hierarchy violation must not call the reorder API");
+    assert.ok(invalidParentModel.message().includes("next backlog category"));
+
+    const recoveryModel = makeModel();
+    recoveryModel.orderMode(backlogOrderService.backlogOrder);
+    recoveryModel._workItemFieldValues = retryModel._workItemFieldValues;
+    recoveryModel.wits([makeOrderedStory(1, "Story 1", 100), makeOrderedStory(2, "Story 2", 200)]);
+    workClient = {
+        getBacklogs: function () { return Promise.reject(new Error("temporary discovery failure")); },
+        getBacklogConfigurations: function () { return Promise.resolve(null); },
+        getTeamFieldValues: function () { return Promise.resolve(null); }
+    };
+    await recoveryModel._loadBacklogOrder(null);
+    assert.strictEqual(recoveryModel.backlogAvailable(), false);
+    assert.strictEqual(recoveryModel.message(), "Backlog order is unavailable for the current team.");
+    workClient = successfulWorkClient;
+    await recoveryModel._onOrderModeChanged(backlogOrderService.backlogOrder);
+    assert.strictEqual(recoveryModel.backlogAvailable(), true, "selecting a remembered Backlog order should retry discovery after a transient Unavailable state");
+    assert.strictEqual(recoveryModel.message(), "");
+    assert.ok(recoveryModel.wits().every((wit) => wit.backlogOrder && wit.backlogOrder.eligible), "the recovered index should immediately replace the query-order fallback");
+
+    recoveryModel.message("An unrelated warning");
+    recoveryModel._activateBacklogIndex(recoveryModel.backlogIndex());
+    assert.strictEqual(recoveryModel.message(), "An unrelated warning", "late backlog activation must not erase an unrelated user-facing message");
+
+    let saved = null;
+    let persisted = JSON.stringify({ showFields: ["duration"] });
+    model.manager = {
+        getValue: function () { return Promise.resolve(persisted); },
+        setValue: function (key, value, options) {
+            persisted = value;
+            saved = { key: key, value: JSON.parse(value), options: options };
+            return Promise.resolve();
+        }
+    };
+    model.settingsKey = "gantt_project-id";
+    model.settings = { showFields: ["duration"] };
+    await model._saveOrderMode(backlogOrderService.backlogOrder);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(saved)), {
+        key: "gantt_project-id",
+        value: { showFields: ["duration"], orderMode: "backlog" },
+        options: { scopeType: "User" }
+    }, "display order should be merged into the existing per-user/project settings");
+
+    let configurationSaved = null;
+    let panelResult = null;
+    settingsManager = {
+        getValue: function () { return Promise.resolve(JSON.stringify({ orderMode: "backlog" })); },
+        setValue: function (key, value, options) {
+            configurationSaved = { key: key, value: JSON.parse(value), options: options };
+            return Promise.resolve();
+        }
+    };
+    const configurationModel = Object.create(configurationApp.Model.prototype);
+    configurationModel.project = { id: "project-id" };
+    configurationModel.fieldsValue = observable(["dates", "duration"]);
+    configurationModel.panel = { close: function (result) { panelResult = result; } };
+    await configurationModel.save();
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(configurationSaved)), {
+        key: "gantt_project-id",
+        value: { orderMode: "backlog", showFields: ["dates", "duration"] },
+        options: { scopeType: "User" }
+    }, "saving field visibility should preserve the selected backlog order");
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(panelResult)), { fieldsValue: ["dates", "duration"] });
+
+    console.log("querygantt backlog integration tests passed");
+})().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+});

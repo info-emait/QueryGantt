@@ -11,7 +11,7 @@
             <div class="page-content flex-column flex-grow">
                 <my-spinner params="isVisible: isLoading"></my-spinner>
                 <my-message params="text: message"></my-message>
-                <div class="flex-row margin-top-16" style="display: none; position: sticky; top: 0; z-index: 3" data-bind="visible: (wits().length || zero() !== null) && !isLoading()">
+                <div class="querygantt-tab__filter flex-row margin-top-16" style="display: none" data-bind="visible: (wits().length || zero() !== null) && !isLoading()">
                     <my-filter params="value: filter,
                                        valuePrimary: filterPrimary,
                                        queryType: queryType,
@@ -48,6 +48,15 @@
                                 </div>
                                 <div class="bolt-header-commandbar bolt-button-group flex-row justify-end">
                                     <div class="bolt-header-commandbar-button-group flex-row flex-center scroll-hidden">
+                                        <label class="querygantt-tab__order-selector flex-row flex-center" data-bind="attr: { title: backlogOrderTitle }">
+                                            <span>Sort:</span>
+                                            <select aria-label="Gantt display order" data-bind="value: orderMode">
+                                                <option value="query">Query order</option>
+                                                <option value="backlog">Backlog order</option>
+                                            </select>
+                                            <span class="querygantt-tab__order-loading" data-bind="visible: orderMode() === 'backlog' && backlogLoading()">Loading…</span>
+                                            <span class="querygantt-tab__order-unavailable" data-bind="visible: orderMode() === 'backlog' && !backlogLoading() && !backlogAvailable()">Unavailable</span>
+                                        </label>
                                         <button class="bolt-header-command-item-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment margin-left-8" tabindex="0" type="button" title="Refresh data"
                                                 data-bind="click: refresh">
                                             <span class="fluent-icons-enabled">
@@ -110,9 +119,10 @@
                         </div>
                         <div class="bolt-card-content flex-row flex-grow">
                             <div class="h-scroll-auto bolt-table-container flex-grow" data-bind="if: filteredWits().length">
-                                <my-timeline params="items: filteredWits,
+                                <my-timeline params="items: orderedWits,
                                                     selectedItem: current,
                                                     selectedItemId: currentId,
+                                                    backlogOrder: isBacklogOrder,
                                                     states: states, 
                                                     priorities: priorities, 
                                                     types: types, 
@@ -121,7 +131,8 @@
                                                     showFields: showFields,
                                                     callbacks: {
                                                         openNewWindow: openNewWindow.bind($root),
-                                                        updateWit: updateWit.bind($root)
+                                                        updateWit: updateWit.bind($root),
+                                                        reorderWit: reorderWit.bind($root)
                                                     },
                                                     actions: {
                                                         expand: _timeline_expandAction,
