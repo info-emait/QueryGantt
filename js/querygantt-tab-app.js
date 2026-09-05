@@ -42,6 +42,7 @@ define([
         this.user = args.user;
         this.project = args.project;
         this.query = args.query;
+        this._queryStringUpdatePromise = Promise.resolve();
 
         this.token = null;
         this.path = null;
@@ -74,7 +75,11 @@ define([
 
         this.filterPrimary = ko.observable({});
         this.filter = ko.observable({});
-        this.filteredPrimaryWits = ko.computed(this._getFilteredPrimaryWits, this);
+        // Primary-filter changes trigger an API reload, so observe them with a
+        // subscription rather than a computed. A computed would also track
+        // observables read synchronously by init(), and those updates could
+        // recursively start another reload.
+        this.filteredPrimaryWits = this.filterPrimary.subscribe(this._getFilteredPrimaryWits, this);
         this.filteredWits = ko.computed(this._getFilteredWits, this);
 
         this.isTotalEffortVisible = ko.computed(() => this.showFields().includes("effort"));  
@@ -96,6 +101,7 @@ define([
         this._timeline_closeAction = ko.observable();
         this._timeline_refreshAction = ko.observable();
         this._timeline_updateAction = ko.observable();
+        this._timeline_exportImageAction = ko.observable();
 
         this.updateQueryString = ko.computed(this._updateQueryString, this).extend({ deferred: true });
 
@@ -372,8 +378,15 @@ define([
      * Downloads the timeline as an png image.
      */
     Model.prototype.downloadImage = function () {
-        global.domtoimage
-            .toBlob(doc.querySelector(".my-timeline"), { 
+        const exportImage = this._timeline_exportImageAction();
+        if (typeof (exportImage) !== "function") {
+            this.message("Unable to download the Gantt chart as an image.");
+            console.warn("App : downloadImage() : Timeline is not ready for image export.");
+            return;
+        }
+
+        exportImage((node) => global.domtoimage
+            .toBlob(node, {
                 filter: (node) => {
                     if (typeof(node.hasAttribute) !== "function") {
                         return true;
@@ -381,7 +394,7 @@ define([
                     return !node.hasAttribute("data-noexport");
                 },
                 bgcolor: global.getComputedStyle(doc.body).getPropertyValue("--background-color")
-            })
+            }))
             .then((blob) => api.getClient(witApi.WorkItemTrackingRestClient).createAttachment(blob, this.project.id, `${this.query.name}_${(new Date()).toISOString().split(".").shift().replace(/(-|:)/gi,"")}.png`))
             .then((response) => sdk.getService(api.CommonServiceIds.HostNavigationService).then((service) => service.openNewWindow(response.url)))
             .catch(error => {
@@ -799,8 +812,8 @@ define([
     /**
      * Gets the work items filtered by the primary filter, which triggers the query api.
      */
-    Model.prototype._getFilteredPrimaryWits = function() {
-        const filter = this.filterPrimary();
+    Model.prototype._getFilteredPrimaryWits = function(filter) {
+        filter = filter && typeof(filter) === "object" ? filter : {};
         
         if (Array.isArray(filter.asOf) && (filter.asOf.length === 1) && (filter.asOf[0] instanceof Date)) {
             this.isLoading(true);
@@ -902,25 +915,42 @@ define([
      * Updates query string to the actual values.
      */
     Model.prototype._updateQueryString = function() {
-        const showFields = this.showFields();
+        const showFields = this.showFields().join(",");
         
         if (ko.computedContext.isInitial()) {
-            return;
+            return Promise.resolve(false);
         }
 
-        sdk.getService(api.CommonServiceIds.HostNavigationService)
+        // Azure DevOps may reload the extension iframe after setQueryParams,
+        // including when the supplied value is identical to the current URL.
+        // Serialize writes and skip the no-op case so the model's initial
+        // Knockout notification cannot turn into a reload loop.
+        this._queryStringUpdatePromise = this._queryStringUpdatePromise
+            .catch(() => false)
+            .then(() => sdk.getService(api.CommonServiceIds.HostNavigationService))
             .then((host) => Promise.all([
-                host, 
+                host,
                 host.getQueryParams()
             ]))
-            .then((response) => ({ 
-                host: response[0], 
-                state: response[1]
+            .then((response) => ({
+                host: response[0],
+                state: response[1] || {}
             }))
             .then(({ host, state }) => {
-                state.showFields = showFields.join(",");
-                host.setQueryParams(state);
+                if ((state.showFields || "") === showFields) {
+                    return false;
+                }
+
+                const nextState = Object.assign({}, state, { showFields: showFields });
+                return Promise.resolve(host.setQueryParams(nextState)).then(() => true);
+            })
+            .catch((error) => {
+                console.warn("App : _updateQueryString() : Unable to update query parameters.");
+                console.warn(error);
+                return false;
             });
+
+        return this._queryStringUpdatePromise;
     };
 
 

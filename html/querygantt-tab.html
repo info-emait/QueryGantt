@@ -10,17 +10,19 @@
         <div class="querygantt-tab__page bolt-page v-scroll-auto flex-column">
             <div class="page-content flex-column flex-grow">
                 <my-spinner params="isVisible: isLoading"></my-spinner>
-                <my-message params="text: message"></my-message>
-                <div class="flex-row margin-top-16" style="display: none; position: sticky; top: 0; z-index: 3" data-bind="visible: (wits().length || zero() !== null) && !isLoading()">
-                    <my-filter params="value: filter,
-                                       valuePrimary: filterPrimary,
-                                       queryType: queryType,
-                                       assignees: assigneesFilter,
-                                       states: statesFilter,
-                                       tags: tagsFilter,
-                                       areas: areasFilter,
-                                       parents: parentsFilter,
-                                       priorities: prioritiesFilter"></my-filter>
+                <div class="querygantt-tab__sticky-region">
+                    <my-message params="text: message"></my-message>
+                    <div class="querygantt-tab__filter flex-row margin-top-16" style="display: none" data-bind="visible: (wits().length || zero() !== null) && !isLoading()">
+                        <my-filter params="value: filter,
+                                           valuePrimary: filterPrimary,
+                                           queryType: queryType,
+                                           assignees: assigneesFilter,
+                                           states: statesFilter,
+                                           tags: tagsFilter,
+                                           areas: areasFilter,
+                                           parents: parentsFilter,
+                                           priorities: prioritiesFilter"></my-filter>
+                    </div>
                 </div>
                 <div data-bind="with: zero, visible: !isLoading()">
                     <my-zero-data params="title: title, text: text"></my-zero-data>
@@ -134,7 +136,8 @@
                                                         focus: _timeline_focusAction,
                                                         close: _timeline_closeAction,
                                                         refresh: _timeline_refreshAction,
-                                                        update: _timeline_updateAction
+                                                        update: _timeline_updateAction,
+                                                        exportImage: _timeline_exportImageAction
                                                     }"></my-timeline>
                             </div>
                         </div>

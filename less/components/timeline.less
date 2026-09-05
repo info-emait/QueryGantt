@@ -1,6 +1,24 @@
 @import "../_variables.less";
 
 .my-timeline {
+    &__floating-axis {
+        display: none;
+        position: fixed;
+        z-index: @z-index-timeline-floating-axis;
+        overflow: hidden;
+        pointer-events: none;
+        background-color: var(--background-color);
+        box-shadow: 0 rem(2px) rem(4px) var(--palette-black-alpha-20, rgba(0, 0, 0, .2));
+
+        &--visible {
+            display: block;
+        }
+
+        &-content {
+            background-color: var(--background-color);
+        }
+    }
+
     &-group {
         font-size: rem(13px);
         font-weight: 400;
