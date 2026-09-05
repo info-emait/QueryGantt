@@ -157,6 +157,10 @@ TimelineStub.prototype.setWindow = function (start, end) {
 TimelineStub.prototype.fit = function () {
     this.window = { start: new Date(this.fitWindow.start), end: new Date(this.fitWindow.end) };
 };
+TimelineStub.prototype.moveTo = function (time, options) {
+    this.moveToTime = new Date(time);
+    this.moveToOptions = options;
+};
 TimelineStub.prototype.zoomIn = function () {};
 TimelineStub.prototype.zoomOut = function () {};
 TimelineStub.prototype.focus = function () {};
@@ -250,6 +254,11 @@ latestTimeline.emit("rangechanged", latestTimeline.getWindow());
 assert.strictEqual(changes[2].preset, "100");
 assert.deepStrictEqual(plain(zoomService.serializeView(changes[2])), { preset: "100" });
 
+const today = new Date("2026-09-02T12:00:00.000Z");
+timelineViewModel.moveToday(today);
+assert.strictEqual(latestTimeline.moveToTime.toISOString(), today.toISOString(), "Jump to today should center the visible range on today");
+assert.deepStrictEqual(plain(latestTimeline.moveToOptions), { animation: false }, "Jump to today should move directly without altering the selected zoom preset");
+
 timelineViewModel.setZoomPreset("daily");
 const dailyDuration = latestTimeline.window.end - latestTimeline.window.start;
 const dailyMinimumStep = dailyDuration * 70 / latestTimeline.body.domProps.center.width;
@@ -285,6 +294,11 @@ const appModel = new appModule.Model({
     browserStorage: browserStorage,
     zoomView: { preset: "100" }
 });
+
+let moveTodayCalls = 0;
+appModel._timeline_moveTodayAction(function () { moveTodayCalls += 1; });
+appModel.moveToday();
+assert.strictEqual(moveTodayCalls, 1, "the toolbar action should be forwarded to the timeline component");
 
 let selectedPreset = null;
 appModel._timeline_setZoomPresetAction(function (preset) { selectedPreset = preset; });
@@ -367,7 +381,8 @@ assert.strictEqual(appModel.zoomPreset(), "300");
         assert.ok(html.includes(">" + label + "</option>"));
     });
     assert.strictEqual(html.includes(">500%</option>"), false, "the zoom selector should stop at 400%");
-
+    assert.ok(html.includes('title="Jump to today"') && html.includes("click: moveToday"), "the redundant zoom reset should be replaced by Jump to today");
+    assert.strictEqual(html.includes("click: zoomReset"), false, "the toolbar should no longer expose a separate zoom reset action");
     console.log("querygantt zoom integration tests passed");
 })().catch(function (error) {
     console.error(error);

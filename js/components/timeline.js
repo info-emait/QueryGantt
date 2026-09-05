@@ -184,10 +184,17 @@ define([
 
 
     /**
-     * Resets zoom.
+     * Centers the current visible range on today without changing its zoom.
+     *
+     * @param {Date} now Optional clock value used by deterministic tests.
      */
-    Timeline.prototype.zoomReset = function () {
-        this.setZoomPreset(timelineZoomService.percent100);
+    Timeline.prototype.moveToday = function (now) {
+        if (!this.timeline || typeof(this.timeline.moveTo) !== "function") {
+            return;
+        }
+
+        const today = now instanceof Date && !isNaN(now.getTime()) ? now : new Date();
+        this.timeline.moveTo(today, { animation: false });
     };
 
 
