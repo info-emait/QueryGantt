@@ -45,14 +45,14 @@ const ko = {
     }
 };
 
-const filter = {
-    getBoundingClientRect: function () { return { top: 0, bottom: 48 }; }
+const stickyRegion = {
+    getBoundingClientRect: function () { return { top: 0, bottom: 64 }; }
 };
 const document = {
     _listeners: {},
     addEventListener: function (name, callback) { this._listeners[name] = callback; },
     removeEventListener: function (name, callback) { if (this._listeners[name] === callback) { delete this._listeners[name]; } },
-    querySelector: function (selector) { return selector === ".querygantt-tab__filter" ? filter : null; },
+    querySelector: function (selector) { return selector === ".querygantt-tab__sticky-region" ? stickyRegion : null; },
     head: { querySelectorAll: function () { return []; }, appendChild: function () {} },
     body: {
         appendChild: function (element) { element.parentNode = this; },
@@ -81,8 +81,11 @@ const axis = {
 };
 const scrollContainer = {
     scrollTop: 200,
-    addEventListener: function () {},
-    removeEventListener: function () {}
+    scrollListener: null,
+    addEventListener: function (name, callback) { if (name === "scroll") { this.scrollListener = callback; } },
+    removeEventListener: function (name, callback) {
+        if (name === "scroll" && this.scrollListener === callback) { this.scrollListener = null; }
+    }
 };
 const chartListeners = {};
 const chart = {
@@ -115,6 +118,7 @@ const viewModel = ko.registration.viewModel.createViewModel({
     types: observable([]), typesOther: observable([]), icons: observable({}),
     showFields: observable([]), callbacks: {}, actions: {}
 }, { element: { firstChild: chart, querySelector: function () {} } });
+assert.ok(scrollContainer.scrollListener, "the floating date axis should observe the page scroll container");
 
 const originalStart = new Date("2026-08-01T00:00:00.000Z");
 const originalEnd = new Date("2026-08-31T00:00:00.000Z");
@@ -125,9 +129,9 @@ viewModel.timeline = {
     setWindow: function (start, end) { visibleWindow = { start: start, end: end }; },
     destroy: function () {}
 };
-viewModel._syncFloatingAxis(true);
+scrollContainer.scrollListener();
 assert.ok(viewModel.floatingAxis.classList.contains("my-timeline__floating-axis--visible"));
-assert.strictEqual(viewModel.floatingAxis.style.top, "48px");
+assert.strictEqual(viewModel.floatingAxis.style.top, "64px", "the date axis should stay below the complete sticky alert/filter region");
 assert.strictEqual(viewModel.floatingAxis.style.left, "420px");
 assert.ok(viewModel.floatingAxis.firstChild, "the live top axis should be mirrored into the fixed layer");
 
@@ -171,6 +175,7 @@ viewModel.exportImage(function (node) {
     assert.strictEqual(/maxHeight\s*:/.test(source), false, "the timeline must not retain a fixed-height cap");
 
     viewModel.dispose();
+    assert.strictEqual(scrollContainer.scrollListener, null, "disposing the timeline should remove its scroll listener");
     console.log("timeline header tests passed");
 }).catch(function (error) {
     console.error(error);

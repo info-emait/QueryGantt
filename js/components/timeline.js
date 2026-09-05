@@ -388,15 +388,17 @@ define([
 
 
     /**
-     * Gets the viewport position immediately below the sticky filter bar.
+     * Gets the viewport position immediately below the complete sticky alert
+     * and filter region. The filter itself has a top margin, so using its
+     * bounds would report zero after the parent region becomes sticky.
      */
     Timeline.prototype._getFloatingAxisTop = function () {
-        const filter = global.document.querySelector(".querygantt-tab__filter");
-        if (!filter || typeof(filter.getBoundingClientRect) !== "function") {
+        const stickyRegion = global.document.querySelector(".querygantt-tab__sticky-region");
+        if (!stickyRegion || typeof(stickyRegion.getBoundingClientRect) !== "function") {
             return 0;
         }
 
-        const bounds = filter.getBoundingClientRect();
+        const bounds = stickyRegion.getBoundingClientRect();
         return bounds.top <= 0 && bounds.bottom > 0 ? bounds.bottom : 0;
     };
 
