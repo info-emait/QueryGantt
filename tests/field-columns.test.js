@@ -50,6 +50,94 @@ assert.strictEqual(service.formatValue("<p>String enum</p>", { type: "html" }), 
 assert.strictEqual(service.escapeHtml("<img src=x onerror='bad'>&\""), "&lt;img src=x onerror=&#39;bad&#39;&gt;&amp;&quot;",
     "arbitrary field values must be escaped because the legacy timeline disables its XSS filter");
 
+const loadTimelineHelpers = function () {
+    let result = null;
+    let source = fs.readFileSync(path.join(__dirname, "../js/components/timeline.js"), "utf8");
+    source = source.replace(/\n\}\);\s*$/, "\n    return { createGroupTemplate: createGroupTemplate };\n});\n");
+    const timelineKnockout = { components: { register: function () {} } };
+    const document = {
+        head: { querySelectorAll: function () { return []; }, appendChild: function () {} },
+        createElement: function () {
+            return {
+                classList: { add: function () {} },
+                innerHTML: "",
+                setAttribute: function () {},
+                querySelector: function (selector) {
+                    return selector === ".my-timeline-group__button--drag" ? null : { addEventListener: function () {} };
+                }
+            };
+        }
+    };
+    vm.runInNewContext(source, {
+        Array: Array,
+        Date: Date,
+        Map: Map,
+        Number: Number,
+        Promise: Promise,
+        Set: Set,
+        console: { debug: function () {}, log: function () {}, warn: function () {} },
+        document: document,
+        isNaN: isNaN,
+        define: function (dependencies, factory) {
+            const timelineDependencies = {
+                knockout: timelineKnockout,
+                "services/date-granularity": {},
+                "services/field-columns": service,
+                "services/timeline-split": {},
+                "services/timeline-zoom": {},
+                "vis-timeline": {},
+                "vis-timeline-arrow": function () {}
+            };
+            result = factory.apply(null, dependencies.map(function (name) { return timelineDependencies[name] || {}; }));
+        }
+    }, { filename: "timeline.js" });
+    return result;
+};
+
+const timelineHelpers = loadTimelineHelpers();
+const renderedGroup = timelineHelpers.createGroupTemplate({
+    _onGroupTitleSelect: function () {},
+    _onGroupSelect: function () {},
+    _onGroupEdit: function () {},
+    _onBacklogPointerDown: function () {}
+}, {
+    id: 17,
+    content: "Example item",
+    fieldValues: {
+        "Custom.Second": "<b>second</b>",
+        "Custom.First": "first"
+    },
+    isCompleted: false,
+    priority: 1,
+    project: "Project",
+    selected: false,
+    state: "New",
+    title: "Example item",
+    type: "Task",
+    url: "https://example.test/_apis/wit/workItems/17"
+}, null, [], [{ value: 1, name: "Must have", color: "ff0000" }], [{
+    name: "Task",
+    icon: { url: "task-icon" },
+    states: [{ name: "New", color: "0078d4" }]
+}], [], { "task-icon": "<svg></svg>" }, ["field:Custom.Second", "field:Custom.First"], [{
+    value: "field:Custom.First",
+    referenceName: "Custom.First",
+    name: "First",
+    type: 0
+}, {
+    value: "field:Custom.Second",
+    referenceName: "Custom.Second",
+    name: "Second",
+    type: 0
+}], false);
+const renderedHtml = renderedGroup.innerHTML;
+assert.ok(renderedHtml.indexOf('title="Second"') < renderedHtml.indexOf('title="First"'),
+    "the real timeline row should render arbitrary fields in the saved column order");
+assert.ok(renderedHtml.includes("&lt;b&gt;second&lt;/b&gt;"),
+    "the real timeline row should HTML-escape arbitrary field values");
+assert.strictEqual(renderedHtml.includes("<b>second</b>"), false,
+    "raw arbitrary field markup must never enter the timeline row");
+
 const loadConfiguration = function () {
     let result = null;
     let source = fs.readFileSync(path.join(__dirname, "../js/querygantt-configuration-app.js"), "utf8");
