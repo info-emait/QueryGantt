@@ -19,6 +19,17 @@ assert.deepStrictEqual(JSON.parse(JSON.stringify(splitService.getBounds(500))), 
 assert.strictEqual(splitService.clamp(100, 1000), 240);
 assert.strictEqual(splitService.clamp(900, 1000), 680);
 
+const loadService = function (name) {
+    let result = null;
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../js/services/" + name + ".js"), "utf8"), {
+        encodeURIComponent: encodeURIComponent,
+        console: { warn: function () {} },
+        define: function (dependencies, factory) { result = factory(); }
+    });
+    return result;
+};
+const browserSettingsService = loadService("browser-settings");
+
 const observable = function (initial) {
     const result = function (value) {
         if (arguments.length) {
@@ -188,7 +199,49 @@ assert.ok(template.includes('data-noexport="true"'), "the splitter must not be i
 const appSource = fs.readFileSync(path.join(__dirname, "../js/querygantt-tab-app.js"), "utf8");
 const appHtml = fs.readFileSync(path.join(__dirname, "../html/querygantt-tab.html"), "utf8");
 const timelineLess = fs.readFileSync(path.join(__dirname, "../less/components/timeline.less"), "utf8");
-assert.ok(appSource.includes('"timelineListWidth", null'), "the split should be persisted as a project-level browser preference");
+let appModule = null;
+const exposedAppSource = appSource.replace(/\n\}\);\s*$/, "\n    return { Model: Model };\n});\n");
+vm.runInNewContext(exposedAppSource, {
+    Array: Array,
+    Date: Date,
+    Map: Map,
+    Number: Number,
+    Promise: Promise,
+    Set: Set,
+    console: { debug: function () {}, log: function () {}, warn: function () {} },
+    document: { readyState: "loading", addEventListener: function () {} },
+    fetch: function () { throw new Error("Unexpected fetch"); },
+    define: function (dependencies, factory) {
+        const appDependencies = {
+            module: { config: function () { return {}; } },
+            knockout: {},
+            sdk: {},
+            "services/browser-settings": browserSettingsService,
+            "services/timeline-split": splitService
+        };
+        appModule = factory.apply(null, dependencies.map(function (name) { return appDependencies[name] || {}; }));
+    }
+}, { filename: "querygantt-tab-app.js" });
+
+const storedWidths = new Map();
+const browserStorage = {
+    getItem: function (key) { return storedWidths.has(key) ? storedWidths.get(key) : null; },
+    setItem: function (key, value) { storedWidths.set(key, value); }
+};
+const persistenceModel = {
+    browserStorage: browserStorage,
+    extensionId: "publisher.internal",
+    project: { id: "project-a" },
+    listWidth: observable(null)
+};
+appModule.Model.prototype.listWidthChanged.call(persistenceModel, 512);
+assert.strictEqual(persistenceModel.listWidth(), 512, "the application model should accept the committed splitter width");
+assert.strictEqual(browserSettingsService.read("publisher.internal", "project-a", "timelineListWidth", null, browserStorage), 512,
+    "the committed splitter width should round-trip through the application persistence boundary");
+assert.ok(/browserSettingsService\.read\(extensionId, project\.id, "timelineListWidth", null/.test(appSource),
+    "startup should restore the same project-level browser preference");
+assert.ok(/new Model\(\{[\s\S]*?\blistWidth\b[\s\S]*?\}\)/.test(appSource),
+    "startup should pass the restored splitter width into the application model");
 assert.ok(appHtml.includes("listWidthChanged: listWidthChanged.bind($root)"));
 assert.ok(timelineLess.includes("touch-action: none;"));
 
