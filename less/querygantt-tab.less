@@ -17,12 +17,33 @@ html, body {
         width: 100%;
     }
 
+    &__filter {
+        position: sticky;
+        top: 0;
+        z-index: @z-index-filter;
+    }
+
     b {
         font-weight: 600;
     }
 
     &__spinner {
         padding: rem(16px) 0;
+    }
+
+    &__zoom-select {
+        height: rem(32px);
+        min-width: rem(88px);
+        padding: 0 rem(6px);
+        border: 1px solid var(--component-border-color);
+        border-radius: rem(2px);
+        color: var(--text-primary-color);
+        background-color: var(--background-color);
+
+        &:focus {
+            outline: 2px solid var(--component-grid-focus-border-color);
+            outline-offset: -2px;
+        }
     }
 
     &__body {

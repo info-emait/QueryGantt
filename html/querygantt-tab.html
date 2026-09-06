@@ -11,7 +11,7 @@
             <div class="page-content flex-column flex-grow">
                 <my-spinner params="isVisible: isLoading"></my-spinner>
                 <my-message params="text: message"></my-message>
-                <div class="flex-row margin-top-16" style="display: none; position: sticky; top: 0; z-index: 3" data-bind="visible: (wits().length || zero() !== null) && !isLoading()">
+                <div class="querygantt-tab__filter flex-row margin-top-16" style="display: none" data-bind="visible: (wits().length || zero() !== null) && !isLoading()">
                     <my-filter params="value: filter,
                                        valuePrimary: filterPrimary,
                                        queryType: queryType,
@@ -54,16 +54,25 @@
                                                 <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Refresh medium"></span>
                                             </span>
                                         </button>
+                                        <select class="querygantt-tab__zoom-select margin-left-8" aria-label="Zoom preset" title="Zoom preset"
+                                                data-bind="value: zoomPreset, event: { change: applyZoomPreset }">
+                                            <option value="custom" disabled>Custom</option>
+                                            <option value="100">100%</option>
+                                            <option value="200">200%</option>
+                                            <option value="300">300%</option>
+                                            <option value="400">400%</option>
+                                            <option value="daily">1 day</option>
+                                        </select>
                                         <button class="bolt-header-command-item-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment margin-left-8" tabindex="0" type="button" title="Zoom out"
                                                 data-bind="click: zoomOut">
                                             <span class="fluent-icons-enabled">
                                                 <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--CircleMinus medium"></span>
                                             </span>
                                         </button>
-                                        <button class="bolt-header-command-item-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment margin-left-8" tabindex="0" type="button" title="Reset zoom"
-                                                data-bind="click: zoomReset">
+                                        <button class="bolt-header-command-item-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment margin-left-8" tabindex="0" type="button" title="Jump to today"
+                                                data-bind="click: moveToday">
                                             <span class="fluent-icons-enabled">
-                                                <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--CircleDisc medium"></span>
+                                                <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Calendar medium"></span>
                                             </span>
                                         </button>
                                         <button class="bolt-header-command-item-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment margin-left-8" tabindex="0" type="button" title="Zoom in"
@@ -119,9 +128,11 @@
                                                     typesOther: typesOther, 
                                                     icons: icons, 
                                                     showFields: showFields,
+                                                    zoomView: zoomView,
                                                     callbacks: {
                                                         openNewWindow: openNewWindow.bind($root),
-                                                        updateWit: updateWit.bind($root)
+                                                        updateWit: updateWit.bind($root),
+                                                        zoomChanged: zoomChanged.bind($root)
                                                     },
                                                     actions: {
                                                         expand: _timeline_expandAction,
@@ -130,7 +141,8 @@
                                                         moveRight: _timeline_moveRightAction,
                                                         zoomOut: _timeline_zoomOutAction,
                                                         zoomIn: _timeline_zoomInAction,
-                                                        zoomReset: _timeline_zoomResetAction,
+                                                        moveToday: _timeline_moveTodayAction,
+                                                        setZoomPreset: _timeline_setZoomPresetAction,
                                                         focus: _timeline_focusAction,
                                                         close: _timeline_closeAction,
                                                         refresh: _timeline_refreshAction,

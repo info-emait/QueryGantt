@@ -10,6 +10,8 @@ define([
     "api/index",
     "api/WorkItemTracking/index",
     "services/data",
+    "services/browser-settings",
+    "services/timeline-zoom",
     "services/icon",
     "my/templates/gantt",
     "my/components/legend",
@@ -18,7 +20,7 @@ define([
     "my/components/message",
     "my/components/filter",
     "my/components/zerodata"
-], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, dataService, iconService, ganttTemplate) {
+], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, dataService, browserSettingsService, timelineZoomService, iconService, ganttTemplate) {
     //#region [ Fields ]
 
     const global = (function () { return this; })();
@@ -42,6 +44,13 @@ define([
         this.user = args.user;
         this.project = args.project;
         this.query = args.query;
+        this.manager = args.manager || null;
+        this.settingsKey = args.settingsKey || null;
+        this.settings = args.settings && (typeof(args.settings) === "object") && !Array.isArray(args.settings) ? args.settings : {};
+        this.zoomSettingsKey = ((this.query || {}).id || (this.query || {}).name || "default") + "";
+        this.extensionId = args.extensionId || "querygantt";
+        this.browserStorage = args.browserStorage || null;
+        this._queryStringUpdatePromise = Promise.resolve();
 
         this.token = null;
         this.path = null;
@@ -49,6 +58,8 @@ define([
         this.zero = ko.observable(null);
 
         this.showFields = ko.observableArray(Array.isArray(args.showFields) ? args.showFields : ["duration"]).extend({ rateLimit: { timeout: 1000, method: "notifyWhenChangesStop" } });
+        this.zoomView = ko.observable(timelineZoomService.normalizeView(args.zoomView));
+        this.zoomPreset = ko.observable(this.zoomView().preset);
 
         this.isLoading = ko.observable(true);
         this.types = ko.observableArray([]);
@@ -74,7 +85,11 @@ define([
 
         this.filterPrimary = ko.observable({});
         this.filter = ko.observable({});
-        this.filteredPrimaryWits = ko.computed(this._getFilteredPrimaryWits, this);
+        // Primary-filter changes trigger an API reload, so observe them with a
+        // subscription rather than a computed. A computed would also track
+        // observables read synchronously by init(), and those updates could
+        // recursively start another reload.
+        this.filteredPrimaryWits = this.filterPrimary.subscribe(this._getFilteredPrimaryWits, this);
         this.filteredWits = ko.computed(this._getFilteredWits, this);
 
         this.isTotalEffortVisible = ko.computed(() => this.showFields().includes("effort"));  
@@ -91,7 +106,8 @@ define([
         this._timeline_moveRightAction = ko.observable();
         this._timeline_zoomOutAction = ko.observable();
         this._timeline_zoomInAction = ko.observable();
-        this._timeline_zoomResetAction = ko.observable();
+        this._timeline_moveTodayAction = ko.observable();
+        this._timeline_setZoomPresetAction = ko.observable();
         this._timeline_focusAction = ko.observable();
         this._timeline_closeAction = ko.observable();
         this._timeline_refreshAction = ko.observable();
@@ -479,6 +495,7 @@ define([
      * Zooms out the timeline.
      */
     Model.prototype.zoomOut = function () {
+        this.zoomPreset(timelineZoomService.custom);
         this.action("_timeline_zoomOutAction");
     };
 
@@ -487,15 +504,43 @@ define([
      * Zooms in the timeline.
      */
     Model.prototype.zoomIn = function () {
+        this.zoomPreset(timelineZoomService.custom);
         this.action("_timeline_zoomInAction");
     };
 
 
     /**
-     * Resets the timeline's zoom.
+     * Centers the current timeline window on today.
      */
-    Model.prototype.zoomReset = function () {
-        this.action("_timeline_zoomResetAction");
+    Model.prototype.moveToday = function () {
+        this.action("_timeline_moveTodayAction");
+    };
+
+
+    /**
+     * Applies the selected zoom preset.
+     */
+    Model.prototype.applyZoomPreset = function (value, event) {
+        const selectedValue = event && event.target ? event.target.value : (typeof(value) === "string" ? value : this.zoomPreset());
+        const preset = timelineZoomService.normalizePreset(selectedValue);
+        this.zoomPreset(preset);
+        const action = this._timeline_setZoomPresetAction();
+        if (typeof(action) === "function") {
+            action(preset);
+        }
+    };
+
+
+    /**
+     * Saves a completed visible-window change.
+     *
+     * @param {object} value Zoom view.
+     */
+    Model.prototype.zoomChanged = function (value) {
+        const view = timelineZoomService.normalizeView(value);
+        this.zoomView(view);
+        this.zoomPreset(view.preset);
+        return this._saveZoomView(view);
     };
 
 
@@ -519,6 +564,7 @@ define([
      * Zooms the current timeline's selection.
      */
     Model.prototype.focus = function () {
+        this.zoomPreset(timelineZoomService.custom);
         this.action("_timeline_focusAction");
         
         let wit = this.current();
@@ -625,6 +671,23 @@ define([
 
 
     //#region [ Methods : Private ]
+
+    /**
+     * Persists the current query's zoom view in this browser profile.
+     *
+     * @param {object} view Zoom view.
+     */
+    Model.prototype._saveZoomView = function (view) {
+        const serializedView = timelineZoomService.serializeView(view);
+        return Promise.resolve(browserSettingsService.write(
+            this.extensionId,
+            this.project.id,
+            "zoomView",
+            this.zoomSettingsKey,
+            serializedView,
+            this.browserStorage
+        ));
+    };
 
     /**
      * Returns params for fetch calls.
@@ -799,8 +862,8 @@ define([
     /**
      * Gets the work items filtered by the primary filter, which triggers the query api.
      */
-    Model.prototype._getFilteredPrimaryWits = function() {
-        const filter = this.filterPrimary();
+    Model.prototype._getFilteredPrimaryWits = function(filter) {
+        filter = filter && typeof(filter) === "object" ? filter : {};
         
         if (Array.isArray(filter.asOf) && (filter.asOf.length === 1) && (filter.asOf[0] instanceof Date)) {
             this.isLoading(true);
@@ -902,25 +965,42 @@ define([
      * Updates query string to the actual values.
      */
     Model.prototype._updateQueryString = function() {
-        const showFields = this.showFields();
+        const showFields = this.showFields().join(",");
         
         if (ko.computedContext.isInitial()) {
-            return;
+            return Promise.resolve(false);
         }
 
-        sdk.getService(api.CommonServiceIds.HostNavigationService)
+        // Azure DevOps may reload the extension iframe after setQueryParams,
+        // including when the supplied value is identical to the current URL.
+        // Serialize writes and skip the no-op case so the model's initial
+        // Knockout notification cannot turn into a reload loop.
+        this._queryStringUpdatePromise = this._queryStringUpdatePromise
+            .catch(() => false)
+            .then(() => sdk.getService(api.CommonServiceIds.HostNavigationService))
             .then((host) => Promise.all([
-                host, 
+                host,
                 host.getQueryParams()
             ]))
-            .then((response) => ({ 
-                host: response[0], 
-                state: response[1]
+            .then((response) => ({
+                host: response[0],
+                state: response[1] || {}
             }))
             .then(({ host, state }) => {
-                state.showFields = showFields.join(",");
-                host.setQueryParams(state);
+                if ((state.showFields || "") === showFields) {
+                    return false;
+                }
+
+                const nextState = Object.assign({}, state, { showFields: showFields });
+                return Promise.resolve(host.setQueryParams(nextState)).then(() => true);
+            })
+            .catch((error) => {
+                console.warn("App : _updateQueryString() : Unable to update query parameters.");
+                console.warn(error);
+                return false;
             });
+
+        return this._queryStringUpdatePromise;
     };
 
 
@@ -999,16 +1079,27 @@ define([
             .then(({ project, host, manager }) => Promise.all([
                 project.getProject(),
                 host.getQueryParams(),
-                project.getProject().then((p) => manager.getValue(`gantt_${p.id}`, { scopeType: "User" }))
+                project.getProject().then((p) => manager.getValue(`gantt_${p.id}`, { scopeType: "User" })),
+                manager
             ]))
-            .then((response) => ({ project: response[0], state: response[1], settings: response[2] }))
-            .then(({ project, state, settings }) => {
+            .then((response) => ({ project: response[0], state: response[1], settings: response[2], manager: response[3] }))
+            .then(({ project, state, settings, manager }) => {
                 let showFields = null;
+                let parsedSettings = {};
+                const query = sdk.getConfiguration().query;
+                let extensionId = "querygantt";
+
+                try {
+                    extensionId = sdk.getExtensionContext().id || extensionId;
+                }
+                catch (error) {
+                }
                 
                 // Read some initial data from settings first
                 if (settings) {
                     try {
-                        const parsedSettings = JSON.parse(settings);
+                        const value = JSON.parse(settings);
+                        parsedSettings = value && (typeof(value) === "object") && !Array.isArray(value) ? value : {};
                         if (parsedSettings.showFields) {
                             showFields = parsedSettings.showFields;
                         }
@@ -1017,8 +1108,19 @@ define([
                     }
                 }
 
+                const zoomViews = parsedSettings.zoomViews && (typeof(parsedSettings.zoomViews) === "object") && !Array.isArray(parsedSettings.zoomViews) ? parsedSettings.zoomViews : {};
+                const zoomSettingsKey = ((query || {}).id || (query || {}).name || "default") + "";
+                const browserZoomView = browserSettingsService.read(extensionId, project.id, "zoomView", zoomSettingsKey);
+                const zoomView = timelineZoomService.normalizeView(browserZoomView === null ? zoomViews[zoomSettingsKey] : browserZoomView);
+
+                // Migrate older Extension Data zoom preferences into the
+                // current browser profile the first time this version opens.
+                if (browserZoomView === null && zoomViews[zoomSettingsKey]) {
+                    browserSettingsService.write(extensionId, project.id, "zoomView", zoomSettingsKey, timelineZoomService.serializeView(zoomView));
+                }
+
                 // Read some initial data from query string
-                if (state["showFields"]) {
+                if (!Array.isArray(showFields) && state["showFields"]) {
                     showFields = state["showFields"].split(",").filter((f) => f.length > 0);
                 }
 
@@ -1029,8 +1131,13 @@ define([
                     fields: cnf.fields,
                     user: sdk.getUser().displayName,
                     project: project,
-                    query: sdk.getConfiguration().query,
-                    showFields
+                    query,
+                    showFields,
+                    zoomView,
+                    extensionId,
+                    manager,
+                    settings: parsedSettings,
+                    settingsKey: `gantt_${project.id}`
                 });
                 console.debug("QueryGanttTabApp : ready() : %o", model);
                 

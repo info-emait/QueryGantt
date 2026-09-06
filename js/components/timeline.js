@@ -1,8 +1,9 @@
 define([
     "knockout",
+    "services/timeline-zoom",
     "vis-timeline",
     "vis-timeline-arrow"
-], function (ko, VisTimeline) {
+], function (ko, timelineZoomService, VisTimeline) {
     //#region [ Fields ]
     
     let global = (function() { return this; })();
@@ -30,6 +31,7 @@ define([
         this.typesOther = ko.isObservable(args.typesOther) ? args.typesOther : ko.observable(args.typesOther || []);
         this.icons = ko.isObservable(args.icons) ? args.icons : ko.observable(args.icons || []);
         this.showFields = ko.isObservableArray(args.showFields) ? args.showFields : ko.observableArray(args.showFields || []);
+        this.zoomView = ko.isObservable(args.zoomView) ? args.zoomView : ko.observable(timelineZoomService.normalizeView(args.zoomView));
         this.selectedItem = ko.isObservable(args.selectedItem) ? args.selectedItem : ko.observable(args.selectedItem || null);
         this.selectedItemId = ko.isObservable(args.selectedItemId) ? args.selectedItemId : ko.observable(args.selectedItemId || null);
 
@@ -39,6 +41,10 @@ define([
         this.groups = null;
         this.records = null;
         this.arrows = null;
+        this._pendingZoomPreset = null;
+        this._ignoredRange = null;
+        this._fitRange = null;
+        this._initialZoomRestored = false;
 
         // Callbacks
         this.callbacks = args.callbacks;
@@ -160,6 +166,7 @@ define([
      */
     Timeline.prototype.zoomOut = function () {
         if (this.timeline) {
+            this._pendingZoomPreset = timelineZoomService.custom;
             this.timeline.zoomOut(0.2);
         }
     };
@@ -170,18 +177,73 @@ define([
      */
     Timeline.prototype.zoomIn = function () {
         if (this.timeline) {
+            this._pendingZoomPreset = timelineZoomService.custom;
             this.timeline.zoomIn(0.2);
         }
     };
 
 
     /**
-     * Resets zoom.
+     * Centers the current visible range on today without changing its zoom.
+     *
+     * @param {Date} now Optional clock value used by deterministic tests.
      */
-    Timeline.prototype.zoomReset = function () {
-        if (this.timeline) {
-            this.timeline.fit();
+    Timeline.prototype.moveToday = function (now) {
+        if (!this.timeline || typeof(this.timeline.moveTo) !== "function") {
+            return;
         }
+
+        const today = now instanceof Date && !isNaN(now.getTime()) ? now : new Date();
+        this.timeline.moveTo(today, { animation: false });
+    };
+
+
+    /**
+     * Applies a named zoom preset around the current visible center.
+     *
+     * @param {string} preset Zoom preset.
+     */
+    Timeline.prototype.setZoomPreset = function (preset) {
+        if (!this.timeline) {
+            return;
+        }
+
+        preset = timelineZoomService.normalizePreset(preset);
+        if (preset === timelineZoomService.custom) {
+            return;
+        }
+
+        this._pendingZoomPreset = preset;
+        const before = this.timeline.getWindow();
+
+        if (preset === timelineZoomService.percent100) {
+            this.timeline.fit({ animation: false });
+            this._fitRange = this.timeline.getWindow();
+        }
+        else {
+            const center = new Date((before.start.getTime() + before.end.getTime()) / 2);
+            const range = timelineZoomService.getPresetWindow(preset, this._fitRange, center, this._getTimelineWidth());
+            if (!range) {
+                this._pendingZoomPreset = null;
+                return;
+            }
+            this.timeline.setWindow(range.start, range.end, { animation: false });
+        }
+
+        const after = this.timeline.getWindow();
+        if ((before.start.getTime() === after.start.getTime()) && (before.end.getTime() === after.end.getTime())) {
+            this._pendingZoomPreset = null;
+            this.callback("zoomChanged", timelineZoomService.normalizeView({ preset, start: after.start, end: after.end }));
+        }
+    };
+
+
+    /**
+     * Gets the drawable timeline width without the variable row-label panel.
+     */
+    Timeline.prototype._getTimelineWidth = function () {
+        const center = this.timeline && this.timeline.body && this.timeline.body.domProps && this.timeline.body.domProps.center;
+        return (center && Number(center.width)) || this.node.clientWidth || 1;
     };
 
 
@@ -190,6 +252,7 @@ define([
      */
     Timeline.prototype.focus = function () {
         if (this.timeline) {
+            this._pendingZoomPreset = timelineZoomService.custom;
             this.timeline.focus(this.timeline.getSelection());
         }
     };
@@ -265,6 +328,7 @@ define([
 
         this._onItemsChangedSubscribe.dispose();
         this._onSelectedIdChangedSubscribe.dispose();
+        this._destroyTimeline();
     };
 
     //#endregion
@@ -329,6 +393,69 @@ define([
         this.timeline = null;
         this.groups = null;
         this.records = null;
+        this._pendingZoomPreset = null;
+        this._ignoredRange = null;
+        this._fitRange = null;
+        this._initialZoomRestored = false;
+    };
+
+
+    /**
+     * Restores the last view after the timeline has fitted its items.
+     */
+    Timeline.prototype._restoreZoom = function () {
+        if (!this.timeline || this._initialZoomRestored) {
+            return;
+        }
+
+        const value = (this.zoomView && typeof(this.zoomView.peek) === "function") ? this.zoomView.peek() : this.zoomView();
+        const view = timelineZoomService.normalizeView(value);
+        // vis-timeline's completed automatic fit is the authoritative 100%
+        // range. Capturing its earlier constructor window makes percentages
+        // depend on a placeholder range instead of the work items.
+        this._fitRange = this.timeline.getWindow();
+        this._initialZoomRestored = true;
+
+        if (view.preset === timelineZoomService.custom && view.start && view.end) {
+            this._pendingZoomPreset = timelineZoomService.custom;
+            this._ignoredRange = { start: new Date(view.start), end: new Date(view.end) };
+            this.timeline.setWindow(view.start, view.end, { animation: false });
+        }
+        else if (view.preset !== timelineZoomService.percent100) {
+            const center = new Date((this._fitRange.start.getTime() + this._fitRange.end.getTime()) / 2);
+            const range = timelineZoomService.getPresetWindow(view.preset, this._fitRange, center, this._getTimelineWidth());
+            if (range) {
+                this._pendingZoomPreset = view.preset;
+                this._ignoredRange = range;
+                this.timeline.setWindow(range.start, range.end, { animation: false });
+            }
+        }
+    };
+
+
+    /**
+     * Persists a completed timeline range change.
+     *
+     * @param {object} e Range event.
+     */
+    Timeline.prototype._onRangeChanged = function (e) {
+        if (!e || !(e.start instanceof Date) || !(e.end instanceof Date)) {
+            return;
+        }
+
+        if (this._ignoredRange) {
+            const matchesIgnored = Math.abs(this._ignoredRange.start.getTime() - e.start.getTime()) <= 1
+                && Math.abs(this._ignoredRange.end.getTime() - e.end.getTime()) <= 1;
+            this._ignoredRange = null;
+            if (matchesIgnored) {
+                this._pendingZoomPreset = null;
+                return;
+            }
+        }
+
+        const preset = this._pendingZoomPreset || timelineZoomService.identifyPreset(e.start, e.end, this._fitRange);
+        this._pendingZoomPreset = null;
+        this.callback("zoomChanged", timelineZoomService.normalizeView({ preset, start: e.start, end: e.end }));
     };
 
 
@@ -513,7 +640,9 @@ define([
             },
             groupTemplate: (record, element) => createGroupTemplate(this, record, element, states, priorities, types, typesOther, icons, showFields),
             visibleFrameTemplate: (record, element) => createVisibleFrameTemplate(this, record, element),
-            onMove: (record, callback) => updateWit(this, record, callback)
+            onMove: (record, callback) => updateWit(this, record, callback),
+            // Restore only after vis-timeline has completed its automatic fit.
+            onInitialDrawComplete: () => this._restoreZoom()
             //template: function (item, element, data) { return '<h1>' + item.header + data.moving?' '+ data.start:'' + '</h1><p>' + item.description + '</p>'; }
         };
 
@@ -548,6 +677,7 @@ define([
         // Events
         this.timeline.on("select", this._onSelect.bind(this));
         this.timeline.on("doubleClick", this._onDoubleClick.bind(this));
+        this.timeline.on("rangechanged", this._onRangeChanged.bind(this));
     };
 
 
