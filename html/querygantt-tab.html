@@ -119,9 +119,11 @@
                                                     typesOther: typesOther, 
                                                     icons: icons, 
                                                     showFields: showFields,
+                                                    listWidth: listWidth,
                                                     callbacks: {
                                                         openNewWindow: openNewWindow.bind($root),
-                                                        updateWit: updateWit.bind($root)
+                                                        updateWit: updateWit.bind($root),
+                                                        listWidthChanged: listWidthChanged.bind($root)
                                                     },
                                                     actions: {
                                                         expand: _timeline_expandAction,

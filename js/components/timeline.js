@@ -1,8 +1,9 @@
 define([
     "knockout",
     "vis-timeline",
+    "services/timeline-split",
     "vis-timeline-arrow"
-], function (ko, VisTimeline) {
+], function (ko, VisTimeline, timelineSplitService) {
     //#region [ Fields ]
     
     let global = (function() { return this; })();
@@ -22,7 +23,9 @@ define([
     let Timeline = function (args = {}) {
         console.debug("Timeline()");
 
-        this.node = args.element.firstChild;
+        this.root = args.element.firstChild;
+        this.node = this.root.querySelector(".my-timeline__chart");
+        this.splitter = this.root.querySelector(".my-timeline__splitter");
         this.items = ko.isObservable(args.items) ? args.items : ko.observable(args.items || []);
         this.states = ko.isObservable(args.states) ? args.states : ko.observable(args.states || []);
         this.priorities = ko.isObservable(args.priorities) ? args.priorities : ko.observable(args.priorities || []);
@@ -32,6 +35,7 @@ define([
         this.showFields = ko.isObservableArray(args.showFields) ? args.showFields : ko.observableArray(args.showFields || []);
         this.selectedItem = ko.isObservable(args.selectedItem) ? args.selectedItem : ko.observable(args.selectedItem || null);
         this.selectedItemId = ko.isObservable(args.selectedItemId) ? args.selectedItemId : ko.observable(args.selectedItemId || null);
+        this.listWidth = ko.isObservable(args.listWidth) ? args.listWidth : ko.observable(timelineSplitService.normalize(args.listWidth));
 
         this.selectedId = ko.observable(null);
         
@@ -39,6 +43,28 @@ define([
         this.groups = null;
         this.records = null;
         this.arrows = null;
+        this._pendingListWidth = null;
+        this._splitFrame = null;
+        this._splitPointerId = null;
+        this._splitStartX = null;
+        this._splitStartWidth = null;
+
+        this._onSplitPointerDownBound = this._onSplitPointerDown.bind(this);
+        this._onSplitPointerMoveBound = this._onSplitPointerMove.bind(this);
+        this._onSplitPointerUpBound = this._onSplitPointerUp.bind(this);
+        this._onSplitPointerCancelBound = this._onSplitPointerCancel.bind(this);
+        this._onSplitKeyDownBound = this._onSplitKeyDown.bind(this);
+        this._onWindowResizeBound = this._onWindowResize.bind(this);
+        this._onTimelineChangedBound = this._onTimelineChanged.bind(this);
+
+        this.splitter.addEventListener("pointerdown", this._onSplitPointerDownBound);
+        this.splitter.addEventListener("pointermove", this._onSplitPointerMoveBound);
+        this.splitter.addEventListener("pointerup", this._onSplitPointerUpBound);
+        this.splitter.addEventListener("pointercancel", this._onSplitPointerCancelBound);
+        this.splitter.addEventListener("keydown", this._onSplitKeyDownBound);
+        if (typeof(global.addEventListener) === "function") {
+            global.addEventListener("resize", this._onWindowResizeBound);
+        }
 
         // Callbacks
         this.callbacks = args.callbacks;
@@ -263,6 +289,16 @@ define([
     Timeline.prototype.dispose = function () {
         console.log("~Timeline()");
 
+        this.splitter.removeEventListener("pointerdown", this._onSplitPointerDownBound);
+        this.splitter.removeEventListener("pointermove", this._onSplitPointerMoveBound);
+        this.splitter.removeEventListener("pointerup", this._onSplitPointerUpBound);
+        this.splitter.removeEventListener("pointercancel", this._onSplitPointerCancelBound);
+        this.splitter.removeEventListener("keydown", this._onSplitKeyDownBound);
+        if (typeof(global.removeEventListener) === "function") {
+            global.removeEventListener("resize", this._onWindowResizeBound);
+        }
+        this._cancelSplitFrame();
+        this._destroyTimeline();
         this._onItemsChangedSubscribe.dispose();
         this._onSelectedIdChangedSubscribe.dispose();
     };
@@ -321,14 +357,267 @@ define([
      * Destroys timeline if it exists.
      */
     Timeline.prototype._destroyTimeline = function () {
+        this._cancelSplitFrame();
+        this.splitter.style.display = "none";
+
         if (!this.timeline) {
             return;
         }
 
+        if (typeof(this.timeline.off) === "function") {
+            this.timeline.off("changed", this._onTimelineChangedBound);
+        }
         this.timeline.destroy();
         this.timeline = null;
         this.groups = null;
         this.records = null;
+        this.arrows = null;
+    };
+
+
+    /**
+     * Gets the vis-timeline panes used by the splitter.
+     */
+    Timeline.prototype._getSplitElements = function () {
+        const dom = this.timeline && this.timeline.body && this.timeline.body.dom;
+        if (!dom || !dom.leftContainer || !dom.centerContainer) {
+            return null;
+        }
+        return {
+            left: dom.leftContainer,
+            center: dom.centerContainer
+        };
+    };
+
+
+    /**
+     * Gets the current component width in CSS pixels.
+     */
+    Timeline.prototype._getTimelineWidth = function () {
+        if (this.node.clientWidth) {
+            return this.node.clientWidth;
+        }
+        const rect = this.node.getBoundingClientRect();
+        return rect ? rect.width : null;
+    };
+
+
+    /**
+     * Gets the rendered list/timeline boundary relative to the component.
+     */
+    Timeline.prototype._getRenderedListWidth = function () {
+        const elements = this._getSplitElements();
+        if (!elements) {
+            return null;
+        }
+
+        const rootRect = this.root.getBoundingClientRect();
+        const centerRect = elements.center.getBoundingClientRect();
+        const width = centerRect.left - rootRect.left;
+        if (Number.isFinite(width) && width > 0) {
+            return Math.round(width);
+        }
+
+        const leftRect = elements.left.getBoundingClientRect();
+        return leftRect && leftRect.width > 0 ? Math.round(leftRect.width) : null;
+    };
+
+
+    /**
+     * Places the splitter over the real boundary after vis-timeline redraws.
+     */
+    Timeline.prototype._positionSplitter = function () {
+        const width = this._getRenderedListWidth();
+        const bounds = timelineSplitService.getBounds(this._getTimelineWidth());
+        if (width === null || bounds === null) {
+            this.splitter.style.display = "none";
+            return;
+        }
+
+        this.splitter.style.display = "block";
+        this.splitter.style.left = width + "px";
+        this.splitter.setAttribute("aria-valuemin", bounds.min);
+        this.splitter.setAttribute("aria-valuemax", bounds.max);
+        this.splitter.setAttribute("aria-valuenow", width);
+    };
+
+
+    /**
+     * Applies a list width without rebuilding the timeline or reloading data.
+     */
+    Timeline.prototype._setListWidth = function (width, redraw) {
+        const elements = this._getSplitElements();
+        width = timelineSplitService.clamp(width, this._getTimelineWidth());
+        if (!elements || width === null) {
+            return null;
+        }
+
+        elements.left.style.width = width + "px";
+        if (redraw && typeof(this.timeline.redraw) === "function") {
+            this.timeline.redraw();
+        }
+        this._positionSplitter();
+        return width;
+    };
+
+
+    /**
+     * Cancels a pending drag redraw.
+     */
+    Timeline.prototype._cancelSplitFrame = function () {
+        if (this._splitFrame !== null && typeof(global.cancelAnimationFrame) === "function") {
+            global.cancelAnimationFrame(this._splitFrame);
+        }
+        this._splitFrame = null;
+        this._pendingListWidth = null;
+    };
+
+
+    /**
+     * Coalesces pointer movement to one redraw per animation frame.
+     */
+    Timeline.prototype._scheduleListWidth = function (width) {
+        width = timelineSplitService.clamp(width, this._getTimelineWidth());
+        if (width === null) {
+            return null;
+        }
+
+        this._pendingListWidth = width;
+        if (this._splitFrame !== null) {
+            return width;
+        }
+
+        const apply = () => {
+            const pendingWidth = this._pendingListWidth;
+            this._splitFrame = null;
+            this._pendingListWidth = null;
+            if (pendingWidth !== null) {
+                this._setListWidth(pendingWidth, true);
+            }
+        };
+
+        if (typeof(global.requestAnimationFrame) === "function") {
+            this._splitFrame = global.requestAnimationFrame(apply);
+        }
+        else {
+            apply();
+        }
+        return width;
+    };
+
+
+    /**
+     * Saves a user-selected width after it has been applied.
+     */
+    Timeline.prototype._commitListWidth = function (width) {
+        width = this._setListWidth(width, true);
+        if (width === null) {
+            return;
+        }
+
+        this.listWidth(width);
+        this.callback("listWidthChanged", width);
+    };
+
+
+    Timeline.prototype._onSplitPointerDown = function (e) {
+        if ((typeof(e.button) === "number" && e.button !== 0) || !this.timeline) {
+            return;
+        }
+
+        const width = this._getRenderedListWidth();
+        if (width === null) {
+            return;
+        }
+
+        this._splitPointerId = e.pointerId;
+        this._splitStartX = e.clientX;
+        this._splitStartWidth = width;
+        if (typeof(this.splitter.setPointerCapture) === "function") {
+            this.splitter.setPointerCapture(e.pointerId);
+        }
+        e.preventDefault();
+    };
+
+
+    Timeline.prototype._onSplitPointerMove = function (e) {
+        if (e.pointerId !== this._splitPointerId) {
+            return;
+        }
+        this._scheduleListWidth(this._splitStartWidth + e.clientX - this._splitStartX);
+        e.preventDefault();
+    };
+
+
+    Timeline.prototype._finishSplitPointer = function (e, persist) {
+        if (e.pointerId !== this._splitPointerId) {
+            return;
+        }
+
+        this._cancelSplitFrame();
+        const width = persist
+            ? this._splitStartWidth + e.clientX - this._splitStartX
+            : this._splitStartWidth;
+
+        if (typeof(this.splitter.hasPointerCapture) !== "function" || this.splitter.hasPointerCapture(e.pointerId)) {
+            if (typeof(this.splitter.releasePointerCapture) === "function") {
+                this.splitter.releasePointerCapture(e.pointerId);
+            }
+        }
+
+        this._splitPointerId = null;
+        this._splitStartX = null;
+        this._splitStartWidth = null;
+        if (persist) {
+            this._commitListWidth(width);
+        }
+        else {
+            this._setListWidth(width, true);
+        }
+        e.preventDefault();
+    };
+
+
+    Timeline.prototype._onSplitPointerUp = function (e) {
+        this._finishSplitPointer(e, true);
+    };
+
+
+    Timeline.prototype._onSplitPointerCancel = function (e) {
+        this._finishSplitPointer(e, false);
+    };
+
+
+    Timeline.prototype._onSplitKeyDown = function (e) {
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") {
+            return;
+        }
+
+        const width = this._getRenderedListWidth();
+        if (width === null) {
+            return;
+        }
+
+        const direction = e.key === "ArrowLeft" ? -1 : 1;
+        const step = timelineSplitService.keyboardStep * (e.shiftKey ? 5 : 1);
+        this._commitListWidth(width + direction * step);
+        e.preventDefault();
+    };
+
+
+    Timeline.prototype._onWindowResize = function () {
+        const preferredWidth = timelineSplitService.normalize(this.listWidth());
+        if (preferredWidth !== null) {
+            this._scheduleListWidth(preferredWidth);
+        }
+        else {
+            this._positionSplitter();
+        }
+    };
+
+
+    Timeline.prototype._onTimelineChanged = function () {
+        this._positionSplitter();
     };
 
 
@@ -548,6 +837,15 @@ define([
         // Events
         this.timeline.on("select", this._onSelect.bind(this));
         this.timeline.on("doubleClick", this._onDoubleClick.bind(this));
+        this.timeline.on("changed", this._onTimelineChangedBound);
+
+        const preferredWidth = timelineSplitService.normalize(this.listWidth());
+        if (preferredWidth !== null) {
+            this._setListWidth(preferredWidth, true);
+        }
+        else {
+            this._positionSplitter();
+        }
     };
 
 
@@ -964,7 +1262,10 @@ define([
             createViewModel: Timeline.createViewModel 
         },
         template: 
-            `<div class="my-timeline"></div>`
+            `<div class="my-timeline">
+                <div class="my-timeline__chart"></div>
+                <div class="my-timeline__splitter" role="separator" aria-orientation="vertical" aria-label="Resize the work item list and timeline" tabindex="0" title="Drag to resize the work item list and timeline" data-noexport="true"></div>
+            </div>`
     });
 
     //#endregion

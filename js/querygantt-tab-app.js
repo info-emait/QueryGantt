@@ -11,6 +11,8 @@ define([
     "api/WorkItemTracking/index",
     "services/data",
     "services/icon",
+    "services/browser-settings",
+    "services/timeline-split",
     "my/templates/gantt",
     "my/components/legend",
     "my/components/timeline",
@@ -18,7 +20,7 @@ define([
     "my/components/message",
     "my/components/filter",
     "my/components/zerodata"
-], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, dataService, iconService, ganttTemplate) {
+], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, dataService, iconService, browserSettingsService, timelineSplitService, ganttTemplate) {
     //#region [ Fields ]
 
     const global = (function () { return this; })();
@@ -42,6 +44,8 @@ define([
         this.user = args.user;
         this.project = args.project;
         this.query = args.query;
+        this.extensionId = args.extensionId;
+        this.browserStorage = args.browserStorage || null;
 
         this.token = null;
         this.path = null;
@@ -49,6 +53,7 @@ define([
         this.zero = ko.observable(null);
 
         this.showFields = ko.observableArray(Array.isArray(args.showFields) ? args.showFields : ["duration"]).extend({ rateLimit: { timeout: 1000, method: "notifyWhenChangesStop" } });
+        this.listWidth = ko.observable(timelineSplitService.normalize(args.listWidth));
 
         this.isLoading = ko.observable(true);
         this.types = ko.observableArray([]);
@@ -301,6 +306,24 @@ define([
     Model.prototype.openNewWindow = function (url) {
         sdk.getService(api.CommonServiceIds.HostNavigationService)
             .then((service) => service.openNewWindow(url));
+    };
+
+
+    /**
+     * Persists the work-item list width after the user moves the timeline
+     * splitter. This is a project-level browser preference rather than a query
+     * setting because it describes the user's preferred screen layout.
+     *
+     * @param {number} width Width in CSS pixels.
+     */
+    Model.prototype.listWidthChanged = function (width) {
+        width = timelineSplitService.normalize(width);
+        if (width === null) {
+            return;
+        }
+
+        this.listWidth(width);
+        browserSettingsService.write(this.extensionId, this.project.id, "timelineListWidth", null, width, this.browserStorage);
     };
 
 
@@ -1004,6 +1027,8 @@ define([
             .then((response) => ({ project: response[0], state: response[1], settings: response[2] }))
             .then(({ project, state, settings }) => {
                 let showFields = null;
+                const extensionId = sdk.getExtensionContext().id;
+                const listWidth = browserSettingsService.read(extensionId, project.id, "timelineListWidth", null);
                 
                 // Read some initial data from settings first
                 if (settings) {
@@ -1030,7 +1055,9 @@ define([
                     user: sdk.getUser().displayName,
                     project: project,
                     query: sdk.getConfiguration().query,
-                    showFields
+                    showFields,
+                    extensionId,
+                    listWidth
                 });
                 console.debug("QueryGanttTabApp : ready() : %o", model);
                 
