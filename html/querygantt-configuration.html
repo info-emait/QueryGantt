@@ -12,10 +12,10 @@
                 <span class="bolt-formitem-message body-xs margin-bottom-8">Title and work-item hierarchy are always shown. Add, remove, or reorder the remaining columns.</span>
                 <div class="querygantt-configuration__field-list" data-bind="foreach: fieldRows">
                     <div class="querygantt-configuration__field-row flex-row flex-center"
-                         data-bind="event: { dragover: $root.allowFieldDrop.bind($root), drop: $root.dropField.bind($root) }">
+                         data-bind="attr: { 'data-field-row-id': id }">
                         <button class="querygantt-configuration__field-handle bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment fluent-icons-enabled"
-                                type="button" draggable="true" title="Drag to reorder. Press Space, then Up or Down, for keyboard reorder."
-                                data-bind="event: { dragstart: $root.startFieldDrag.bind($root), dragend: $root.endFieldDrag.bind($root), keydown: $root.onFieldKeyDown.bind($root) }, attr: { 'aria-grabbed': grabbed() ? 'true' : 'false', 'aria-label': 'Reorder column ' + ($index() + 1) }">
+                                type="button" title="Drag to reorder. Press Space, then Up or Down, for keyboard reorder."
+                                data-bind="event: { pointerdown: $root.startFieldPointerDrag.bind($root), keydown: $root.onFieldKeyDown.bind($root) }, attr: { 'aria-grabbed': grabbed() ? 'true' : 'false', 'aria-label': 'Reorder column ' + ($index() + 1) }">
                             <span aria-hidden="true" class="flex-noshrink fabric-icon ms-Icon--GripperDotsVertical"></span>
                         </button>
                         <div class="bolt-textfield bolt-textfield--select flex-row flex-center focus-treatment flex-grow">

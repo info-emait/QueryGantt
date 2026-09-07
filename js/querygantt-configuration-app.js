@@ -34,6 +34,14 @@ define([
         this.fieldsValue = ko.observableArray(selected);
         this._nextFieldRowId = 1;
         this._draggedFieldRow = null;
+        this._fieldPointerId = null;
+        this._fieldPointerHandle = null;
+        this._fieldDropRow = null;
+        this._fieldDropElement = null;
+        this._fieldDropAfter = false;
+        this._fieldPointerMoveHandler = this._onFieldPointerMove.bind(this);
+        this._fieldPointerUpHandler = this._onFieldPointerUp.bind(this);
+        this._fieldPointerCancelHandler = this._onFieldPointerCancel.bind(this);
         this._keyboardFieldRow = null;
         this.fieldRows = ko.observableArray(selected.map((value) => this._createFieldRow(value)));
         this.panel = args.panel;
@@ -122,65 +130,47 @@ define([
 
 
     /**
-     * Starts pointer drag reorder.
+     * Starts pointer-based row reordering. Native HTML drag/drop is not used
+     * because Azure DevOps hosts this pane inside an extension iframe, where
+     * the browser drag lifecycle is not reliably delivered.
      */
-    Model.prototype.startFieldDrag = function (row, event) {
-        this._draggedFieldRow = row;
-        if (event.dataTransfer) {
-            event.dataTransfer.effectAllowed = "move";
-            event.dataTransfer.setData("text/plain", row.id + "");
+    Model.prototype.startFieldPointerDrag = function (row, event) {
+        if (!event || event.isPrimary === false || (event.button !== undefined && event.button !== 0)) {
+            return true;
         }
-        return true;
-    };
 
+        this._clearFieldPointerDrag();
+        if (this._keyboardFieldRow) {
+            this._keyboardFieldRow.grabbed(false);
+            this._keyboardFieldRow = null;
+        }
 
-    /**
-     * Allows a field row to receive a drop.
-     */
-    Model.prototype.allowFieldDrop = function (row, event) {
-        if (this._draggedFieldRow && this._draggedFieldRow !== row) {
-            event.preventDefault();
-            if (event.dataTransfer) {
-                event.dataTransfer.dropEffect = "move";
+        event.preventDefault();
+        event.stopPropagation();
+        this._draggedFieldRow = row;
+        this._fieldPointerId = event.pointerId;
+        this._fieldPointerHandle = event.currentTarget || null;
+        row.grabbed(true);
+
+        if (this._fieldPointerHandle) {
+            if (typeof(this._fieldPointerHandle.focus) === "function") {
+                this._fieldPointerHandle.focus();
+            }
+            if (typeof(this._fieldPointerHandle.setPointerCapture) === "function") {
+                try {
+                    this._fieldPointerHandle.setPointerCapture(event.pointerId);
+                }
+                catch (error) {
+                }
             }
         }
-        return true;
-    };
 
-
-    /**
-     * Drops the dragged row before or after the target based on pointer half.
-     */
-    Model.prototype.dropField = function (row, event) {
-        event.preventDefault();
-        const dragged = this._draggedFieldRow;
-        this._draggedFieldRow = null;
-        if (!dragged || dragged === row) {
-            return false;
+        if (typeof(doc.addEventListener) === "function") {
+            doc.addEventListener("pointermove", this._fieldPointerMoveHandler, true);
+            doc.addEventListener("pointerup", this._fieldPointerUpHandler, true);
+            doc.addEventListener("pointercancel", this._fieldPointerCancelHandler, true);
         }
-
-        const rows = this.fieldRows().slice();
-        const from = rows.indexOf(dragged);
-        let to = rows.indexOf(row);
-        const bounds = event.currentTarget && typeof(event.currentTarget.getBoundingClientRect) === "function"
-            ? event.currentTarget.getBoundingClientRect()
-            : null;
-        const after = bounds && Number.isFinite(event.clientY) && event.clientY > bounds.top + (bounds.height / 2);
-        rows.splice(from, 1);
-        to = rows.indexOf(row) + (after ? 1 : 0);
-        rows.splice(to, 0, dragged);
-        this.fieldRows(rows);
-        this._syncFieldsValue();
-        return true;
-    };
-
-
-    /**
-     * Clears pointer drag state.
-     */
-    Model.prototype.endFieldDrag = function () {
-        this._draggedFieldRow = null;
-        return true;
+        return false;
     };
 
 
@@ -240,6 +230,11 @@ define([
      * Dispose.
      */
     Model.prototype.dispose = function () {
+        this._clearFieldPointerDrag();
+        if (this._keyboardFieldRow) {
+            this._keyboardFieldRow.grabbed(false);
+            this._keyboardFieldRow = null;
+        }
         console.log("~QueryGanttConfigurationApp()");
     };
 
@@ -282,6 +277,156 @@ define([
             this.fieldsValue(value);
         }
         return value;
+    };
+
+
+    /**
+     * Tracks a pointer over the field rows even after it leaves the handle.
+     */
+    Model.prototype._onFieldPointerMove = function (event) {
+        if (!this._draggedFieldRow || event.pointerId !== this._fieldPointerId) {
+            return true;
+        }
+        event.preventDefault();
+        this._updateFieldDropTarget(event);
+        return false;
+    };
+
+
+    /**
+     * Commits the current pointer drop target.
+     */
+    Model.prototype._onFieldPointerUp = function (event) {
+        if (!this._draggedFieldRow || event.pointerId !== this._fieldPointerId) {
+            return true;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        this._updateFieldDropTarget(event);
+
+        const dragged = this._draggedFieldRow;
+        const target = this._fieldDropRow;
+        const after = this._fieldDropAfter;
+        this._clearFieldPointerDrag();
+        if (target) {
+            this._moveFieldTo(dragged, target, after);
+        }
+        return false;
+    };
+
+
+    /**
+     * Cancels a pointer gesture without changing the saved order.
+     */
+    Model.prototype._onFieldPointerCancel = function (event) {
+        if (!this._draggedFieldRow || event.pointerId !== this._fieldPointerId) {
+            return true;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        this._clearFieldPointerDrag();
+        return false;
+    };
+
+
+    /**
+     * Finds the field row under the pointer and marks its insertion edge.
+     */
+    Model.prototype._updateFieldDropTarget = function (event) {
+        this._clearFieldDropTarget();
+        if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY) || typeof(doc.elementFromPoint) !== "function") {
+            return false;
+        }
+
+        const element = doc.elementFromPoint(event.clientX, event.clientY);
+        const rowElement = element && typeof(element.closest) === "function"
+            ? element.closest(".querygantt-configuration__field-row")
+            : null;
+        const rowId = rowElement && typeof(rowElement.getAttribute) === "function"
+            ? rowElement.getAttribute("data-field-row-id")
+            : null;
+        const row = this.fieldRows().find((candidate) => candidate.id + "" === rowId);
+        if (!row || row === this._draggedFieldRow) {
+            return false;
+        }
+
+        const bounds = typeof(rowElement.getBoundingClientRect) === "function"
+            ? rowElement.getBoundingClientRect()
+            : null;
+        const after = !!(bounds && event.clientY > bounds.top + (bounds.height / 2));
+        this._fieldDropRow = row;
+        this._fieldDropElement = rowElement;
+        this._fieldDropAfter = after;
+        if (rowElement.classList) {
+            rowElement.classList.add("querygantt-configuration__field-row--drop-" + (after ? "after" : "before"));
+        }
+        return true;
+    };
+
+
+    /**
+     * Moves a field row to one side of another row.
+     */
+    Model.prototype._moveFieldTo = function (dragged, target, after) {
+        const original = this.fieldRows().slice();
+        const rows = original.slice();
+        const from = rows.indexOf(dragged);
+        if (from < 0 || rows.indexOf(target) < 0 || dragged === target) {
+            return false;
+        }
+
+        rows.splice(from, 1);
+        const to = rows.indexOf(target) + (after ? 1 : 0);
+        rows.splice(to, 0, dragged);
+        if (rows.every((row, index) => row === original[index])) {
+            return false;
+        }
+
+        this.fieldRows(rows);
+        this._syncFieldsValue();
+        return true;
+    };
+
+
+    /**
+     * Clears the visible insertion marker.
+     */
+    Model.prototype._clearFieldDropTarget = function () {
+        if (this._fieldDropElement && this._fieldDropElement.classList) {
+            this._fieldDropElement.classList.remove("querygantt-configuration__field-row--drop-before");
+            this._fieldDropElement.classList.remove("querygantt-configuration__field-row--drop-after");
+        }
+        this._fieldDropRow = null;
+        this._fieldDropElement = null;
+        this._fieldDropAfter = false;
+    };
+
+
+    /**
+     * Releases capture and all document listeners for a pointer gesture.
+     */
+    Model.prototype._clearFieldPointerDrag = function () {
+        if (typeof(doc.removeEventListener) === "function") {
+            doc.removeEventListener("pointermove", this._fieldPointerMoveHandler, true);
+            doc.removeEventListener("pointerup", this._fieldPointerUpHandler, true);
+            doc.removeEventListener("pointercancel", this._fieldPointerCancelHandler, true);
+        }
+        this._clearFieldDropTarget();
+
+        if (this._draggedFieldRow) {
+            this._draggedFieldRow.grabbed(false);
+        }
+        if (this._fieldPointerHandle && typeof(this._fieldPointerHandle.releasePointerCapture) === "function" && this._fieldPointerId !== null) {
+            try {
+                this._fieldPointerHandle.releasePointerCapture(this._fieldPointerId);
+            }
+            catch (error) {
+            }
+        }
+
+        this._draggedFieldRow = null;
+        this._fieldPointerId = null;
+        this._fieldPointerHandle = null;
     };
 
     /**

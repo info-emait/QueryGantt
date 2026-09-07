@@ -142,11 +142,32 @@ const loadConfiguration = function () {
     let result = null;
     let source = fs.readFileSync(path.join(__dirname, "../js/querygantt-configuration-app.js"), "utf8");
     source = source.replace(/\n\}\);\s*$/, "\n    return { Model: Model };\n});\n");
+    const listeners = {};
+    const testDocument = {
+        readyState: "loading",
+        hitElement: null,
+        addEventListener: function (name, handler) {
+            listeners[name] = listeners[name] || [];
+            listeners[name].push(handler);
+        },
+        removeEventListener: function (name, handler) {
+            listeners[name] = (listeners[name] || []).filter((candidate) => candidate !== handler);
+        },
+        dispatch: function (name, event) {
+            (listeners[name] || []).slice().forEach((handler) => handler(event));
+        },
+        listenerCount: function (name) {
+            return (listeners[name] || []).length;
+        },
+        elementFromPoint: function () {
+            return this.hitElement;
+        }
+    };
     vm.runInNewContext(source, {
         Promise: Promise,
         Set: Set,
         console: { debug: function () {}, log: function () {} },
-        document: { readyState: "loading", addEventListener: function () {} },
+        document: testDocument,
         define: function (names, factory) {
             const dependencies = {
                 module: { config: function () { return {}; } },
@@ -159,10 +180,11 @@ const loadConfiguration = function () {
             result = factory.apply(null, names.map((name) => dependencies[name] || {}));
         }
     }, { filename: "querygantt-configuration-app.js" });
-    return result;
+    return { exports: result, document: testDocument };
 };
 
-const ConfigurationModel = loadConfiguration().Model;
+const loadedConfiguration = loadConfiguration();
+const ConfigurationModel = loadedConfiguration.exports.Model;
 const configuration = new ConfigurationModel({
     project: { id: "project-id" },
     fields: definitions.filter((field) => !field.unavailable),
@@ -183,5 +205,92 @@ configuration.changeField(changed);
 assert.deepStrictEqual(configuration._getFieldsValue(), ["assignedTo", "field:Custom.Score", "duration"], "selecting an existing field should swap rows instead of creating a duplicate");
 configuration.removeField(configuration.fieldRows()[0]);
 assert.deepStrictEqual(configuration._getFieldsValue(), ["field:Custom.Score", "duration"], "Remove should retain the remaining order");
+const configurationTemplate = fs.readFileSync(path.join(__dirname, "../html/querygantt-configuration.html"), "utf8");
+assert.ok(configurationTemplate.includes("pointerdown: $root.startFieldPointerDrag.bind($root)"),
+    "the real configuration template should wire its drag handle to pointer reorder");
+assert.strictEqual(configurationTemplate.includes('draggable="true"'), false,
+    "the configuration template should not fall back to unreliable iframe-native drag/drop");
+
+const createClassList = function () {
+    const names = new Set();
+    return {
+        add: function (name) { names.add(name); },
+        remove: function (name) { names.delete(name); },
+        contains: function (name) { return names.has(name); }
+    };
+};
+const dragConfiguration = new ConfigurationModel({
+    project: { id: "project-id" },
+    fields: definitions.filter((field) => !field.unavailable),
+    fieldsValue: ["duration", "field:Custom.Score", "assignedTo"],
+    dateGranularity: "day",
+    panel: { close: function () {} }
+});
+const draggedRow = dragConfiguration.fieldRows()[0];
+const targetRow = dragConfiguration.fieldRows()[2];
+const targetClassList = createClassList();
+const targetElement = {
+    classList: targetClassList,
+    getAttribute: function (name) {
+        return name === "data-field-row-id" ? targetRow.id + "" : null;
+    },
+    getBoundingClientRect: function () {
+        return { top: 100, height: 40 };
+    },
+    closest: function () { return this; }
+};
+const targetChild = { closest: function () { return targetElement; } };
+const capturedPointers = [];
+const releasedPointers = [];
+let handleFocused = false;
+const handle = {
+    focus: function () { handleFocused = true; },
+    setPointerCapture: function (pointerId) { capturedPointers.push(pointerId); },
+    releasePointerCapture: function (pointerId) { releasedPointers.push(pointerId); }
+};
+const pointerEvent = function (values) {
+    return Object.assign({
+        pointerId: 7,
+        clientX: 20,
+        clientY: 120,
+        preventDefault: function () {},
+        stopPropagation: function () {}
+    }, values || {});
+};
+
+assert.strictEqual(typeof(dragConfiguration.startFieldPointerDrag), "function",
+    "the configuration pane must expose an iframe-safe pointer drag entry point");
+dragConfiguration.startFieldPointerDrag(draggedRow, pointerEvent({ button: 0, currentTarget: handle }));
+assert.strictEqual(handleFocused, true, "pointer reorder should retain keyboard focus on its drag handle");
+assert.deepStrictEqual(capturedPointers, [7], "pointer reorder should capture the active pointer");
+assert.strictEqual(draggedRow.grabbed(), true, "the active row should expose its grabbed state");
+assert.strictEqual(loadedConfiguration.document.listenerCount("pointermove"), 1,
+    "pointer reorder should keep tracking outside the handle and row");
+
+loadedConfiguration.document.hitElement = targetChild;
+loadedConfiguration.document.dispatch("pointermove", pointerEvent({ clientY: 135 }));
+assert.strictEqual(targetClassList.contains("querygantt-configuration__field-row--drop-after"), true,
+    "the lower half of a field row should show an after-row drop target");
+loadedConfiguration.document.dispatch("pointerup", pointerEvent({ clientY: 135 }));
+assert.deepStrictEqual(dragConfiguration._getFieldsValue(), ["field:Custom.Score", "assignedTo", "duration"],
+    "the real pointer lifecycle should reorder and persist the configured fields");
+assert.strictEqual(draggedRow.grabbed(), false, "completed pointer reorder should clear grabbed state");
+assert.deepStrictEqual(releasedPointers, [7], "completed pointer reorder should release pointer capture");
+assert.strictEqual(targetClassList.contains("querygantt-configuration__field-row--drop-after"), false,
+    "completed pointer reorder should clear its drop marker");
+assert.strictEqual(loadedConfiguration.document.listenerCount("pointermove"), 0,
+    "completed pointer reorder should remove document listeners");
+
+const beforeCancel = dragConfiguration._getFieldsValue().slice();
+const cancelDraggedRow = dragConfiguration.fieldRows()[0];
+dragConfiguration.startFieldPointerDrag(cancelDraggedRow, pointerEvent({ button: 0, currentTarget: handle }));
+loadedConfiguration.document.hitElement = targetChild;
+loadedConfiguration.document.dispatch("pointermove", pointerEvent({ clientY: 135 }));
+loadedConfiguration.document.dispatch("pointercancel", pointerEvent({ clientY: 135 }));
+assert.deepStrictEqual(dragConfiguration._getFieldsValue(), beforeCancel,
+    "a cancelled pointer gesture must not reorder configured fields");
+assert.strictEqual(cancelDraggedRow.grabbed(), false, "a cancelled gesture should clear grabbed state");
+assert.strictEqual(loadedConfiguration.document.listenerCount("pointermove"), 0,
+    "a cancelled gesture should remove document listeners");
 
 console.log("field columns tests passed");

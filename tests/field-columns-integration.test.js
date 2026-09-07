@@ -26,8 +26,13 @@ assert.ok(timeline.includes("showFields.filter((value) => value !== \"id\").forE
     "configured columns should render in the persisted user order");
 assert.ok(timeline.includes("fieldColumnsService.escapeHtml"),
     "arbitrary values should be escaped before entering a raw HTML timeline template");
-assert.ok(configurationHtml.includes("Add a column") && configurationHtml.includes("dragstart") && configurationHtml.includes("Remove column"),
-    "Column options should support adding, removing, and reordering fields");
+assert.ok(configurationHtml.includes("Add a column") &&
+    configurationHtml.includes("pointerdown: $root.startFieldPointerDrag.bind($root)") &&
+    configurationHtml.includes("data-field-row-id") &&
+    configurationHtml.includes("Remove column"),
+    "Column options should wire adding, removing, and pointer-based field reordering");
+assert.strictEqual(configurationHtml.includes("dragstart"), false,
+    "Column options should not rely on iframe-native HTML drag/drop");
 assert.ok(timelineLess.includes("&--field {\n                width: rem(160px);"),
     "generic fields should use a stable column width");
 
