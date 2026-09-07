@@ -84,11 +84,12 @@
                                                 <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--ChevronRight medium"></span>
                                             </span>
                                         </button>
-                                        <button class="bolt-header-command-item-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment margin-left-8" tabindex="0" type="button" title="Open configuration"
+                                        <button class="bolt-header-command-item-button bolt-button bolt-icon-button enabled bolt-focus-treatment margin-left-8" tabindex="0" type="button" title="Column Options"
                                                 data-bind="click: openSettings">
                                             <span class="fluent-icons-enabled">
-                                                <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Settings medium"></span>
+                                                <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Repair medium"></span>
                                             </span>
+                                            <span class="bolt-button-text body-m">Column Options</span>
                                         </button>
                                         <button class="bolt-header-command-item-button bolt-button bolt-icon-button enabled bolt-focus-treatment margin-left-8" tabindex="0" type="button"
                                                 data-bind="click: download">
@@ -119,6 +120,7 @@
                                                     typesOther: typesOther, 
                                                     icons: icons, 
                                                     showFields: showFields,
+                                                    fieldDefinitions: fields,
                                                     callbacks: {
                                                         openNewWindow: openNewWindow.bind($root),
                                                         updateWit: updateWit.bind($root)

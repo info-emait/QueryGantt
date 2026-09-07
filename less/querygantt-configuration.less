@@ -12,3 +12,52 @@ html, body {
 
 @import "bolt-textfield.less";
 @import "bolt-checkbox.less";
+
+.querygantt-configuration {
+    &__field-list {
+        min-height: 0;
+    }
+
+    &__field-row {
+        gap: rem(4px);
+        padding: rem(4px) 0;
+        border-bottom: 1px solid var(--component-border-color, rgba(0, 0, 0, .08));
+
+        &--drop-before {
+            box-shadow: inset 0 rem(2px) 0 rgba(var(--palette-primary-tint-10, 0, 120, 212), 1);
+        }
+
+        &--drop-after {
+            box-shadow: inset 0 rem(-2px) 0 rgba(var(--palette-primary-tint-10, 0, 120, 212), 1);
+        }
+    }
+
+    &__field-handle,
+    &__field-remove {
+        flex: 0 0 rem(32px);
+        width: rem(32px);
+        height: rem(32px);
+        cursor: grab;
+
+        &[aria-grabbed="true"] {
+            background-color: rgba(var(--palette-primary-tint-30, 222, 236, 249), 1);
+        }
+    }
+
+    &__field-handle {
+        touch-action: none;
+        user-select: none;
+
+        &[aria-grabbed="true"] {
+            cursor: grabbing;
+        }
+    }
+
+    &__field-remove {
+        cursor: pointer;
+    }
+
+    &__add-field {
+        align-self: flex-start;
+    }
+}

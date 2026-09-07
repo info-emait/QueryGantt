@@ -38,6 +38,7 @@
             display: flex;
             flex-direction: row;
             flex-wrap: nowrap;
+            overflow: hidden;
 
             > div {
                 font-size: rem(12px);
@@ -69,6 +70,7 @@
         }
 
         &__content {
+            flex: 0 0 auto;
             color: var(--text-secondary-color);
             white-space: nowrap;
 
@@ -114,6 +116,11 @@
             
             &--assignedto {
                 width: rem(125px);
+            }
+
+            &--tags,
+            &--field {
+                width: rem(160px);
             }
         }
 

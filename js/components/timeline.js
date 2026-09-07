@@ -1,8 +1,9 @@
 define([
     "knockout",
+    "services/field-columns",
     "vis-timeline",
     "vis-timeline-arrow"
-], function (ko, VisTimeline) {
+], function (ko, fieldColumnsService, VisTimeline) {
     //#region [ Fields ]
     
     let global = (function() { return this; })();
@@ -30,6 +31,7 @@ define([
         this.typesOther = ko.isObservable(args.typesOther) ? args.typesOther : ko.observable(args.typesOther || []);
         this.icons = ko.isObservable(args.icons) ? args.icons : ko.observable(args.icons || []);
         this.showFields = ko.isObservableArray(args.showFields) ? args.showFields : ko.observableArray(args.showFields || []);
+        this.fieldDefinitions = ko.isObservableArray(args.fieldDefinitions) ? args.fieldDefinitions : ko.observableArray(args.fieldDefinitions || []);
         this.selectedItem = ko.isObservable(args.selectedItem) ? args.selectedItem : ko.observable(args.selectedItem || null);
         this.selectedItemId = ko.isObservable(args.selectedItemId) ? args.selectedItemId : ko.observable(args.selectedItemId || null);
 
@@ -454,6 +456,7 @@ define([
         var typesOther = this.typesOther();
         var icons = this.icons();
         var showFields = this.showFields();
+        var fieldDefinitions = this.fieldDefinitions();
         var now = new Date();
 
         this._createStyles(types, typesOther);
@@ -511,7 +514,7 @@ define([
                 updateGroup: false,
                 updateTime: true
             },
-            groupTemplate: (record, element) => createGroupTemplate(this, record, element, states, priorities, types, typesOther, icons, showFields),
+            groupTemplate: (record, element) => createGroupTemplate(this, record, element, states, priorities, types, typesOther, icons, showFields, fieldDefinitions),
             visibleFrameTemplate: (record, element) => createVisibleFrameTemplate(this, record, element),
             onMove: (record, callback) => updateWit(this, record, callback)
             //template: function (item, element, data) { return '<h1>' + item.header + data.moving?' '+ data.start:'' + '</h1><p>' + item.description + '</p>'; }
@@ -637,6 +640,7 @@ define([
             treeLevel: wit.level,
             content: wit.title.truncate(50, true),
             title: wit.title,
+            fieldValues: Object.assign({}, wit.fieldValues || {}),
             type: wit.type,
             state: wit.state,
             priority: wit.priority,
@@ -696,6 +700,74 @@ define([
 
 
     /**
+     * Creates one configured column. Legacy values retain their existing
+     * formatting, while arbitrary Azure values use a safe generic renderer
+     * and follow the user's selected order.
+     */
+    let createConfiguredField = function (record, value, fieldDefinitions) {
+        const escape = fieldColumnsService.escapeHtml;
+        const textColumn = function (modifier, title, text) {
+            return `<div class="my-timeline-group__content my-timeline-group__content--${modifier} text-left text-ellipsis margin-left-8" title="${escape(title)}">${escape(text || "")}</div>`;
+        };
+
+        switch (value) {
+            case "assignedTo":
+                return textColumn("assignedto", "Assigned To", record.assignedTo);
+            case "project":
+                return textColumn("project", "Team Project", record.project);
+            case "areaPath":
+                return textColumn("areapath", "Area Path", record.areaPath);
+            case "nodeName":
+                return textColumn("nodename", "Node Name", record.nodeName);
+            case "iterationPath":
+                return textColumn("iterationpath", "Iteration Path", record.iterationPath);
+            case "parentTitle":
+                return textColumn("parent", "Parent", record.parentTitle);
+            case "tags": {
+                const tags = (record.tags || []).map((tag) => `<div>${escape(tag)}</div>`).join("");
+                return `<div class="my-timeline-group__content my-timeline-group__content--tags my-timeline-group__tags margin-left-8" title="Tags">${tags}</div>`;
+            }
+            case "effort":
+                return `<div class="my-timeline-group__content my-timeline-group__content--effort justify-end margin-left-8 flex-row flex-center" title="Effort">
+                            ${escape(record.effort + " h")}
+                            <div class="bolt-pill bolt-pill--timeline flex-row flex-center outlined compact margin-left-4">
+                                <div class="bolt-pill-content text-ellipsis" role="presentation">EFF</div>
+                            </div>
+                        </div>`;
+            case "remainingWork":
+                return `<div class="my-timeline-group__content my-timeline-group__content--remainingwork justify-end margin-left-8 flex-row flex-center" title="Remaining Work">
+                            ${escape(record.remainingWork + " h")}
+                            <div class="bolt-pill bolt-pill--timeline flex-row flex-center outlined compact margin-left-4">
+                                <div class="bolt-pill-content text-ellipsis" role="presentation">RW</div>
+                            </div>
+                        </div>`;
+            case "completedWork":
+                return `<div class="my-timeline-group__content my-timeline-group__content--completedwork justify-end margin-left-8 flex-row flex-center" title="Completed Work">
+                            <div>${escape(record.completedWork + " h")}</div>
+                            <div class="bolt-pill bolt-pill--timeline flex-row flex-center outlined compact margin-left-4">
+                                <div class="bolt-pill-content text-ellipsis" role="presentation">CW</div>
+                            </div>
+                        </div>`;
+            case "dates":
+                return `<div class="my-timeline-group__content my-timeline-group__content--dates text-right margin-left-8" title="Dates">${escape(getFormattedDate(record.startDate) || "×")} - ${escape(getFormattedDate(record.endDate) || "×")}</div>`;
+            case "duration":
+                return `<div class="my-timeline-group__content my-timeline-group__content--duration text-right margin-left-8" title="Duration">${escape(record.duration)} day(s)</div>`;
+        }
+
+        const referenceName = fieldColumnsService.getReferenceName(value);
+        if (!referenceName) {
+            return "";
+        }
+        const definition = (fieldDefinitions || []).find((field) => field.value === value) || {
+            name: referenceName,
+            referenceName: referenceName
+        };
+        const text = fieldColumnsService.formatValue((record.fieldValues || {})[referenceName], definition);
+        return textColumn("field", definition.name || referenceName, text);
+    };
+
+
+    /**
      * Creates template for group.
      * 
      * @param {object} vm View model.
@@ -707,8 +779,9 @@ define([
      * @param {array} typesOthers List of supported types for other projects in the across project query.
      * @param {array} icons List of icons.
      * @param {array} showFields List of fields which should be rendered.
+     * @param {array} fieldDefinitions Available field definitions.
      */
-    let createGroupTemplate = function (vm, record, element, states, priorities, types, typesOther, icons, showFields) {
+    let createGroupTemplate = function (vm, record, element, states, priorities, types, typesOther, icons, showFields, fieldDefinitions) {
         // Do not create group label for markers group
         if (!record || (record.type === "markers")) {
             return "";
@@ -723,71 +796,13 @@ define([
             `<div class="my-timeline-group__state" title="${record.state}" style="background-color: #${state.color}"></div>`
         ];
 
-        if (showFields.includes("tags")) {
-            const tags = record.tags.length ? record.tags.map((t) => `<div>${t}</div>`).join("") : "";
-            result.push(`<div class="my-timeline-group__tags">${tags}</div>`);
-        }
-
         result.push(`<div class="my-timeline-group__dividier"></div>`);
-
-        if (showFields.includes("assignedTo")) {
-            result.push(`<div class="my-timeline-group__content my-timeline-group__content--assignedto text-left text-ellipsis margin-left-8">${record.assignedTo || ""}</div>`);
-        }
-        
-        if (showFields.includes("project")) {
-            result.push(`<div class="my-timeline-group__content my-timeline-group__content--project text-left text-ellipsis margin-left-8" title="Project">${record.project}</div>`);
-        }
-        
-        if (showFields.includes("areaPath")) {
-            result.push(`<div class="my-timeline-group__content my-timeline-group__content--areapath text-left text-ellipsis margin-left-8" title="Area Path">${record.areaPath}</div>`);
-        }
-        
-        if (showFields.includes("nodeName")) {
-            result.push(`<div class="my-timeline-group__content my-timeline-group__content--nodename text-left text-ellipsis margin-left-8" title="Node Name">${record.nodeName}</div>`);
-        }
-
-        if (showFields.includes("iterationPath")) {
-            result.push(`<div class="my-timeline-group__content my-timeline-group__content--iterationpath text-left text-ellipsis margin-left-8" title="Iteration Path">${record.iterationPath}</div>`);
-        }
-        
-        if (showFields.includes("parentTitle")) {
-            result.push(`<div class="my-timeline-group__content my-timeline-group__content--parent text-left text-ellipsis margin-left-8" title="Parent">${record.parentTitle || ""}</div>`);
-        }
-
-        if (showFields.includes("effort")) {
-            result.push(`<div class="my-timeline-group__content my-timeline-group__content--effort justify-end margin-left-8 flex-row flex-center" title="Effort">
-                            ${record.effort + " h" || ""}
-                            <div class="bolt-pill bolt-pill--timeline flex-row flex-center outlined compact margin-left-4">
-                                <div class="bolt-pill-content text-ellipsis" role="presentation">EFF</div>
-                            </div>
-                        </div>`);
-        }
-
-        if (showFields.includes("remainingWork")) {
-            result.push(`<div class="my-timeline-group__content my-timeline-group__content--remainingwork justify-end margin-left-8 flex-row flex-center" title="Remaining Work">
-                            ${record.remainingWork + " h" || ""}
-                            <div class="bolt-pill bolt-pill--timeline flex-row flex-center outlined compact margin-left-4">
-                                <div class="bolt-pill-content text-ellipsis" role="presentation">RW</div>
-                            </div>
-                        </div>`);
-        }
-
-        if (showFields.includes("completedWork")) {
-            result.push(`<div class="my-timeline-group__content my-timeline-group__content--completedwork justify-end margin-left-8 flex-row flex-center" title="Completed Work">
-                            <div>${record.completedWork + " h" || "×"}</div>
-                            <div class="bolt-pill bolt-pill--timeline flex-row flex-center outlined compact margin-left-4">
-                                <div class="bolt-pill-content text-ellipsis" role="presentation">CW</div>
-                            </div>
-                        </div>`);
-        }
-
-        if (showFields.includes("dates")) {
-            result.push(`<div class="my-timeline-group__content my-timeline-group__content--dates text-right margin-left-8" title="Dates">${getFormattedDate(record.startDate) || "×"} - ${getFormattedDate(record.endDate) || "×"}</div>`);
-        }
-
-        if (showFields.includes("duration")) {
-            result.push(`<div class="my-timeline-group__content my-timeline-group__content--duration text-right margin-left-8" title="Duration">${record.duration} day(s)</div>`);
-        }
+        showFields.filter((value) => value !== "id").forEach((value) => {
+            const content = createConfiguredField(record, value, fieldDefinitions);
+            if (content) {
+                result.push(content);
+            }
+        });
 
         const priority = priorities.find((p) => p.value === record.priority) || {};
         result.push(`<div class="my-timeline-group__state my-timeline-group__state--square" title="${priority.name}" style="background-color: #${priority.color}"></div>`);
