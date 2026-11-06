@@ -61,7 +61,7 @@ const loadAmd = function (filename, dependencies, exposeModel) {
     let source = fs.readFileSync(filename, "utf8");
 
     if (exposeModel) {
-        source = source.replace(/\n\}\);\s*$/, "\n    return { Model: Model };\n});\n");
+        source = source.replace(/(?:\n    return \{ start \};\r?)?\n\}\);\s*$/, "\n    return { Model: Model, start: typeof start === 'function' ? start : null };\n});\n");
     }
     else {
         source = "String.prototype.truncate = function () { return this.toString(); };\n" + source;
@@ -330,8 +330,7 @@ appLoader.result.Model.prototype.init = function () { return Promise.resolve(); 
         dateGranularity: "day"
     });
 
-    appLoader.runReady();
-    await new Promise((resolve) => setImmediate(resolve));
+    await appLoader.result.start();
     assert.ok(startupModel, "the tab should initialize from persisted settings");
     assert.strictEqual(startupModel.dateGranularity(), "day", "the browser-local granularity should win over legacy shared settings");
     assert.deepStrictEqual(JSON.parse(JSON.stringify(startupModel.showFields())), ["duration"], "saved columns should not be replaced by a stale query-string value");
