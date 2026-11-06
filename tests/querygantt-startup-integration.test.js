@@ -11,7 +11,7 @@ const loadAmd = function (filename, dependencies, exposeModel) {
     let source = fs.readFileSync(filename, "utf8");
 
     if (exposeModel) {
-        source = source.replace(/\n\}\);\s*$/, "\n    return { Model: Model };\n});\n");
+        source = source.replace("return { start };", "return { Model: Model, start };");
     }
 
     const document = {
