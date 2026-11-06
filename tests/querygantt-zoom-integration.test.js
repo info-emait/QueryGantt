@@ -78,7 +78,7 @@ const loadAmd = function (filename, dependencies, exposeModel) {
     let result = null;
     let source = fs.readFileSync(filename, "utf8");
     if (exposeModel) {
-        source = source.replace(/\n\}\);\s*$/, "\n    return { Model: Model };\n});\n");
+        source = source.replace("return { start };", "return { Model: Model, start };");
     }
     else {
         source = "String.prototype.truncate = function () { return this.toString(); };\n" + source;
@@ -380,8 +380,7 @@ assert.strictEqual(appModel.zoomPreset(), "300");
         "services/timeline-zoom": zoomService
     }, true);
     startupLoader.result.Model.prototype.init = function () { return Promise.resolve(); };
-    startupLoader.runReady();
-    await new Promise(function (resolve) { setImmediate(resolve); });
+    await startupLoader.result.start();
 
     assert.ok(startupModel, "the tab should initialize from persisted settings");
     assert.deepStrictEqual(plain(startupModel.showFields()), ["duration"], "saved visible columns should win over the stale query parameter written by a previous view");
