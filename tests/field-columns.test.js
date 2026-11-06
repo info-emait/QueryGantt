@@ -141,7 +141,7 @@ assert.strictEqual(renderedHtml.includes("<b>second</b>"), false,
 const loadConfiguration = function () {
     let result = null;
     let source = fs.readFileSync(path.join(__dirname, "../js/querygantt-configuration-app.js"), "utf8");
-    source = source.replace(/\n\}\);\s*$/, "\n    return { Model: Model };\n});\n");
+    source = source.replace(/(?:\n    return \{ start \};\r?)?\n\}\);\s*$/, "\n    return { Model: Model };\n});\n");
     const listeners = {};
     const testDocument = {
         readyState: "loading",
