@@ -200,7 +200,7 @@ const appSource = fs.readFileSync(path.join(__dirname, "../js/querygantt-tab-app
 const appHtml = fs.readFileSync(path.join(__dirname, "../html/querygantt-tab.html"), "utf8");
 const timelineLess = fs.readFileSync(path.join(__dirname, "../less/components/timeline.less"), "utf8");
 let appModule = null;
-const exposedAppSource = appSource.replace(/\n\}\);\s*$/, "\n    return { Model: Model };\n});\n");
+const exposedAppSource = appSource.replace("return { start };", "return { Model: Model, start };");
 vm.runInNewContext(exposedAppSource, {
     Array: Array,
     Date: Date,

@@ -9,7 +9,15 @@
     <body class="querygantt-tab" data-bind="attr: { 'data-version': 'v' + version }">
         <div class="querygantt-tab__page bolt-page v-scroll-auto flex-column">
             <div class="page-content flex-column flex-grow">
-                <my-spinner params="isVisible: isLoading"></my-spinner>
+                <div id="querygantt-load-notice" class="querygantt-tab__load-notice" hidden>
+                    <span role="status"></span>
+                    <button type="button" aria-label="Dismiss loading notice" title="Dismiss loading notice">&times;</button>
+                </div>
+                <div id="querygantt-loading-spinner" class="querygantt-tab__spinner bolt-spinner flex-column text-center rhythm-vertical-8"
+                        data-bind="visible: isLoading" role="status">
+                    <div class="bolt-spinner-circle medium" aria-hidden="true"></div>
+                    <div class="bolt-spinner-label">Loading Query Gantt…</div>
+                </div>
                 <my-message params="text: message"></my-message>
                 <div class="flex-row margin-top-16" style="display: none; position: sticky; top: 0; z-index: 3" data-bind="visible: (wits().length || zero() !== null) && !isLoading()">
                     <my-filter params="value: filter,

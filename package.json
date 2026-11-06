@@ -5,7 +5,7 @@
     "author": "emait",
     "private": true,
     "scripts": {
-        "test": "node tests/browser-settings.test.js && node tests/timeline-split.test.js",
+        "test": "node tests/browser-settings.test.js && node tests/timeline-split.test.js && node tests/tab-startup.test.js && node tests/render-preparation.test.js",
         "test:browser": "node tests/timeline-layout.browser.test.js"
     },
     "devDependencies": {
