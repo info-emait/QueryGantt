@@ -23,6 +23,52 @@ html, body {
 
     &__spinner {
         padding: rem(16px) 0;
+
+        &[hidden] {
+            display: none;
+        }
+    }
+
+    &__load-notice {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: rem(8px);
+        margin-top: rem(16px);
+        padding: rem(4px) rem(8px) rem(4px) rem(12px);
+        background: var(--status-warning-background, rgba(213, 155, 0, .12));
+        color: var(--text-primary-color, #242424);
+        font-size: rem(14px);
+
+        &[hidden] {
+            display: none;
+        }
+
+        &--error {
+            background: var(--status-error-background, rgba(205, 74, 69, .12));
+        }
+
+        > button {
+            flex: none;
+            width: rem(32px);
+            height: rem(32px);
+            padding: 0;
+            border: 0;
+            border-radius: rem(2px);
+            background: transparent;
+            color: inherit;
+            font-size: rem(22px);
+            cursor: pointer;
+
+            &:hover {
+                background: var(--palette-black-alpha-10, rgba(0, 0, 0, .1));
+            }
+
+            &:focus-visible {
+                outline: 2px solid var(--component-grid-focus-border-color, #0078d4);
+                outline-offset: -2px;
+            }
+        }
     }
 
     &__body {

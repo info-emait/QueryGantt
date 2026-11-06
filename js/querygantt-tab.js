@@ -75,4 +75,8 @@ require({
             }]
         }
     }
-}, ["my/#{Extension.Id}#-tab-app"]);
+}, ["services/tab-startup"], function (startup) {
+    startup.start("#{Extension.Id}#-tab", () => new Promise((resolve, reject) => {
+        require(["my/#{Extension.Id}#-tab-app"], resolve, reject);
+    }));
+});

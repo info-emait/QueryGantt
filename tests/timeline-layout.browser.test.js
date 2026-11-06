@@ -25,6 +25,49 @@ const renderStyles = async function () {
     return result.css;
 };
 
+const assertLoadingNotice = async function (browser, styles) {
+    const page = await browser.newPage({ viewport: { width: 1024, height: 768 } });
+    try {
+        const shell = fs.readFileSync(path.join(root, "html/querygantt-tab.html"), "utf8")
+            .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+            .replace(/<link\b[^>]*>/gi, "");
+        await page.setContent(shell);
+        await page.addStyleTag({ path: path.join(root, "node_modules/azure-devops-ui/Core/core.css") });
+        await page.addStyleTag({ content: styles });
+        await page.clock.install();
+        await page.evaluate(() => {
+            window.define = (names, factory) => {
+                window.startup = factory({ init: () => Promise.resolve(), register: () => {} });
+            };
+        });
+        await page.addScriptTag({ path: path.join(root, "js/services/tab-startup.js") });
+        await page.evaluate(() => {
+            window.started = window.startup.start("test-tab", () => ({
+                start: () => new Promise((resolve) => { window.finishLoad = resolve; })
+            }));
+        });
+        const notice = page.locator("#querygantt-load-notice");
+        const dismiss = page.getByRole("button", { name: "Dismiss loading notice" });
+        assert.strictEqual(await notice.isVisible(), false);
+        await page.clock.fastForward(5000);
+        assert.strictEqual(await notice.isVisible(), true);
+        const bounds = await notice.boundingBox();
+        const button = await dismiss.boundingBox();
+        assert.ok(bounds.x + bounds.width - button.x - button.width < 16, "the dismiss button must appear at the right edge");
+        await dismiss.focus();
+        await page.keyboard.press("Enter");
+        assert.strictEqual(await notice.isVisible(), false);
+        await page.evaluate(async () => {
+            window.finishLoad({});
+            await window.started;
+        });
+        assert.strictEqual(await notice.isVisible(), false, "finishing the load must leave the closed banner hidden");
+    }
+    finally {
+        await page.close();
+    }
+};
+
 const mountTimeline = async function (page, styles, backlogOrder) {
     await page.setContent('<style>html,body{margin:0;font-size:16px;width:100%;height:100%}:root{--background-color:white;--text-primary-color:#222;--text-secondary-color:#666}</style><div class="v-scroll-auto" style="width:100%;height:760px;overflow:auto"><div id="component" style="display:none"></div></div>');
     await page.addStyleTag({ path: path.join(root, "node_modules/azure-devops-ui/Core/core.css") });
@@ -152,6 +195,7 @@ const assertStable = async function (page, mode, expectedCount) {
     const styles = await renderStyles();
     const browser = await chromium.launch({ channel: process.env.QUERYGANTT_BROWSER_CHANNEL || "chrome", headless: true });
     try {
+        await assertLoadingNotice(browser, styles);
         let supportsBacklog = false;
         const modes = [];
         for (const backlogOrder of [false, true]) {
