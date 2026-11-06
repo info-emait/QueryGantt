@@ -459,6 +459,17 @@ define([
             return;
         }
 
+        // Index child IDs in display order for all groups in one pass.
+        const childrenByParent = new Map();
+        items.forEach((wit) => {
+            if (!isMarker(wit)) {
+                if (!childrenByParent.has(wit.parent)) {
+                    childrenByParent.set(wit.parent, []);
+                }
+                childrenByParent.get(wit.parent).push(wit.id);
+            }
+        });
+
         // Create groups
         var markerGroup = null;
         var groups = items
@@ -468,7 +479,7 @@ define([
                     return null;
                 }
 
-                return createGroup(wit, items, now);
+                return createGroup(wit, childrenByParent.get(wit.path) || [], now);
             })
             .filter((group) => group !== null);
 
@@ -610,10 +621,10 @@ define([
      * Creates group representation for the current work item.
      * 
      * @param {object} wit Current work item.
-     * @param {array} items List of all work items. 
+     * @param {array} childIds IDs of the work item's visible children.
      * @param {number} now Current date. 
      */
-    let createGroup = function (wit, items, now) {
+    let createGroup = function (wit, childIds, now) {
         var group = {
             id: wit.id,
             parentId: wit.parentId,
@@ -641,9 +652,7 @@ define([
             tags: wit.tags,
             startDate: wit.startDate,
             endDate: wit.targetDate,
-            nestedGroups: items
-                .filter((child) => (child.parent === wit.path) && !isMarker(child))
-                .map((child) => child.id)
+            nestedGroups: childIds.slice()
         };
 
         if (!group.nestedGroups.length) {
