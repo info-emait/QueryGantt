@@ -9,7 +9,7 @@ const loadAmd = function (filename, dependencies, exposeModel, timerOverrides) {
     let result;
     let source = fs.readFileSync(path.join(__dirname, "../js/", filename), "utf8");
     if (exposeModel) {
-        source = source.replace(/\n\}\);\s*$/, "\n    return { Model: Model };\n});\n");
+        source = source.replace("return { start };", "return { Model: Model, start };");
     }
     vm.runInNewContext(source, Object.assign({
         console: { debug: function () {}, warn: function () {} },

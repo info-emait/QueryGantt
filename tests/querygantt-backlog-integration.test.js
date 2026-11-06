@@ -8,7 +8,7 @@ const vm = require("vm");
 const loadAmd = function (filename, dependencies) {
     let result = null;
     let source = fs.readFileSync(filename, "utf8");
-    source = source.replace(/\n\}\);\s*$/, "\n    return { Model: Model };\n});\n");
+    source = source.replace(/(?:\n    return \{ start \};\r?)?\n\}\);\s*$/, "\n    return { Model: Model, start: typeof start === 'function' ? start : null };\n});\n");
     const context = {
         console: {
             debug: function () {},

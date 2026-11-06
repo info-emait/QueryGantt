@@ -885,6 +885,17 @@ define([
             return;
         }
 
+        // Index child IDs in display order for all groups in one pass.
+        const childrenByParent = new Map();
+        items.forEach((wit) => {
+            if (!isMarker(wit)) {
+                if (!childrenByParent.has(wit.parent)) {
+                    childrenByParent.set(wit.parent, []);
+                }
+                childrenByParent.get(wit.parent).push(wit.id);
+            }
+        });
+
         // Create groups
         var markerGroup = null;
         var groups = items
@@ -894,7 +905,7 @@ define([
                     return null;
                 }
 
-                return createGroup(wit, items, now, index);
+                return createGroup(wit, childrenByParent.get(wit.path) || [], now, index);
             })
             .filter((group) => group !== null);
 
@@ -1050,11 +1061,11 @@ define([
      * Creates group representation for the current work item.
      * 
      * @param {object} wit Current work item.
-     * @param {array} items List of all work items. 
+     * @param {array} childIds IDs of the work item's visible children.
      * @param {number} now Current date. 
      * @param {number} order Stable visual position in the group DataSet.
      */
-    let createGroup = function (wit, items, now, order) {
+    let createGroup = function (wit, childIds, now, order) {
         var group = {
             id: wit.id,
             order: order,
@@ -1090,9 +1101,7 @@ define([
             backlogRank: wit.backlogOrder && wit.backlogOrder.backlogRank,
             backlogParentId: wit.backlogOrder && wit.backlogOrder.parentId,
             backlogParentValid: !wit.backlogOrder || wit.backlogOrder.parentValid !== false,
-            nestedGroups: items
-                .filter((child) => (child.parent === wit.path) && !isMarker(child))
-                .map((child) => child.id)
+            nestedGroups: childIds.slice()
         };
 
         if (!group.nestedGroups.length) {
