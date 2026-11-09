@@ -5,7 +5,7 @@
     "author": "emait",
     "private": true,
     "scripts": {
-        "test": "node tests/querygantt-startup-integration.test.js && node tests/browser-settings.test.js && node tests/timeline-zoom.test.js && node tests/querygantt-zoom-integration.test.js && node tests/stacking-order.test.js && node tests/tab-startup.test.js && node tests/render-preparation.test.js",
+        "test": "node tests/querygantt-startup-integration.test.js && node tests/browser-settings.test.js && node tests/timeline-zoom.test.js && node tests/querygantt-zoom-integration.test.js && node tests/stacking-order.test.js && node tests/tab-startup.test.js && node tests/render-preparation.test.js && node tests/display-options.test.js",
         "test:browser": "node tests/timeline-layout.browser.test.js"
     },
     "devDependencies": {
