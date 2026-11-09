@@ -1,6 +1,13 @@
 @import "../_variables.less";
 
 .my-timeline {
+    &--hide-item-actions {
+        .my-timeline-group__button--checkbox,
+        .my-timeline-group__button--edit {
+            display: none;
+        }
+    }
+
     &-group {
         font-size: rem(13px);
         font-weight: 400;
@@ -224,6 +231,10 @@
 
         &-label {
             display: flex;
+            // vis-timeline measures .vis-inner to calculate this label's
+            // height. Stretching it to the previously calculated height
+            // creates feedback, especially for hidden/out-of-range children.
+            align-items: flex-start;
 
             &.vis-group-level-1,
             &.vis-group-level-2,
