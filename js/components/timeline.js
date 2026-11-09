@@ -1,8 +1,9 @@
 define([
     "knockout",
+    "services/date-granularity",
     "vis-timeline",
     "vis-timeline-arrow"
-], function (ko, VisTimeline) {
+], function (ko, dateGranularityService, VisTimeline) {
     //#region [ Fields ]
     
     let global = (function() { return this; })();
@@ -24,12 +25,14 @@ define([
 
         this.node = args.element.firstChild;
         this.items = ko.isObservable(args.items) ? args.items : ko.observable(args.items || []);
+        this.showItemActions = ko.isObservable(args.showItemActions) ? args.showItemActions : ko.observable(args.showItemActions === true);
         this.states = ko.isObservable(args.states) ? args.states : ko.observable(args.states || []);
         this.priorities = ko.isObservable(args.priorities) ? args.priorities : ko.observable(args.priorities || []);
         this.types = ko.isObservable(args.types) ? args.types : ko.observable(args.types || []);
         this.typesOther = ko.isObservable(args.typesOther) ? args.typesOther : ko.observable(args.typesOther || []);
         this.icons = ko.isObservable(args.icons) ? args.icons : ko.observable(args.icons || []);
         this.showFields = ko.isObservableArray(args.showFields) ? args.showFields : ko.observableArray(args.showFields || []);
+        this.dateGranularity = ko.isObservable(args.dateGranularity) ? args.dateGranularity : ko.observable(dateGranularityService.normalize(args.dateGranularity));
         this.selectedItem = ko.isObservable(args.selectedItem) ? args.selectedItem : ko.observable(args.selectedItem || null);
         this.selectedItemId = ko.isObservable(args.selectedItemId) ? args.selectedItemId : ko.observable(args.selectedItemId || null);
 
@@ -39,6 +42,11 @@ define([
         this.groups = null;
         this.records = null;
         this.arrows = null;
+        this._resizeTimelineBound = this._resizeTimeline.bind(this);
+        this._timelineChangedBound = this._syncRangeItemVisibility.bind(this);
+        if (typeof(global.addEventListener) === "function") {
+            global.addEventListener("resize", this._resizeTimelineBound, false);
+        }
 
         // Callbacks
         this.callbacks = args.callbacks;
@@ -47,6 +55,12 @@ define([
         Object.entries(args.actions || {}).forEach(([name, action]) => typeof (action) === "function" && action(this[name].bind(this)));
 
         // Subscribes
+        this._itemActionsSubscribe = ko.computed(() => {
+            this.node.classList[this.showItemActions() === true ? "remove" : "add"]("my-timeline--hide-item-actions");
+            if (this.timeline) {
+                this.timeline.redraw();
+            }
+        });
         this._onItemsChangedSubscribe = ko.computed(this._onItemsChanged, this).extend({ deferred: true });
         this._onSelectedIdChangedSubscribe = ko.computed(this._onSelectedIdChanged, this);
     };
@@ -264,13 +278,27 @@ define([
         console.log("~Timeline()");
 
         this._onItemsChangedSubscribe.dispose();
+        this._itemActionsSubscribe.dispose();
         this._onSelectedIdChangedSubscribe.dispose();
+        if (typeof(global.removeEventListener) === "function") {
+            global.removeEventListener("resize", this._resizeTimelineBound, false);
+        }
     };
 
     //#endregion
 
 
     //#region [ Methods : Private ]
+
+    /**
+     * Keeps Day mode capped at a day axis after the host panel is resized.
+     */
+    Timeline.prototype._resizeTimeline = function () {
+        if (!this.timeline || dateGranularityService.normalize(this.dateGranularity()) !== dateGranularityService.day) {
+            return;
+        }
+        this.timeline.setOptions({ zoomMin: dateGranularityService.getZoomMin(dateGranularityService.day, this.node.clientWidth) });
+    };
 
     /**
      * Create styles for the input types.
@@ -333,6 +361,42 @@ define([
 
 
     /**
+     * Hides stale item DOM that vis-timeline can briefly retain after a range
+     * change. Only records overlapping the current date window may remain
+     * visible; moving the window back clears the guard automatically.
+     */
+    Timeline.prototype._syncRangeItemVisibility = function () {
+        if (!this.timeline || !this.timeline.itemSet || !this.timeline.itemSet.items
+            || typeof(this.timeline.getWindow) !== "function") {
+            return;
+        }
+
+        const range = this.timeline.getWindow();
+        const rangeStart = range && range.start instanceof Date ? range.start.getTime() : NaN;
+        const rangeEnd = range && range.end instanceof Date ? range.end.getTime() : NaN;
+        if (!Number.isFinite(rangeStart) || !Number.isFinite(rangeEnd)) {
+            return;
+        }
+
+        Object.keys(this.timeline.itemSet.items).forEach((id) => {
+            const item = this.timeline.itemSet.items[id];
+            const data = (item || {}).data || {};
+            const start = data.start instanceof Date ? data.start.getTime() : new Date(data.start).getTime();
+            const end = data.end instanceof Date ? data.end.getTime() : new Date(data.end).getTime();
+            const element = ((item || {}).dom || {}).box || ((item || {}).dom || {}).point;
+            if (!Number.isFinite(start) || !element || !element.style) {
+                return;
+            }
+
+            const visible = Number.isFinite(end)
+                ? start < rangeEnd && end > rangeStart
+                : start >= rangeStart && start < rangeEnd;
+            element.style.visibility = visible ? "" : "hidden";
+        });
+    };
+
+
+    /**
      * Handles the group title click event.
      * 
      * @param {object} e Event arguments. 
@@ -385,6 +449,9 @@ define([
     Timeline.prototype._onGroupEdit = function (e) {
         e.stopPropagation();
         e.preventDefault();
+        if (!this.showItemActions()) {
+            return;
+        }
 
         const id = parseInt(e.target.getAttribute("data-group-id"));
         if (isNaN(id)) {
@@ -454,6 +521,7 @@ define([
         var typesOther = this.typesOther();
         var icons = this.icons();
         var showFields = this.showFields();
+        var dateGranularity = dateGranularityService.normalize(this.dateGranularity());
         var now = new Date();
 
         this._createStyles(types, typesOther);
@@ -462,6 +530,17 @@ define([
         if (!items || !items.length) {
             return;
         }
+
+        // Index child IDs in display order for all groups in one pass.
+        const childrenByParent = new Map();
+        items.forEach((wit) => {
+            if (!isMarker(wit)) {
+                if (!childrenByParent.has(wit.parent)) {
+                    childrenByParent.set(wit.parent, []);
+                }
+                childrenByParent.get(wit.parent).push(wit.id);
+            }
+        });
 
         // Create groups
         var markerGroup = null;
@@ -472,7 +551,7 @@ define([
                     return null;
                 }
 
-                return createGroup(wit, items, now);
+                return createGroup(wit, childrenByParent.get(wit.path) || [], now, dateGranularity);
             })
             .filter((group) => group !== null);
 
@@ -483,7 +562,7 @@ define([
         
         // Create items
         var records = items
-            .map((wit) => createRecord(wit, now))
+            .map((wit) => createRecord(wit, now, dateGranularity))
             .filter((record) => record !== null);
 
         // Options for the Timeline
@@ -513,9 +592,15 @@ define([
             },
             groupTemplate: (record, element) => createGroupTemplate(this, record, element, states, priorities, types, typesOther, icons, showFields),
             visibleFrameTemplate: (record, element) => createVisibleFrameTemplate(this, record, element),
-            onMove: (record, callback) => updateWit(this, record, callback)
+            onMove: (record, callback) => updateWit(this, record, callback),
+            onInitialDrawComplete: this._timelineChangedBound
             //template: function (item, element, data) { return '<h1>' + item.header + data.moving?' '+ data.start:'' + '</h1><p>' + item.description + '</p>'; }
         };
+
+        if (dateGranularity === dateGranularityService.day) {
+            options.snap = dateGranularityService.startOfDay;
+            options.zoomMin = dateGranularityService.getZoomMin(dateGranularity, this.node.clientWidth);
+        }
 
         this.groups = new VisTimeline.DataSet(groups);
         this.records = new VisTimeline.DataSet(records);
@@ -548,6 +633,8 @@ define([
         // Events
         this.timeline.on("select", this._onSelect.bind(this));
         this.timeline.on("doubleClick", this._onDoubleClick.bind(this));
+        this.timeline.on("rangechange", this._timelineChangedBound);
+        this.timeline.on("changed", this._timelineChangedBound);
     };
 
 
@@ -614,10 +701,10 @@ define([
      * Creates group representation for the current work item.
      * 
      * @param {object} wit Current work item.
-     * @param {array} items List of all work items. 
+     * @param {array} childIds IDs of the work item's visible children.
      * @param {number} now Current date. 
      */
-    let createGroup = function (wit, items, now) {
+    let createGroup = function (wit, childIds, now, dateGranularity) {
         var group = {
             id: wit.id,
             parentId: wit.parentId,
@@ -640,14 +727,12 @@ define([
             type: wit.type,
             state: wit.state,
             priority: wit.priority,
-            duration: getDuration(wit),
+            duration: getDuration(wit, dateGranularity),
             selected: false,
             tags: wit.tags,
             startDate: wit.startDate,
             endDate: wit.targetDate,
-            nestedGroups: items
-                .filter((child) => (child.parent === wit.path) && !isMarker(child))
-                .map((child) => child.id)
+            nestedGroups: childIds.slice()
         };
 
         if (!group.nestedGroups.length) {
@@ -662,18 +747,15 @@ define([
      * Creates record for the current work item.
      * 
      * @param {object} wit Current work item. 
-     * @param {number} now Current time in milliseconds.
+     * @param {Date} now Current date.
      */
-    let createRecord = function (wit, now) {
+    let createRecord = function (wit, now, dateGranularity) {
         var subtitle = [
             getFormattedDate(wit.startDate) || "×",
             getFormattedDate(wit.targetDate) || "×"
         ];
 
-        // Ensure dates
-        let start = wit.startDate || wit.targetDate || now;
-        let end = new Date((wit.targetDate || wit.startDate || now).getTime());
-        end.setDate(end.getDate() + 1);
+        const range = dateGranularityService.getTimelineRange(wit.startDate, wit.targetDate, now, dateGranularity);
 
         return {
             id: wit.id,
@@ -689,8 +771,8 @@ define([
             content: isMarker(wit) ? wit.title : wit.childCount ? `${wit.childCompletedCount}/${wit.childCount} (${Math.ceil((wit.childCompletedCount/wit.childCount) * 100)}%)` : "&nbsp;",
             selectable: true,
             type: isMarker(wit) ? "box" : "range",
-            start,
-            end: isMarker(wit) ? start : end
+            start: range.start,
+            end: isMarker(wit) ? range.start : range.end
         };
     };
 
@@ -855,20 +937,8 @@ define([
      * 
      * @param {object} wit Work item.
      */
-    let getDuration = function (wit) {
-        if (!wit.startDate || !wit.targetDate) {
-            return 0;
-        }
-
-        // Check dates
-        var startTime = wit.startDate.getTime();
-        var targetTime = wit.targetDate.getTime();
-
-        if (startTime > targetTime) {
-            return 0;
-        }
-
-        return Math.ceil((targetTime - startTime) / (1000 * 60 * 60 * 24)) + 1;
+    let getDuration = function (wit, dateGranularity) {
+        return dateGranularityService.getDuration(wit.startDate, wit.targetDate, dateGranularity);
     };
 
 
