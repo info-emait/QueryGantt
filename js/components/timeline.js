@@ -21,6 +21,7 @@ define([
 
         this.node = args.element.firstChild;
         this.items = ko.isObservable(args.items) ? args.items : ko.observable(args.items || []);
+        this.showItemActions = ko.isObservable(args.showItemActions) ? args.showItemActions : ko.observable(args.showItemActions === true);
         this.states = ko.isObservable(args.states) ? args.states : ko.observable(args.states || []);
         this.priorities = ko.isObservable(args.priorities) ? args.priorities : ko.observable(args.priorities || []);
         this.types = ko.isObservable(args.types) ? args.types : ko.observable(args.types || []);
@@ -68,6 +69,12 @@ define([
         Object.entries(args.actions || {}).forEach(([name, action]) => typeof (action) === "function" && action(this[name].bind(this)));
 
         // Subscribes
+        this._itemActionsSubscribe = ko.computed(() => {
+            this.node.classList[this.showItemActions() === true ? "remove" : "add"]("my-timeline--hide-item-actions");
+            if (this.timeline) {
+                this.timeline.redraw();
+            }
+        });
         this._onItemsChangedSubscribe = ko.computed(this._onItemsChanged, this).extend({ deferred: true });
         this._onSelectedIdChangedSubscribe = ko.computed(this._onSelectedIdChanged, this);
     };
@@ -300,6 +307,7 @@ define([
         console.log("~Timeline()");
 
         this._onItemsChangedSubscribe.dispose();
+        this._itemActionsSubscribe.dispose();
         this._onSelectedIdChangedSubscribe.dispose();
         this._clearTimelinePointer();
         this._destroyTimeline();
@@ -626,6 +634,9 @@ define([
     Timeline.prototype._onGroupEdit = function (e) {
         e.stopPropagation();
         e.preventDefault();
+        if (!this.showItemActions()) {
+            return;
+        }
 
         const id = parseInt(e.target.getAttribute("data-group-id"));
         if (isNaN(id)) {
