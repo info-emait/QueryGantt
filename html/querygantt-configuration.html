@@ -17,6 +17,16 @@
                 </div>
                 <span class="bolt-formitem-message body-xs">Day aligns bars to full local calendar days</span>
 
+                <label class="bolt-formitem-label body-m margin-top-16">Display options</label>
+                <label class="querygantt-configuration__display-option">
+                    <span>Show work item controls and detail pane</span>
+                    <input type="checkbox" role="switch" data-bind="checked: showItemActions" />
+                </label>
+                <label class="querygantt-configuration__display-option">
+                    <span>Show footer summaries</span>
+                    <input type="checkbox" role="switch" data-bind="checked: showFooter" />
+                </label>
+
                 <label class="bolt-formitem-label body-m margin-top-16">Fields:</label>
                 <!-- ko foreach: fields -->
                 <label class="bolt-checkbox bolt-formitem-label body-m flex-row">

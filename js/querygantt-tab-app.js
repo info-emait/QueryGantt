@@ -40,6 +40,7 @@ define([
         this.user = args.user;
         this.project = args.project;
         this.query = args.query;
+        this.settings = {};
         this.extensionId = args.extensionId || "querygantt";
         this.browserStorage = args.browserStorage || null;
         this._queryStringUpdatePromise = Promise.resolve();
@@ -50,6 +51,8 @@ define([
         this.zero = ko.observable(null);
 
         this.showFields = ko.observableArray(Array.isArray(args.showFields) ? args.showFields : ["duration"]).extend({ rateLimit: { timeout: 1000, method: "notifyWhenChangesStop" } });
+        this.showItemActions = ko.observable(args.showItemActions === true);
+        this.showFooter = ko.observable(args.showFooter === true);
         this.dateGranularity = ko.observable(dateGranularityService.normalize(args.dateGranularity));
 
         this.isLoading = ko.observable(true);
@@ -586,11 +589,28 @@ define([
                 configuration: {
                     fields,
                     fieldsValue,
+                    showItemActions: this.showItemActions(),
+                    showFooter: this.showFooter(),
                     dateGranularity,
                     extensionId: this.extensionId
                 },
                 onClose: (result = {}) => {
-                    if (Array.isArray(result.fieldsValue)) {
+                    const currentFields = this.showFields();
+                    if (typeof(result.showItemActions) === "boolean") {
+                        this.showItemActions(result.showItemActions);
+                        this.settings.showItemActions = result.showItemActions;
+                        if (!result.showItemActions) {
+                            this.currentId(null);
+                        }
+                    }
+                    if (typeof(result.showFooter) === "boolean") {
+                        this.showFooter(result.showFooter);
+                        this.settings.showFooter = result.showFooter;
+                    }
+                    if (Array.isArray(result.fieldsValue) && (
+                        result.fieldsValue.length !== currentFields.length ||
+                        result.fieldsValue.some((value, index) => value !== currentFields[index])
+                    )) {
                         this.showFields(result.fieldsValue);
                     }
                     if (result.dateGranularity) {
@@ -790,11 +810,14 @@ define([
         const types = this.types();
         const typesOther = this.typesOther();
 
-        if (ko.computedContext.isInitial() || !current || !currentId) {
+        if (ko.computedContext.isInitial() || !this.showItemActions() || !current || !currentId) {
             return;
         }
 
         sdk.getService(api.CommonServiceIds.HostPageLayoutService).then((host) => {
+            if (!this.showItemActions() || this.currentId() !== currentId) {
+                return;
+            }
             host.openPanel(`${sdk.getExtensionContext().id}.#{Extension.Id}#-detail`, {
                 title: `#${current.id}: ${current.title}`,
                 lightDismiss: false,
@@ -1079,6 +1102,7 @@ define([
             .then((response) => ({ project: response[0], state: response[1], settings: response[2] }))
             .then(({ project, state, settings }) => {
                 let showFields = null;
+                let displayPreferences = {};
                 let dateGranularity = null;
                 let parsedSettings = {};
                 let extensionId = "querygantt";
@@ -1093,6 +1117,7 @@ define([
                 if (settings) {
                     try {
                         const value = JSON.parse(settings);
+                        displayPreferences = value || {};
                         parsedSettings = value && (typeof(value) === "object") && !Array.isArray(value) ? value : {};
                         if (parsedSettings.showFields) {
                             showFields = parsedSettings.showFields;
@@ -1129,6 +1154,8 @@ define([
                     project: project,
                     query: sdk.getConfiguration().query,
                     showFields,
+                    showItemActions: displayPreferences.showItemActions,
+                    showFooter: displayPreferences.showFooter,
                     dateGranularity,
                     extensionId
                 });

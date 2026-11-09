@@ -127,6 +127,7 @@
                                                     typesOther: typesOther, 
                                                     icons: icons, 
                                                     showFields: showFields,
+                                                    showItemActions: showItemActions,
                                                     dateGranularity: dateGranularity,
                                                     callbacks: {
                                                         openNewWindow: openNewWindow.bind($root),
@@ -149,7 +150,7 @@
                         </div>
                     </div>
                 </div>
-                <!-- ko if: !isLoading() && !zero() -->
+                <!-- ko if: showFooter() && !isLoading() && !zero() -->
                 <div class="querygantt-tab__footer flex-row flex-wrap justify-space-around">
                     <my-legend params="items: filteredWits, title: 'Total Effort:', reduce: (a, b) => a + b.effort || 0, format: (a) => `${a} hour(s)`, isVisible: isTotalEffortVisible"></my-legend>
                     <my-legend params="items: filteredWits, title: 'Total Remaining Work:', reduce: (a, b) => a + b.remainingWork || 0, format: (a) => `${a} hour(s)`, isVisible: isTotalRemainingWorkVisible"></my-legend>

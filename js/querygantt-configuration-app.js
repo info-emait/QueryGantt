@@ -31,6 +31,8 @@ define([
         this.project = args.project;
         this.fields = ko.isObservable(args.fields) ? args.fields : ko.observableArray(args.fields || []);
         this.fieldsValue = ko.isObservable(args.fieldsValue) ? args.fieldsValue : ko.observableArray(args.fieldsValue || []);
+        this.showItemActions = ko.observable(args.showItemActions === true);
+        this.showFooter = ko.observable(args.showFooter === true);
         this.dateGranularity = ko.observable(dateGranularityService.normalize(args.dateGranularity));
         this.extensionId = args.extensionId || "querygantt";
         this.browserStorage = args.browserStorage || null;
@@ -63,6 +65,8 @@ define([
      */
     Model.prototype.save = function() {
         const fieldsValue = this.fieldsValue();
+        const showItemActions = this.showItemActions() === true;
+        const showFooter = this.showFooter() === true;
         const dateGranularity = dateGranularityService.normalize(this.dateGranularity());
         const key = `gantt_${this.project.id}`;
         browserSettingsService.write(
@@ -87,10 +91,12 @@ define([
                 }
 
                 settings.showFields = fieldsValue;
+                settings.showItemActions = showItemActions;
+                settings.showFooter = showFooter;
 
                 return manager.setValue(key, JSON.stringify(settings), { scopeType: "User" });
             })
-            .then(() => this.panel.close({ fieldsValue, dateGranularity }));
+            .then(() => this.panel.close({ fieldsValue, dateGranularity, showItemActions, showFooter }));
     };
 
 
@@ -143,6 +149,8 @@ define([
                     project: project,
                     fields: config.fields,
                     fieldsValue: config.fieldsValue,
+                    showItemActions: config.showItemActions,
+                    showFooter: config.showFooter,
                     dateGranularity: config.dateGranularity,
                     extensionId: config.extensionId || sdk.getExtensionContext().id,
                     panel: config.panel

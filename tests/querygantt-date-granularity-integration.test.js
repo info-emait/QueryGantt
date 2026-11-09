@@ -321,12 +321,16 @@ appLoader.result.Model.prototype.init = function () { return Promise.resolve(); 
         value: {
             orderMode: "backlog",
             customSetting: true,
-            showFields: ["dates", "duration"]
+            showFields: ["dates", "duration"],
+            showItemActions: false,
+            showFooter: false
         },
         options: { scopeType: "User" }
     }, "configuration saves should merge instead of overwriting other settings");
     assert.deepStrictEqual(JSON.parse(JSON.stringify(panelResult)), {
         fieldsValue: ["dates", "duration"],
+        showItemActions: false,
+        showFooter: false,
         dateGranularity: "day"
     });
 
