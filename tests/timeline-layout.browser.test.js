@@ -151,45 +151,88 @@ const assertDisplayOptions = async function (browser) {
 
 const assertAnalysisAction = async function (browser) {
     if (!fs.existsSync(path.join(root, "js/services/hierarchy-analysis.js"))) return;
-    const page = await browser.newPage({ viewport: { width: 1000, height: 800 } });
-    try {
-        await page.setContent('<div id="message"></div>');
-        await page.addScriptTag({ path: path.join(root, "node_modules/knockout/build/output/knockout-latest.debug.js") });
-        await page.evaluate(() => {
-            window.ko.components.register = (name, value) => { window.messageRegistration = value; };
-            window.define = (names, factory) => factory(window.ko);
-        });
-        await page.addScriptTag({ path: path.join(root, "js/components/message.js") });
-        await page.evaluate(() => {
-            const root = document.getElementById("message");
-            root.innerHTML = window.messageRegistration.template;
-            const text = window.ko.observable('Reorder failed <img src=x onerror="window.injected=true">');
-            const busy = window.ko.observable(false);
-            const analysis = window.ko.observable(null);
-            window.finishAnalysis = () => {
-                busy(false);
-                analysis({
-                    summary: "Invalid Parent link",
-                    findings: [{ child: 10, parent: 40, childUrl: "https://example.test/10", parentUrl: "https://example.test/40", text: "Open #10 and check Links > Parent (#40)." }],
-                    traces: [{ text: "Parent chain from #30", items: [{ id: 30, text: "#30 (User Story)", url: "https://example.test/30" }] }],
-                    warnings: []
+    for (const culture of ["en-US", "ja-JP"]) {
+        const japanese = culture === "ja-JP";
+        const page = await browser.newPage({ viewport: { width: 1000, height: 800 }, locale: japanese ? "en-US" : "ja-JP" });
+        const errors = [];
+        page.on("pageerror", (error) => errors.push(error.message));
+        try {
+            const markup = fs.readFileSync(path.join(root, "html/querygantt-tab.html"), "utf8").match(/<my-message\b[\s\S]*?<\/my-message>/)[0];
+            await page.setContent(markup);
+            for (const filename of ["Core/core.css", "Components/Button/Button.css", "Components/Card/Card.css", "Components/MessageBar/MessageBar.css", "Components/MessageCard/MessageCard.css"]) {
+                await page.addStyleTag({ path: path.join(root, "node_modules/azure-devops-ui", filename) });
+            }
+            await page.addStyleTag({ content: await renderStyles() });
+            await page.addScriptTag({ path: path.join(root, "node_modules/knockout/build/output/knockout-latest.debug.js") });
+            await page.evaluate(() => {
+                window.analysisServices = { knockout: window.ko };
+                window.define = (names, factory) => { window.latestAnalysisService = factory(...names.map((name) => window.analysisServices[name])); };
+            });
+            for (const name of ["backlog-order", "hierarchy-localization", "hierarchy-analysis"]) {
+                await page.addScriptTag({ path: path.join(root, "js/services/" + name + ".js") });
+                await page.evaluate((name) => { window.analysisServices["services/" + name] = window.latestAnalysisService; }, name);
+            }
+            await page.addScriptTag({ path: path.join(root, "js/components/message.js") });
+            await page.evaluate((culture) => {
+                const strings = window.analysisServices["services/hierarchy-localization"];
+                const language = strings.getLanguage({ getPageContext: () => ({ globalization: { culture } }) });
+                const backlog = window.analysisServices["services/backlog-order"];
+                const index = backlog.createIndex([
+                    { id: "epics", rank: 3, workItemTypes: ["Epic"] },
+                    { id: "features", rank: 2, workItemTypes: ["Feature"] },
+                    { id: "stories", rank: 1, workItemTypes: ["User Story"] }
+                ], []);
+                const items = [
+                    { id: 30, type: "User Story", parent: 20 }, { id: 20, type: "Feature", parent: 10 },
+                    { id: 10, type: "Epic", parent: 40 }, { id: 40, type: "User Story", parent: 0 }
+                ];
+                const text = window.ko.observable('Reorder failed <img src=x onerror="window.injected=true">');
+                const busy = window.ko.observable(false);
+                const analysis = window.ko.observable(null);
+                const action = window.ko.observable(() => {
+                    busy(true);
+                    window.pendingAnalysis = new Promise((resolve) => { window.finishAnalysis = resolve; }).then(() => window.analysisServices["services/hierarchy-analysis"].analyze({
+                        ids: [30], index, projectName: "Synthetic", culture: language,
+                        client: { getWorkItems: (ids) => {
+                            const item = items.find((value) => value.id === ids[0]);
+                            return Promise.resolve([{ id: item.id, fields: { "System.WorkItemType": item.type, "System.TeamProject": "Synthetic" },
+                                relations: item.parent ? [{ rel: "System.LinkTypes.Hierarchy-Reverse", url: "https://example.test/_apis/wit/workItems/" + item.parent }] : [] }]);
+                        } }
+                    })).then((result) => {
+                        result.findings.forEach((finding) => {
+                            finding.childUrl = "https://example.test/" + finding.child;
+                            finding.parentUrl = "https://example.test/" + finding.parent;
+                        });
+                        result.traces.forEach((trace) => trace.items.forEach((item) => { item.url = "https://example.test/" + item.id; }));
+                        analysis(result);
+                        busy(false);
+                    });
                 });
-            };
-            const action = window.ko.observable(() => { busy(true); });
-            const model = window.messageRegistration.viewModel.createViewModel({ text, busy, action, analysis }, { element: root });
-            window.ko.applyBindings(model, root);
-        });
-        const analyze = page.getByRole("button", { name: "Analyze Parent links" });
-        await analyze.click();
-        assert.strictEqual(await page.getByRole("button", { name: "Analyzing…" }).isDisabled(), true);
-        await page.evaluate(() => window.finishAnalysis());
-        assert.strictEqual(await page.getByRole("link", { name: "Open #10", exact: true }).getAttribute("target"), "_blank");
-        assert.strictEqual(await page.locator("img").count(), 0, "server text must not be interpreted as HTML");
-        await page.getByRole("button", { name: "Dismiss error" }).click();
-        assert.strictEqual(await analyze.isVisible(), false);
-    }
-    finally {
-        await page.close();
+                window.ko.applyBindings({ message: text, messageAction: action, messageActionBusy: busy, messageAnalysis: analysis, analysisCulture: language }, document.body);
+            }, culture);
+            const analyze = page.getByRole("button", { name: japanese ? "親子関係を解析" : "Analyze Parent links", exact: true });
+            await analyze.click();
+            assert.strictEqual(await page.getByRole("button", { name: japanese ? "解析中…" : "Analyzing…", exact: true }).isDisabled(), true);
+            await page.evaluate(async () => { window.finishAnalysis(); await window.pendingAnalysis; });
+            assert.strictEqual(await page.getByRole("link", { name: japanese ? "#10 を開く" : "Open #10", exact: true }).getAttribute("target"), "_blank");
+            const body = await page.locator(".querygantt-tab__analysis").innerText();
+            assert.strictEqual(await page.evaluate(() => navigator.language), japanese ? "en-US" : "ja-JP", "the browser language is deliberately different from the host culture");
+            assert.ok(body.includes(japanese ? "並べ替えを妨げる可能性" : "Found a Parent link"));
+            assert.ok(body.includes(japanese ? "親のバックログ階層が子より下位" : "the parent is in a lower backlog category"));
+            const chains = page.locator("summary");
+            assert.strictEqual(await chains.innerText(), japanese ? "確認した親階層" : "Checked Parent chains");
+            await chains.click();
+            await page.getByRole("link", { name: "#30 (User Story)", exact: true }).waitFor({ state: "visible" });
+            assert.ok((await page.locator("details").innerText()).includes(japanese ? "#30 からたどった親階層" : "Parent chain from #30"));
+            assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false, "localized analysis must not overflow the viewport");
+            assert.strictEqual(await page.locator("img").count(), 0, "server text must not be interpreted as HTML");
+            await page.getByRole("button", { name: japanese ? "エラーを閉じる" : "Dismiss error" }).click();
+            assert.strictEqual(await analyze.isVisible(), false);
+            assert.deepStrictEqual(errors, []);
+        }
+        finally {
+            await page.close();
+        }
     }
 };
 

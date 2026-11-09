@@ -74,7 +74,9 @@ assert.ok(service.describeParentChain(makeIndex(), [
 ]).includes("cycle"), "a Parent cycle should have an actionable diagnosis");
 
 const ko = require("knockout");
-const analysisService = loadAmd("services/hierarchy-analysis.js", { "services/backlog-order": service });
+const localization = require("./helpers/load-pure-service")("hierarchy-localization");
+const analysisDependencies = { "services/backlog-order": service, "services/hierarchy-localization": localization };
+const analysisService = loadAmd("services/hierarchy-analysis.js", analysisDependencies);
 const workApi = { WorkRestClient: function () {} };
 const witApi = { WorkItemTrackingRestClient: function () {} };
 let rejection = "Work item 50 can't be reordered under work item 30 because work item 30's parent is on the same category.";
@@ -107,7 +109,8 @@ const dependencies = {
     "api/Work/index": workApi,
     "api/WorkItemTracking/index": witApi,
     "services/backlog-order": service,
-    "services/hierarchy-analysis": analysisService
+    "services/hierarchy-analysis": analysisService,
+    "services/hierarchy-localization": localization
 };
 for (const name of ["browser-settings", "date-granularity", "field-columns", "timeline-zoom", "timeline-split"]) {
     if (fs.existsSync(path.join(__dirname, "../js/services/" + name + ".js"))) {
@@ -115,8 +118,9 @@ for (const name of ["browser-settings", "date-granularity", "field-columns", "ti
     }
 }
 const Model = loadAmd("querygantt-tab-app.js", dependencies, true).Model;
-const makeModel = () => {
+const makeModel = (culture) => {
     const model = new Model({
+        culture,
         project: { id: "project-id", name: "Project" },
         team: { id: "team-id" }, priorities: [], fields: [],
         query: { id: "query-id", name: "Synthetic" }, showFields: []
@@ -158,6 +162,15 @@ const move = { draggedId: 50, targetId: 30, position: "inside" };
     assert.strictEqual(model.message(), "Unable to reorder work item #50. " + rejection, "the Azure rejection must remain visible");
     assert.strictEqual(JSON.stringify(model.wits()), originalItems, "analysis must not change items");
     assert.strictEqual(JSON.stringify(model.backlogIndex()), originalIndex, "analysis must not change order or links");
+
+    const japanese = await analysisService.analyze({
+        ids: [30], client: trackingClient, index: makeIndex(), projectName: "Project", culture: "ja-JP"
+    });
+    assert.ok(japanese.summary.includes("親子関係"), "a Japanese host culture must produce a Japanese analysis summary");
+    assert.ok(japanese.findings[0].text.includes("親のバックログ階層が子より下位"));
+    assert.ok(japanese.findings[0].text.includes("#10 (Epic) → #40 (User Story)"), "IDs and process type names remain unchanged");
+    assert.ok(japanese.findings[0].text.includes("親（Parent）") && japanese.findings[0].text.includes("関連（Related）"));
+    assert.strictEqual(japanese.traces[0].text, "#30 からたどった親階層");
 
     trackingCalls = [];
     getWorkItems = (id) => Promise.resolve([serverItem(id === 50 ? { id, type: "Task", parentId: 10 } : serverChain.find((node) => node.id === id))]);
@@ -204,7 +217,7 @@ const move = { draggedId: 50, targetId: 30, position: "inside" };
 
     let timeoutCallback;
     let timeoutCleared = false;
-    const timed = loadAmd("services/hierarchy-analysis.js", { "services/backlog-order": service }, false, {
+    const timed = loadAmd("services/hierarchy-analysis.js", analysisDependencies, false, {
         setTimeout: (callback, delay) => { assert.strictEqual(delay, 15000); timeoutCallback = callback; return 1; },
         clearTimeout: () => { timeoutCleared = true; }
     });
@@ -243,6 +256,68 @@ const move = { draggedId: 50, targetId: 30, position: "inside" };
     assert.strictEqual(otherProject.findings.length, 0, "another project's process must not be classified using the current team's categories");
     assert.ok(otherProject.warnings.some((warning) => warning.includes("another project")));
 
+    const analyzeJapanese = (options) => analysisService.analyze(Object.assign({
+        ids: [30], client: trackingClient, index: makeIndex(), projectName: "Project", culture: "ja-JP"
+    }, options || {}));
+    getWorkItems = (id) => Promise.resolve([serverItem({ id, type: "User Story", parentId: id === 30 ? 40 : 0 })]);
+    assert.ok((await analyzeJapanese()).findings[0].text.includes("同じバックログ階層"));
+    getWorkItems = (id) => Promise.resolve([serverItem({ id, type: "User Story", parentId: id === 30 ? 40 : 30 })]);
+    assert.ok((await analyzeJapanese()).findings.some((finding) => finding.text.includes("循環")));
+    getWorkItems = (id) => Promise.resolve([serverItem(id === 30
+        ? { id, type: "User Story", parentId: 20 }
+        : { id, type: "Feature", parentId: 0 })]);
+    const noIssueJapanese = await analyzeJapanese();
+    assert.strictEqual(noIssueJapanese.findings.length, 0);
+    assert.strictEqual(noIssueJapanese.warnings.length, 0);
+    assert.ok(noIssueJapanese.summary.startsWith("確認した範囲では"));
+    for (const status of [401, 403, 404, 500]) {
+        getWorkItems = () => Promise.reject({ status });
+        const failureJapanese = await analyzeJapanese();
+        assert.ok(failureJapanese.summary.includes("一部未完了"));
+        assert.ok(failureJapanese.warnings[0].includes("#30"));
+        assert.ok(failureJapanese.warnings[0].includes(status === 401 || status === 403 ? "閲覧権限" : status === 404 ? "見つからない" : "取得に失敗"));
+    }
+    getWorkItems = () => Promise.reject(new Error("Synthetic English network failure"));
+    const networkJapanese = await analyzeJapanese();
+    assert.ok(networkJapanese.warnings[0].includes("接続状況"));
+    assert.ok(networkJapanese.warnings[0].includes("取得エラーの原文：Synthetic English"), "retain the original lookup error after the localized guidance");
+    getWorkItems = () => Promise.resolve([]);
+    assert.ok((await analyzeJapanese()).warnings[0].includes("取得できません"));
+    getWorkItems = () => Promise.resolve([{ id: 30, fields: {}, relations: [
+        { rel: "System.LinkTypes.Hierarchy-Reverse", url: "https://example.test/40" },
+        { rel: "System.LinkTypes.Hierarchy-Reverse", url: "https://example.test/50" }
+    ] }]);
+    assert.ok((await analyzeJapanese()).warnings[0].includes("一意に読み取れません"));
+    getWorkItems = (id) => Promise.resolve([serverItem({ id, type: "Unknown", parentId: id + 1 })]);
+    const limitJapanese = await analyzeJapanese({ maxItems: 3 });
+    assert.ok(limitJapanese.warnings.some((warning) => warning.includes("件数上限")));
+    assert.ok(limitJapanese.warnings.some((warning) => warning.includes("バックログ階層が不明")));
+    getWorkItems = (id) => Promise.resolve([serverItem({ id, type: "User Story", parentId: 0, project: "Other project" })]);
+    assert.ok((await analyzeJapanese()).warnings.some((warning) => warning.includes("別のプロジェクト")));
+    getWorkItems = () => new Promise(() => {});
+    const timedJapanese = timed.analyze({ ids: [30], client: trackingClient, index: makeIndex(), projectName: "Project", culture: "ja-JP" });
+    await Promise.resolve();
+    timeoutCallback();
+    assert.ok((await timedJapanese).warnings.some((warning) => warning.includes("制限時間")));
+    getWorkItems = (id) => id === 50 ? Promise.reject({ status: 403 }) : defaultRead(id);
+    const partialJapanese = await analyzeJapanese({ ids: [50, 30] });
+    assert.ok(partialJapanese.findings.length && partialJapanese.summary.includes("見つかりました"));
+    assert.ok(partialJapanese.warnings.some((warning) => warning.includes("#50") && warning.includes("閲覧権限")));
+    getWorkItems = defaultRead;
+    const japaneseModel = makeModel("ja-JP");
+    await japaneseModel.reorderWit(move);
+    assert.ok(japaneseModel.message().startsWith("Work Item #50 の並べ替えができませんでした。"));
+    assert.ok(japaneseModel.message().includes(rejection), "retain Azure's original rejection without machine-translating it");
+    await japaneseModel.messageAction()();
+    assert.ok(japaneseModel.messageAnalysis().summary.includes("見つかりました"), "the model must pass its host culture into analysis");
+    const analyze = analysisService.analyze;
+    analysisService.analyze = () => Promise.reject(new Error("Synthetic failure"));
+    await japaneseModel.messageAction()();
+    assert.ok(japaneseModel.messageAnalysis().summary.includes("解析を完了できません"));
+    analysisService.analyze = analyze;
+    japaneseModel._showBacklogFailure("作業項目 #88 の親を確認してください。", {}, { dragged: { id: 50 } });
+    assert.ok(japaneseModel._backlogAnalysisContext.ids.includes(88), "localized server errors must retain named analysis anchors");
+
     rejection = null;
     trackingCalls = [];
     const success = makeModel();
@@ -256,6 +331,6 @@ const move = { draggedId: 50, targetId: 30, position: "inside" };
     assert.strictEqual(repeated.messageAction(), null);
     assert.strictEqual(repeated.message(), "");
 
-    for (const item of [model, dismissed, repeated, success]) item.dispose();
+    for (const item of [model, dismissed, repeated, success, japaneseModel]) item.dispose();
     console.log("backlog hierarchy diagnostic tests passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });

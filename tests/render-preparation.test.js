@@ -43,7 +43,8 @@ const context = {
                 })
             },
             "api/WorkItemTracking/index": {},
-            "services/hierarchy-analysis": {}
+            "services/hierarchy-analysis": {},
+            "services/hierarchy-localization": require("./helpers/load-pure-service")("hierarchy-localization")
         };
         app = factory(...names.map((name) => dependencies[name] || {}));
     }

@@ -11,6 +11,8 @@ let closed;
 let panel;
 let live;
 let writes = 0;
+let hostCulture = "ja-JP";
+let hostReady = false;
 const manager = {
     getValue: () => Promise.resolve(JSON.stringify(stored)),
     setValue: (key, value) => {
@@ -22,7 +24,11 @@ const manager = {
 };
 const sdk = {
     init: () => {},
-    ready: () => Promise.resolve(),
+    ready: () => { hostReady = true; return Promise.resolve(); },
+    getPageContext: () => {
+        assert.ok(hostReady, "read the Azure DevOps culture only after SDK.ready");
+        return { globalization: { culture: hostCulture } };
+    },
     getConfiguration: () => ({ query: { id: "query", name: "Synthetic" } }),
     getUser: () => ({ displayName: "Test" }),
     getExtensionContext: () => ({ id: "test.querygantt" }),
@@ -55,7 +61,7 @@ const load = (file, expose) => {
     });
     return result;
 };
-for (const name of ["backlog-order", "browser-settings", "date-granularity", "field-columns", "timeline-zoom", "timeline-split"]) {
+for (const name of ["backlog-order", "browser-settings", "date-granularity", "field-columns", "timeline-zoom", "timeline-split", "hierarchy-localization"]) {
     if (fs.existsSync(path.join(root, "js/services/" + name + ".js"))) {
         dependencies["services/" + name] = load("js/services/" + name + ".js");
     }
@@ -69,6 +75,7 @@ App.Model.prototype.init = () => Promise.resolve();
 
 (async () => {
     await App.start();
+    assert.strictEqual(live.analysisCulture, "ja", "ordinary startup must use the host's Japanese culture");
     assert.strictEqual(live.showItemActions(), false, "older preferences must default to hidden controls");
     assert.strictEqual(live.showFooter(), false, "older preferences must default to hidden summaries");
     live.openSettings();
@@ -102,7 +109,9 @@ App.Model.prototype.init = () => Promise.resolve();
     assert.strictEqual(detailPanels, 0, "an in-flight detail request must not open after controls are disabled");
     live.currentId(null);
     sdk.getService = getService;
+    hostCulture = "en-US";
     await App.start();
+    assert.strictEqual(live.analysisCulture, "en", "reopening the tab must pick up the current host language");
     assert.strictEqual(live.showItemActions(), true, "saved settings must restore through the normal startup path");
     assert.strictEqual(live.showFooter(), true);
     live.openSettings();

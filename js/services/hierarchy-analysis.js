@@ -1,5 +1,11 @@
-define(["services/backlog-order"], function (backlogOrder) {
+define(["services/backlog-order", "services/hierarchy-localization"], function (backlogOrder, localization) {
     const analyze = function (args) {
+        const text = (key, values) => localization.text(args.culture, key, values);
+        const failure = (code) => {
+            const error = new Error(text(code));
+            error.analysisCode = code;
+            return error;
+        };
         const seeds = [...new Set((args.ids || []).map(Number).filter((id) => Number.isInteger(id) && id > 0))];
         const cache = new Map();
         const traces = seeds.map((id) => ({ id, items: [] }));
@@ -11,20 +17,20 @@ define(["services/backlog-order"], function (backlogOrder) {
         const read = (id) => {
             if (!cache.has(id)) {
                 if (cache.size >= (args.maxItems || 128)) {
-                    return Promise.reject(new Error("The analysis reached its work item limit. Start another analysis from the last item shown."));
+                    return Promise.reject(failure("itemLimit"));
                 }
                 const request = Promise.resolve().then(() => args.client.getWorkItems(
                     [id], undefined, ["System.Id", "System.WorkItemType", "System.TeamProject"], null, 1
                 )).then((items) => {
                     const item = (items || []).find((candidate) => Number(candidate.id) === id);
                     if (!item) {
-                        throw new Error("This work item was not returned. It may have been removed or access may be restricted.");
+                        throw failure("missingItem");
                     }
                     const fields = item.fields || {};
                     const parents = (item.relations || []).filter((link) => link.rel === "System.LinkTypes.Hierarchy-Reverse");
                     const parentId = parents.length ? Number((parents[0].url || "").split("/").pop()) : Number(fields["System.Parent"] || 0);
                     if (!Number.isInteger(parentId) || parentId < 0 || parents.length > 1) {
-                        throw new Error("The Parent links could not be read unambiguously.");
+                        throw failure("ambiguousParent");
                     }
                     return { id, type: fields["System.WorkItemType"] || "", project: fields["System.TeamProject"] || "", parentId };
                 });
@@ -49,11 +55,16 @@ define(["services/backlog-order"], function (backlogOrder) {
             }).catch((error) => {
                 if (!cancelled()) {
                     const status = Number(error && (error.status || error.statusCode));
-                    const reason = status === 401 || status === 403
-                        ? "Access was denied. Check your permission to read this work item."
-                        : status === 404 ? "This work item was not found or is inaccessible."
-                        : "The Parent lookup failed. " + (error && error.message && !error.status && !error.statusCode ? error.message : "Try the analysis again or check your connection and read permissions.");
-                    warnings.add(`#${id}. ${reason}`);
+                    const code = error && error.analysisCode;
+                    const detail = ["itemLimit", "missingItem", "ambiguousParent"].includes(code) ? code : "lookupRetry";
+                    let reason = status === 401 || status === 403
+                        ? text("accessDenied")
+                        : status === 404 ? text("notFound")
+                        : text("lookupFailed", { reason: text(detail) });
+                    if (!status && !code && error && typeof(error.message) === "string" && error.message) {
+                        reason += " " + text("lookupDetail", { detail: error.message });
+                    }
+                    warnings.add(text("warning", { id, reason }));
                 }
             });
         };
@@ -64,10 +75,10 @@ define(["services/backlog-order"], function (backlogOrder) {
             traces.forEach((trace) => {
                 const crossProject = trace.items.some((node) => node.project && node.project !== args.projectName);
                 if (crossProject) {
-                    warnings.add("An ancestor belongs to another project. Its backlog categories need to be checked in that project.");
+                    warnings.add(text("crossProject"));
                 }
                 if (trace.items.some((node) => !knownTypes.has(node.type))) {
-                    warnings.add("Some work item types have no known backlog category. Their Parent links need to be checked in the project's process settings.");
+                    warnings.add(text("unknownCategory"));
                 }
                 const issues = [];
                 for (let i = 0; i < trace.items.length - 1; i++) {
@@ -86,18 +97,20 @@ define(["services/backlog-order"], function (backlogOrder) {
                 issues.forEach((issue) => {
                     findings.set(issue.child.id + "/" + issue.parent.id, {
                         child: issue.child.id, parent: issue.parent.id,
-                        text: `${label(issue.child)} -> ${label(issue.parent)}. ${issue.reason}. Open #${issue.child.id} and check Links > Parent (#${issue.parent.id}). Correct this Parent link, or use Related for a non-hierarchical association.`
+                        text: text("finding", {
+                            child: label(issue.child), parent: label(issue.parent),
+                            childId: issue.child.id, parentId: issue.parent.id, reason: text(issue.reasonCode)
+                        })
                     });
                 });
             });
             return {
                 summary: findings.size
-                    ? "Found a Parent link that can prevent backlog reordering."
-                    : warnings.size ? "The analysis is incomplete. No invalid Parent link was confirmed in the items checked."
-                    : "No invalid Parent link was confirmed in the items checked.",
+                    ? text("found")
+                    : warnings.size ? text("incomplete") : text("none"),
                 findings: [...findings.values()],
                 traces: traces.filter((trace) => trace.items.length).map((trace) => ({
-                    text: "Parent chain from #" + trace.id,
+                    text: text("chainFrom", { id: trace.id }),
                     items: trace.items.map((node) => ({ id: node.id, text: label(node) }))
                 })),
                 warnings: [...warnings]
@@ -106,7 +119,7 @@ define(["services/backlog-order"], function (backlogOrder) {
         const timeout = new Promise((resolve) => {
             timer = setTimeout(() => {
                 stopped = true;
-                warnings.add("The analysis reached its time limit. The chains shown may be incomplete. You can run the analysis again.");
+                warnings.add(text("timeLimit"));
                 resolve(finish());
             }, args.timeoutMs || 15000);
         });

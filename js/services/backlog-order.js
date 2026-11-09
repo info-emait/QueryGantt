@@ -479,10 +479,12 @@ define([], () => {
         let child;
         let parent;
         let reason;
+        let reasonCode;
         if (repeated) {
             parent = repeated;
             child = chain[chain.length - 2];
             reason = "this link closes a Parent cycle";
+            reasonCode = "parentCycle";
         }
         else {
             for (let i = 0; i < chain.length - 1; i++) {
@@ -494,12 +496,13 @@ define([], () => {
                     reason = parentLevel.rank === childLevel.rank
                         ? "both work items are in the same backlog category"
                         : "the parent is in a lower backlog category than the child";
+                    reasonCode = parentLevel.rank === childLevel.rank ? "sameCategory" : "reversedParent";
                     break;
                 }
             }
         }
 
-        return child && parent ? { child, parent, reason } : null;
+        return child && parent ? { child, parent, reason, reasonCode } : null;
     };
 
     const describeParentChain = function (index, chain) {

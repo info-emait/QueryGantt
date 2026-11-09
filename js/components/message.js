@@ -1,6 +1,7 @@
 define([
-    "knockout"
-], function (ko) {
+    "knockout",
+    "services/hierarchy-localization"
+], function (ko, localization) {
     //#region [ Constructors ]
     
     /**
@@ -15,6 +16,8 @@ define([
         this.action = ko.isObservable(args.action) ? args.action : ko.observable(null);
         this.busy = ko.isObservable(args.busy) ? args.busy : ko.observable(false);
         this.analysis = ko.isObservable(args.analysis) ? args.analysis : ko.observable(null);
+        this.culture = localization.normalize(ko.unwrap(args.culture));
+        this.label = (key, values) => localization.text(this.culture, key, values);
     };
 
     //#endregion
@@ -97,10 +100,9 @@ define([
                             </div>
                             <div class="bolt-messagebar-buttons flex-noshrink flex-row flex-center flex-self-stretch">
                                 <button class="bolt-button enabled bolt-focus-treatment" type="button"
-                                        data-bind="visible: action, click: runAction, disable: busy, text: busy() ? 'Analyzing…' : 'Analyze Parent links'"></button>
+                                        data-bind="visible: action, click: runAction, disable: busy, text: label(busy() ? 'analyzing' : 'analyze')"></button>
                                 <button class="bolt-messagebar-close-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="0" type="button"
-                                        title="Dismiss error" aria-label="Dismiss error"
-                                        data-bind="click: () => text('')">
+                                        data-bind="click: () => text(''), attr: { title: label('dismiss'), 'aria-label': label('dismiss') }">
                                     <span class="fluent-icons-enabled">
                                         <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Cancel medium"></span>
                                     </span>
@@ -113,13 +115,13 @@ define([
                         <ul data-bind="foreach: findings">
                             <li>
                                 <span data-bind="text: text"></span>
-                                <a target="_blank" rel="noopener noreferrer" data-bind="attr: { href: childUrl }, text: 'Open #' + child"></a>
-                                <a target="_blank" rel="noopener noreferrer" data-bind="attr: { href: parentUrl }, text: 'Open #' + parent"></a>
+                                <a target="_blank" rel="noopener noreferrer" data-bind="attr: { href: childUrl }, text: $component.label('openItem', { id: child })"></a>
+                                <a target="_blank" rel="noopener noreferrer" data-bind="attr: { href: parentUrl }, text: $component.label('openItem', { id: parent })"></a>
                             </li>
                         </ul>
                         <ul data-bind="foreach: warnings"><li data-bind="text: $data"></li></ul>
                         <details>
-                            <summary>Checked Parent chains</summary>
+                            <summary data-bind="text: $component.label('checkedChains')"></summary>
                             <ul data-bind="foreach: traces">
                                 <li>
                                     <span data-bind="text: text"></span>
