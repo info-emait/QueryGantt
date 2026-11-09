@@ -29,6 +29,8 @@ define([
         this.project = args.project;
         this.fields = ko.isObservable(args.fields) ? args.fields : ko.observableArray(args.fields || []);
         this.fieldsValue = ko.isObservable(args.fieldsValue) ? args.fieldsValue : ko.observableArray(args.fieldsValue || []);
+        this.showItemActions = ko.observable(args.showItemActions === true);
+        this.showFooter = ko.observable(args.showFooter === true);
         this.panel = args.panel;
     };
 
@@ -58,14 +60,30 @@ define([
      */
     Model.prototype.save = function() {
         const fieldsValue = this.fieldsValue();
-        const settings = {
-            showFields: fieldsValue
-        };
+        const showItemActions = this.showItemActions() === true;
+        const showFooter = this.showFooter() === true;
+        const key = `gantt_${this.project.id}`;
 
-        dataService.getManager().then((manager) => {
-            manager.setValue(`gantt_${this.project.id}`, JSON.stringify(settings), { scopeType: "User" });
-            this.panel.close({ fieldsValue });
-        });
+
+        return dataService.getManager()
+            .then((manager) => manager.getValue(key, { scopeType: "User" })
+                .then((value) => ({ manager, value })))
+            .then(({ manager, value }) => {
+                let settings = {};
+                try {
+                    const parsedSettings = value ? JSON.parse(value) : {};
+                    settings = parsedSettings && (typeof(parsedSettings) === "object") && !Array.isArray(parsedSettings) ? parsedSettings : {};
+                }
+                catch (error) {
+                }
+
+                settings.showFields = fieldsValue;
+                settings.showItemActions = showItemActions;
+                settings.showFooter = showFooter;
+
+                return manager.setValue(key, JSON.stringify(settings), { scopeType: "User" });
+            })
+            .then(() => this.panel.close({ fieldsValue, showItemActions, showFooter }));
     };
 
 
@@ -118,6 +136,8 @@ define([
                     project: project,
                     fields: config.fields,
                     fieldsValue: config.fieldsValue,
+                    showItemActions: config.showItemActions,
+                    showFooter: config.showFooter,
                     panel: config.panel
                 });
                 console.debug("QueryGanttConfigurationApp : ready() : %o", model);
