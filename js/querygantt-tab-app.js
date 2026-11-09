@@ -541,6 +541,9 @@ define([
             .then(() => {
                 try {
                     this._applyBacklogMove(currentPlan, items.dragged, items.target);
+                    if (this._backlogAnalysisContext) {
+                        this.message("");
+                    }
                     return true;
                 }
                 catch (error) {
@@ -988,6 +991,9 @@ define([
      * against the server, not inferred from the rendered tree/backlog index.
      */
     Model.prototype._showBacklogFailure = function (message, plan, items) {
+        this._backlogAnalysisContext = null;
+        this.messageActionBusy(false);
+        this.messageAnalysis(null);
         this.message(message);
         const operation = plan.operation || {};
         const ids = [

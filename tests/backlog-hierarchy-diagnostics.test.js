@@ -187,6 +187,21 @@ const move = { draggedId: 50, targetId: 30, position: "inside" };
     assert.strictEqual(await pending, false);
     assert.strictEqual(dismissed.messageAnalysis(), null, "late results must not resurrect a closed error");
 
+    const repeated = makeModel();
+    await repeated.reorderWit(move);
+    const repeatedReleases = [];
+    getWorkItems = () => new Promise((resolve) => repeatedReleases.push(resolve));
+    const earlierAnalysis = repeated.messageAction()();
+    for (let i = 0; i < 8; i++) await Promise.resolve();
+    assert.strictEqual(repeated.messageActionBusy(), true);
+    await repeated.reorderWit(move);
+    assert.strictEqual(repeated.messageActionBusy(), false, "an identical new rejection must release the earlier analysis state");
+    assert.strictEqual(repeated.messageAnalysis(), null);
+    repeatedReleases.forEach((release) => release([]));
+    assert.strictEqual(await earlierAnalysis, false);
+    getWorkItems = defaultRead;
+    assert.strictEqual(await repeated.messageAction()(), true, "the new alert must remain analyzable after an identical rejection");
+
     let timeoutCallback;
     let timeoutCleared = false;
     const timed = loadAmd("services/hierarchy-analysis.js", { "services/backlog-order": service }, false, {
@@ -235,7 +250,12 @@ const move = { draggedId: 50, targetId: 30, position: "inside" };
     assert.strictEqual(await success.reorderWit(move), true);
     assert.deepStrictEqual(trackingCalls, []);
     assert.strictEqual(success.messageAction(), null);
+    repeated._applyBacklogMove = () => {};
+    assert.strictEqual(await repeated.reorderWit(move), true);
+    assert.strictEqual(repeated.messageAnalysis(), null, "a successful retry must clear the earlier diagnosis");
+    assert.strictEqual(repeated.messageAction(), null);
+    assert.strictEqual(repeated.message(), "");
 
-    for (const item of [model, dismissed, success]) item.dispose();
+    for (const item of [model, dismissed, repeated, success]) item.dispose();
     console.log("backlog hierarchy diagnostic tests passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });
