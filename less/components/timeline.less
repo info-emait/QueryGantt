@@ -1,6 +1,47 @@
 @import "../_variables.less";
 
 .my-timeline {
+    position: relative;
+
+    &__chart {
+        width: 100%;
+    }
+
+    &__splitter {
+        display: none;
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: rem(12px);
+        margin-left: rem(-6px);
+        z-index: 2;
+        cursor: col-resize;
+        touch-action: none;
+        outline: none;
+
+        &:before {
+            content: "";
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: rem(5px);
+            width: rem(2px);
+            background-color: transparent;
+        }
+
+        &:hover:before,
+        &:focus:before {
+            background-color: var(--component-grid-focus-border-color, rgba(var(--palette-primary), 1));
+        }
+    }
+
+    &--hide-item-actions {
+        .my-timeline-group__button--checkbox,
+        .my-timeline-group__button--edit {
+            display: none;
+        }
+    }
+
     &-group {
         font-size: rem(13px);
         font-weight: 400;
@@ -224,6 +265,10 @@
 
         &-label {
             display: flex;
+            // vis-timeline measures .vis-inner to calculate this label's
+            // height. Stretching it to the previously calculated height
+            // creates feedback, especially for hidden/out-of-range children.
+            align-items: flex-start;
 
             &.vis-group-level-1,
             &.vis-group-level-2,

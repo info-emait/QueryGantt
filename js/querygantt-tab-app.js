@@ -5,20 +5,18 @@ define([
     "knockout",
     "bindings",
     "sdk",
-    "xlsx",
-    "dom-to-image",
     "api/index",
     "api/WorkItemTracking/index",
     "services/data",
     "services/icon",
-    "my/templates/gantt",
+    "services/browser-settings",
+    "services/timeline-split",
     "my/components/legend",
     "my/components/timeline",
-    "my/components/spinner",
     "my/components/message",
     "my/components/filter",
     "my/components/zerodata"
-], function (module, require, polyfills, ko, bindings, sdk, xlsx, domtoimage, api, witApi, dataService, iconService, ganttTemplate) {
+], function (module, require, polyfills, ko, bindings, sdk, api, witApi, dataService, iconService, browserSettingsService, timelineSplitService) {
     //#region [ Fields ]
 
     const global = (function () { return this; })();
@@ -42,6 +40,9 @@ define([
         this.user = args.user;
         this.project = args.project;
         this.query = args.query;
+        this.settings = {};
+        this.extensionId = args.extensionId;
+        this.browserStorage = args.browserStorage || null;
 
         this.token = null;
         this.path = null;
@@ -49,6 +50,9 @@ define([
         this.zero = ko.observable(null);
 
         this.showFields = ko.observableArray(Array.isArray(args.showFields) ? args.showFields : ["duration"]).extend({ rateLimit: { timeout: 1000, method: "notifyWhenChangesStop" } });
+        this.showItemActions = ko.observable(args.showItemActions === true);
+        this.showFooter = ko.observable(args.showFooter === true);
+        this.listWidth = ko.observable(timelineSplitService.normalize(args.listWidth));
 
         this.isLoading = ko.observable(true);
         this.types = ko.observableArray([]);
@@ -153,7 +157,7 @@ define([
                 // Query type "tree", "oneHop"
                 if((data.queryType === 2) || (data.queryType === 3)) {
                     this.relations(data.workItemRelations || []);
-                    this.witIds(this.relations().map((wit) => wit.target.id));
+                    this.witIds([...new Set(this.relations().map((wit) => wit.target.id))]);
                 }
             })
             .then(() => {
@@ -176,7 +180,7 @@ define([
                 return Promise.all(xhrs).then((chunks) => Array.prototype.concat.apply([], chunks));
             })
             .then((wits) => {
-                var relations = this.relations();
+                const getPaths = this._createPathLookup(this.relations());
                 var results = [];
                 
                 // Normalize results
@@ -211,16 +215,16 @@ define([
                     };
 
                     // If there is the same item more than once in the result tree
-                    this._getPaths(relations, wit.id).forEach((p, idx) => {
-                        var o = JSON.parse(JSON.stringify(w));
+                    getPaths(wit.id).forEach((p, idx) => {
+                        var o = Object.assign({}, w);
 
                         o.createdDate = new Date(o.createdDate);
                         o.changedDate = new Date(o.changedDate);
                         o.startDate = new Date(o.startDate);
                         o.targetDate = new Date(o.targetDate);
-                        o.path = (p instanceof Array) ? p[0] : p;
+                        o.path = p;
                         o.level = o.path.split("/").length;
-                        o.parent = o.path.replace(new RegExp("\/?" + o.id, "g"),"");
+                        o.parent = o.path.substring(0, o.path.lastIndexOf("/"));
                         o.id = (idx > 0) ? o.id + "_" + idx : o.id;
                         o.startDate = ((o.startDate + "") === "Invalid Date") ? null : o.startDate;
                         o.targetDate = ((o.targetDate + "") === "Invalid Date") ? null : o.targetDate;
@@ -305,6 +309,24 @@ define([
 
 
     /**
+     * Persists the work-item list width after the user moves the timeline
+     * splitter. This is a project-level browser preference rather than a query
+     * setting because it describes the user's preferred screen layout.
+     *
+     * @param {number} width Width in CSS pixels.
+     */
+    Model.prototype.listWidthChanged = function (width) {
+        width = timelineSplitService.normalize(width);
+        if (width === null) {
+            return;
+        }
+
+        this.listWidth(width);
+        browserSettingsService.write(this.extensionId, this.project.id, "timelineListWidth", null, width, this.browserStorage);
+    };
+
+
+    /**
      * Updates the work item.
      * 
      * @param {object} record The item being manipulated.
@@ -372,7 +394,7 @@ define([
      * Downloads the timeline as an png image.
      */
     Model.prototype.downloadImage = function () {
-        global.domtoimage
+        return loadModules(["dom-to-image"]).then(([renderer]) => (renderer || global.domtoimage)
             .toBlob(doc.querySelector(".my-timeline"), { 
                 filter: (node) => {
                     if (typeof(node.hasAttribute) !== "function") {
@@ -381,7 +403,7 @@ define([
                     return !node.hasAttribute("data-noexport");
                 },
                 bgcolor: global.getComputedStyle(doc.body).getPropertyValue("--background-color")
-            })
+            }))
             .then((blob) => api.getClient(witApi.WorkItemTrackingRestClient).createAttachment(blob, this.project.id, `${this.query.name}_${(new Date()).toISOString().split(".").shift().replace(/(-|:)/gi,"")}.png`))
             .then((response) => sdk.getService(api.CommonServiceIds.HostNavigationService).then((service) => service.openNewWindow(response.url)))
             .catch(error => {
@@ -396,9 +418,9 @@ define([
      * Downloads the timeline.
      */
     Model.prototype.download = function () {
-        ganttTemplate.fetch()
+        return loadModules(["xlsx", "my/templates/gantt"]).then(([xlsx, ganttTemplate]) => ganttTemplate.fetch()
             .then((response) => response.ok ? response.arrayBuffer() : null)
-            .then((blob) => xlsx.fromDataAsync(blob))
+            .then((blob) => xlsx.fromDataAsync(blob)))
             .then((workbook) => {
                 // Get the right sheet
                 let sheet = workbook.sheet("GANTT");
@@ -423,7 +445,11 @@ define([
                 return workbook.outputAsync();
             })
             .then((blob) => api.getClient(witApi.WorkItemTrackingRestClient).createAttachment(blob, this.project.id, `${this.query.name}_${(new Date()).toISOString().split(".").shift().replace(/(-|:)/gi,"")}.xlsx`))
-            .then((response) => sdk.getService(api.CommonServiceIds.HostNavigationService).then((service) => service.navigate(response.url)));
+            .then((response) => sdk.getService(api.CommonServiceIds.HostNavigationService).then((service) => service.navigate(response.url)))
+            .catch((error) => {
+                this.message("Unable to download the Gantt chart as a spreadsheet.");
+                console.warn("Query Gantt spreadsheet export failed.", error);
+            });
     };
 
 
@@ -574,10 +600,27 @@ define([
                 lightDismiss: false,
                 configuration: {
                     fields,
-                    fieldsValue
+                    fieldsValue,
+                    showItemActions: this.showItemActions(),
+                    showFooter: this.showFooter(),
                 },
                 onClose: (result = {}) => {
-                    if (Array.isArray(result.fieldsValue)) {
+                    const currentFields = this.showFields();
+                    if (typeof(result.showItemActions) === "boolean") {
+                        this.showItemActions(result.showItemActions);
+                        this.settings.showItemActions = result.showItemActions;
+                        if (!result.showItemActions) {
+                            this.currentId(null);
+                        }
+                    }
+                    if (typeof(result.showFooter) === "boolean") {
+                        this.showFooter(result.showFooter);
+                        this.settings.showFooter = result.showFooter;
+                    }
+                    if (Array.isArray(result.fieldsValue) && (
+                        result.fieldsValue.length !== currentFields.length ||
+                        result.fieldsValue.some((value, index) => value !== currentFields[index])
+                    )) {
                         this.showFields(result.fieldsValue);
                     }
                 }
@@ -757,11 +800,14 @@ define([
         const types = this.types();
         const typesOther = this.typesOther();
 
-        if (ko.computedContext.isInitial() || !current || !currentId) {
+        if (ko.computedContext.isInitial() || !this.showItemActions() || !current || !currentId) {
             return;
         }
 
         sdk.getService(api.CommonServiceIds.HostPageLayoutService).then((host) => {
+            if (!this.showItemActions() || this.currentId() !== currentId) {
+                return;
+            }
             host.openPanel(`${sdk.getExtensionContext().id}.#{Extension.Id}#-detail`, {
                 title: `#${current.id}: ${current.title}`,
                 lightDismiss: false,
@@ -882,19 +928,49 @@ define([
     
 
     /**
-     * Gets the path of the work item.
-     * 
+     * Indexes query links and resolves each work item's display paths once.
+     *
      * @param {array} relations Array of relations between work items.
-     * @param {number} id Id of the current work item. 
      */
-    Model.prototype._getPaths = function (relations, id) {
-        var itm = relations.filter((rel) => rel.target.id === id);
+    Model.prototype._createPathLookup = function (relations) {
+        const parentsById = new Map();
+        relations.forEach(({ source, target }) => {
+            if (source) {
+                if (!parentsById.has(target.id)) {
+                    parentsById.set(target.id, new Set());
+                }
+                parentsById.get(target.id).add(source.id);
+            }
+        });
 
-        if (!itm.length || ((itm.length === 1) && !itm[0].source)) {
-            return [id + ""];
-        }
+        const pathsById = new Map();
+        const visiting = new Set();
+        const getPaths = (id) => {
+            if (pathsById.has(id)) {
+                return pathsById.get(id);
+            }
+            if (visiting.has(id)) {
+                return [];
+            }
 
-        return itm.filter((i) => i.source).map((i) => this._getPaths(relations, i.source.id).map((p) => p + "/" + id));
+            visiting.add(id);
+            const paths = [];
+            (parentsById.get(id) || []).forEach((parentId) => {
+                // Use one path per direct source in a one-hop query.
+                // Expanding every ancestor path can multiply the row count.
+                const parent = getPaths(parentId)[0];
+                if (parent) {
+                    paths.push(parent + "/" + id);
+                }
+            });
+            if (!paths.length) {
+                paths.push(id + "");
+            }
+            visiting.delete(id);
+            pathsById.set(id, paths);
+            return paths;
+        };
+        return getPaths;
     };
     
 
@@ -949,11 +1025,18 @@ define([
             w.isCompleted = state.category === "Completed";
         });
 
-        // Get count of completed work items
+        // Count direct children once across the result tree.
+        const countsByParent = new Map();
         wits.forEach((w) => {
-            let children = wits.filter((x) => x.parent === w.path);
-            w.childCount = children.length;
-            w.childCompletedCount = children.filter((x) => x.isCompleted).length;
+            const counts = countsByParent.get(w.parent) || { total: 0, completed: 0 };
+            counts.total += 1;
+            counts.completed += w.isCompleted ? 1 : 0;
+            countsByParent.set(w.parent, counts);
+        });
+        wits.forEach((w) => {
+            const counts = countsByParent.get(w.path);
+            w.childCount = counts ? counts.total : 0;
+            w.childCompletedCount = counts ? counts.completed : 0;
         });
 
         return wits;
@@ -965,17 +1048,10 @@ define([
     //#region [ Methods ]
 
     /**
-     * Fires function when DOM is ready.
-     *
-     * @param {function} fn Function.
+     * Loads export dependencies only when an export is requested.
      */
-    let ready = function (fn) {
-        if (doc.attachEvent ? (doc.readyState === "complete") : (doc.readyState !== "loading")) {
-            fn();
-        }
-        else {
-            doc.addEventListener("DOMContentLoaded", fn);
-        }
+    const loadModules = function (names) {
+        return new Promise((resolve, reject) => require(names, (...modules) => resolve(modules), reject));
     };
 
     //#endregion
@@ -983,13 +1059,8 @@ define([
 
     //#region [ Start ]
 
-    ready(function () {
-        sdk.init({                        
-            loaded: false,
-            applyTheme: true
-        });
-
-        sdk.ready()
+    const start = function () {
+        return sdk.ready()
             .then(() => Promise.all([
                 sdk.getService(api.CommonServiceIds.ProjectPageService),
                 sdk.getService(api.CommonServiceIds.HostNavigationService),
@@ -1004,11 +1075,15 @@ define([
             .then((response) => ({ project: response[0], state: response[1], settings: response[2] }))
             .then(({ project, state, settings }) => {
                 let showFields = null;
+                let displayPreferences = {};
+                const extensionId = sdk.getExtensionContext().id;
+                const listWidth = browserSettingsService.read(extensionId, project.id, "timelineListWidth", null);
                 
                 // Read some initial data from settings first
                 if (settings) {
                     try {
                         const parsedSettings = JSON.parse(settings);
+                        displayPreferences = parsedSettings || {};
                         if (parsedSettings.showFields) {
                             showFields = parsedSettings.showFields;
                         }
@@ -1030,22 +1105,25 @@ define([
                     user: sdk.getUser().displayName,
                     project: project,
                     query: sdk.getConfiguration().query,
-                    showFields
+                    showFields,
+                    showItemActions: displayPreferences.showItemActions,
+                    showFooter: displayPreferences.showFooter,
+                    extensionId,
+                    listWidth
                 });
                 console.debug("QueryGanttTabApp : ready() : %o", model);
                 
-                // Register tab
-                sdk.register("#{Extension.Id}#-tab", () => model);
-
                 // Start application and init application
                 ko.applyBindings(model, doc.body);
-                sdk.notifyLoadSucceeded();
-                model.init().then(() => {
+                return model.init().then(() => {
                     model.isLoading(false);
                     console.debug("QueryGanttTabApp is running.");
+                    return model;
                 });
-        });
-    });
+            });
+    };
 
     //#endregion
+
+    return { start };
 });
