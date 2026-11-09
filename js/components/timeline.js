@@ -24,6 +24,7 @@ define([
 
         this.node = args.element.firstChild;
         this.items = ko.isObservable(args.items) ? args.items : ko.observable(args.items || []);
+        this.showItemActions = ko.isObservable(args.showItemActions) ? args.showItemActions : ko.observable(args.showItemActions === true);
         this.states = ko.isObservable(args.states) ? args.states : ko.observable(args.states || []);
         this.priorities = ko.isObservable(args.priorities) ? args.priorities : ko.observable(args.priorities || []);
         this.types = ko.isObservable(args.types) ? args.types : ko.observable(args.types || []);
@@ -47,6 +48,12 @@ define([
         Object.entries(args.actions || {}).forEach(([name, action]) => typeof (action) === "function" && action(this[name].bind(this)));
 
         // Subscribes
+        this._itemActionsSubscribe = ko.computed(() => {
+            this.node.classList[this.showItemActions() === true ? "remove" : "add"]("my-timeline--hide-item-actions");
+            if (this.timeline) {
+                this.timeline.redraw();
+            }
+        });
         this._onItemsChangedSubscribe = ko.computed(this._onItemsChanged, this).extend({ deferred: true });
         this._onSelectedIdChangedSubscribe = ko.computed(this._onSelectedIdChanged, this);
     };
@@ -264,6 +271,7 @@ define([
         console.log("~Timeline()");
 
         this._onItemsChangedSubscribe.dispose();
+        this._itemActionsSubscribe.dispose();
         this._onSelectedIdChangedSubscribe.dispose();
     };
 
@@ -385,6 +393,9 @@ define([
     Timeline.prototype._onGroupEdit = function (e) {
         e.stopPropagation();
         e.preventDefault();
+        if (!this.showItemActions()) {
+            return;
+        }
 
         const id = parseInt(e.target.getAttribute("data-group-id"));
         if (isNaN(id)) {
@@ -463,6 +474,17 @@ define([
             return;
         }
 
+        // Index child IDs in display order for all groups in one pass.
+        const childrenByParent = new Map();
+        items.forEach((wit) => {
+            if (!isMarker(wit)) {
+                if (!childrenByParent.has(wit.parent)) {
+                    childrenByParent.set(wit.parent, []);
+                }
+                childrenByParent.get(wit.parent).push(wit.id);
+            }
+        });
+
         // Create groups
         var markerGroup = null;
         var groups = items
@@ -472,7 +494,7 @@ define([
                     return null;
                 }
 
-                return createGroup(wit, items, now);
+                return createGroup(wit, childrenByParent.get(wit.path) || [], now);
             })
             .filter((group) => group !== null);
 
@@ -614,10 +636,10 @@ define([
      * Creates group representation for the current work item.
      * 
      * @param {object} wit Current work item.
-     * @param {array} items List of all work items. 
+     * @param {array} childIds IDs of the work item's visible children.
      * @param {number} now Current date. 
      */
-    let createGroup = function (wit, items, now) {
+    let createGroup = function (wit, childIds, now) {
         var group = {
             id: wit.id,
             parentId: wit.parentId,
@@ -635,7 +657,7 @@ define([
             assignedTo: wit.assignedTo,
             url: wit.url,
             treeLevel: wit.level,
-            content: wit.title.truncate(50, true),
+            content: wit.title,
             title: wit.title,
             type: wit.type,
             state: wit.state,
@@ -645,9 +667,7 @@ define([
             tags: wit.tags,
             startDate: wit.startDate,
             endDate: wit.targetDate,
-            nestedGroups: items
-                .filter((child) => (child.parent === wit.path) && !isMarker(child))
-                .map((child) => child.id)
+            nestedGroups: childIds.slice()
         };
 
         if (!group.nestedGroups.length) {

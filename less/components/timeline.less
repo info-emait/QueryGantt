@@ -1,11 +1,20 @@
 @import "../_variables.less";
 
 .my-timeline {
+    &--hide-item-actions {
+        .my-timeline-group__button--checkbox,
+        .my-timeline-group__button--edit {
+            display: none;
+        }
+    }
+
     &-group {
         font-size: rem(13px);
         font-weight: 400;
         color: var(--text-primary-color);
         display: flex;
+        width: 100%;
+        min-width: 0;
         height: rem(30px);
         line-height: rem(30px);
         align-items: center;
@@ -16,10 +25,14 @@
         }
 
         &__dividier {
-            flex: 1;
+            flex: 0 0 0;
         }
 
         &__title {
+            flex: 1 1 0;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: clip;
             cursor: pointer;
             white-space: nowrap;
             text-decoration: none;
@@ -69,6 +82,7 @@
         }
 
         &__content {
+            flex: 0 0 auto;
             color: var(--text-secondary-color);
             white-space: nowrap;
 
@@ -224,6 +238,10 @@
 
         &-label {
             display: flex;
+            // vis-timeline measures .vis-inner to calculate this label's
+            // height. Stretching it to the previously calculated height
+            // creates feedback, especially for hidden/out-of-range children.
+            align-items: flex-start;
 
             &.vis-group-level-1,
             &.vis-group-level-2,
@@ -345,6 +363,9 @@
 
         &-inner {
             flex: 1;
+            box-sizing: border-box;
+            min-width: 0;
+            width: 100%;
         }
 
         &-tooltip {
