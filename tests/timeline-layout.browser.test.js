@@ -10,8 +10,8 @@ const root = path.resolve(__dirname, "..");
 // Use the source LESS and actual pinned vis-timeline/Knockout components. A
 // mocked DOM cannot measure the flex/height feedback that causes overlapping
 // rows after a hidden tab becomes visible or out-of-range children redraw.
-const renderStyles = async function () {
-    const filename = path.join(root, "less/querygantt-tab.less");
+const renderStyles = async function (name = "querygantt-tab") {
+    const filename = path.join(root, "less/" + name + ".less");
     const result = await less.render(fs.readFileSync(filename, "utf8"), {
         filename,
         plugins: [{
@@ -62,6 +62,131 @@ const assertLoadingNotice = async function (browser, styles) {
             await window.started;
         });
         assert.strictEqual(await notice.isVisible(), false, "finishing the load must leave the closed banner hidden");
+    }
+    finally {
+        await page.close();
+    }
+};
+
+const assertDisplayOptions = async function (browser) {
+    const page = await browser.newPage({ viewport: { width: 720, height: 800 } });
+    try {
+        const html = fs.readFileSync(path.join(root, "html/querygantt-configuration.html"), "utf8")
+            .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "").replace(/<link\b[^>]*>/gi, "");
+        await page.setContent(html);
+        await page.addStyleTag({ content: await renderStyles("querygantt-configuration") });
+        await page.addScriptTag({ path: path.join(root, "node_modules/knockout/build/output/knockout-latest.debug.js") });
+        await page.evaluate(() => {
+            window.loadedServices = {};
+            window.define = (names, factory) => { window.latestService = factory(); };
+        });
+        for (const name of ["browser-settings", "date-granularity", "field-columns"]) {
+            const filename = path.join(root, "js/services/" + name + ".js");
+            if (fs.existsSync(filename)) {
+                await page.addScriptTag({ path: filename });
+                await page.evaluate((name) => { window.loadedServices["services/" + name] = window.latestService; }, name);
+            }
+        }
+        await page.evaluate(() => {
+            window.manager = {
+                getValue: () => Promise.resolve('{"otherSetting":"keep"}'),
+                setValue: (key, value) => { window.savedOptions = JSON.parse(value); return Promise.resolve(); }
+            };
+            window.define = (names, factory) => {
+                const dependencies = Object.assign({}, window.loadedServices, {
+                    module: { config: () => ({}) }, knockout: window.ko,
+                    sdk: { init: () => {}, ready: () => new Promise(() => {}) },
+                    "services/data": { getManager: () => Promise.resolve(window.manager) }
+                });
+                window.configurationModule = factory(...names.map((name) => dependencies[name] || {}));
+            };
+        });
+        const source = fs.readFileSync(path.join(root, "js/querygantt-configuration-app.js"), "utf8")
+            .replace(/\r?\n\}\);\s*$/, "\n return { Model: Model };\n});");
+        await page.addScriptTag({ content: source });
+        await page.evaluate(() => {
+            window.configuration = new window.configurationModule.Model({
+                project: { id: "project-id" }, fields: [], fieldsValue: [],
+                panel: { close: (result) => { window.closedOptions = result; } }
+            });
+            window.ko.applyBindings(window.configuration, document.body);
+        });
+        const controls = page.getByRole("switch", { name: "Show work item controls and detail pane" });
+        const footer = page.getByRole("switch", { name: "Show footer summaries" });
+        assert.strictEqual(await controls.isChecked(), false);
+        assert.strictEqual(await footer.isChecked(), false);
+        await controls.check();
+        await footer.check();
+        await page.getByRole("button", { name: "Save", exact: true }).click();
+        await page.waitForFunction(() => !!window.savedOptions);
+        assert.deepStrictEqual(await page.evaluate(() => [window.savedOptions.showItemActions, window.savedOptions.showFooter, window.savedOptions.otherSetting]), [true, true, "keep"]);
+        const tab = fs.readFileSync(path.join(root, "html/querygantt-tab.html"), "utf8");
+        const start = tab.indexOf("<!-- ko if: showFooter()");
+        assert.ok(start >= 0);
+        const footerMarkup = tab.slice(start, tab.indexOf("<!-- /ko -->", start) + "<!-- /ko -->".length);
+        await page.evaluate((markup) => {
+            window.ko.cleanNode(document.body);
+            document.body.innerHTML = markup;
+            window.define = (names, factory) => factory(window.ko);
+        }, footerMarkup);
+        await page.addScriptTag({ path: path.join(root, "js/components/legend.js") });
+        await page.evaluate(() => {
+            window.footerModel = {
+                showFooter: window.ko.observable(false), isLoading: () => false, zero: () => null,
+                filteredWits: [], states: [], priorities: [], statesFilter: [], prioritiesFilter: [],
+                isTotalEffortVisible: false, isTotalRemainingWorkVisible: false, isTotalCompletedWorkVisible: false
+            };
+            window.ko.applyBindings(window.footerModel, document.body);
+        });
+        assert.strictEqual(await page.locator(".querygantt-tab__footer").count(), 0);
+        await page.evaluate(() => window.footerModel.showFooter(true));
+        await page.locator(".querygantt-tab__footer").waitFor({ state: "attached" });
+        await page.evaluate(() => window.footerModel.showFooter(false));
+        assert.strictEqual(await page.locator(".querygantt-tab__footer").count(), 0);
+    }
+    finally {
+        await page.close();
+    }
+};
+
+const assertAnalysisAction = async function (browser) {
+    if (!fs.existsSync(path.join(root, "js/services/hierarchy-analysis.js"))) return;
+    const page = await browser.newPage({ viewport: { width: 1000, height: 800 } });
+    try {
+        await page.setContent('<div id="message"></div>');
+        await page.addScriptTag({ path: path.join(root, "node_modules/knockout/build/output/knockout-latest.debug.js") });
+        await page.evaluate(() => {
+            window.ko.components.register = (name, value) => { window.messageRegistration = value; };
+            window.define = (names, factory) => factory(window.ko);
+        });
+        await page.addScriptTag({ path: path.join(root, "js/components/message.js") });
+        await page.evaluate(() => {
+            const root = document.getElementById("message");
+            root.innerHTML = window.messageRegistration.template;
+            const text = window.ko.observable('Reorder failed <img src=x onerror="window.injected=true">');
+            const busy = window.ko.observable(false);
+            const analysis = window.ko.observable(null);
+            window.finishAnalysis = () => {
+                busy(false);
+                analysis({
+                    summary: "Invalid Parent link",
+                    findings: [{ child: 10, parent: 40, childUrl: "https://example.test/10", parentUrl: "https://example.test/40", text: "Open #10 and check Links > Parent (#40)." }],
+                    traces: [{ text: "Parent chain from #30", items: [{ id: 30, text: "#30 (User Story)", url: "https://example.test/30" }] }],
+                    warnings: []
+                });
+            };
+            const action = window.ko.observable(() => { busy(true); });
+            const model = window.messageRegistration.viewModel.createViewModel({ text, busy, action, analysis }, { element: root });
+            window.ko.applyBindings(model, root);
+        });
+        const analyze = page.getByRole("button", { name: "Analyze Parent links" });
+        await analyze.click();
+        assert.strictEqual(await page.getByRole("button", { name: "Analyzing…" }).isDisabled(), true);
+        await page.evaluate(() => window.finishAnalysis());
+        assert.strictEqual(await page.getByRole("link", { name: "Open #10", exact: true }).getAttribute("target"), "_blank");
+        assert.strictEqual(await page.locator("img").count(), 0, "server text must not be interpreted as HTML");
+        await page.getByRole("button", { name: "Dismiss error" }).click();
+        assert.strictEqual(await analyze.isVisible(), false);
     }
     finally {
         await page.close();
@@ -196,6 +321,8 @@ const assertStable = async function (page, mode, expectedCount) {
     const browser = await chromium.launch({ channel: process.env.QUERYGANTT_BROWSER_CHANNEL || "chrome", headless: true });
     try {
         await assertLoadingNotice(browser, styles);
+        await assertDisplayOptions(browser);
+        await assertAnalysisAction(browser);
         let supportsBacklog = false;
         const modes = [];
         for (const backlogOrder of [false, true]) {
@@ -205,12 +332,27 @@ const assertStable = async function (page, mode, expectedCount) {
             page.on("pageerror", error => errors.push(error.message));
             const mode = backlogOrder ? "Backlog order" : "Query order";
             await mountTimeline(page, styles, backlogOrder);
+            const titleTarget = await page.locator(".my-timeline-group__title").first().getAttribute("target");
+            await page.evaluate(() => { window.initialTimeline = window.view.timeline; });
+            const edit = page.locator(".my-timeline-group__button--edit").first();
+            assert.strictEqual(await edit.isVisible(), false, "controls must be hidden by default");
+            await page.evaluate(() => window.view.showItemActions(true));
+            await page.locator(".my-timeline-group").first().hover();
+            assert.strictEqual(await edit.isVisible(), true);
+            await edit.click();
+            assert.strictEqual(await page.evaluate(() => window.view.selectedItemId()), 10);
+            await page.evaluate(() => window.view.showItemActions(false));
+            assert.strictEqual(await edit.isVisible(), false);
+            assert.strictEqual(await page.evaluate(() => window.initialTimeline === window.view.timeline), true, "toggling controls must preserve the timeline instance");
+            assert.strictEqual(await page.locator(".my-timeline-group__title").first().getAttribute("target"), titleTarget, "toggling controls must preserve title navigation");
             supportsBacklog = await page.evaluate(() => typeof window.view.backlogOrder === "function");
             await assertStable(page, `${mode}, revealed/out-of-range`, 80);
             await page.evaluate(() => { document.querySelector(".v-scroll-auto").scrollTop = 1200; });
             await assertStable(page, `${mode}, scrolled`, 80);
             await page.evaluate(() => { window.view.collapse(); });
             await assertStable(page, `${mode}, collapsed`, 16);
+            await page.evaluate(() => { window.view.showItemActions(true); window.view.showItemActions(false); });
+            assertLayout(await readLayout(page), `${mode}, toggled while collapsed`, 16);
             await page.evaluate(() => { window.view.expand(); });
             await assertStable(page, `${mode}, expanded`, 80);
             await page.setViewportSize({ width: 1100, height: 800 });
@@ -229,7 +371,7 @@ const assertStable = async function (page, mode, expectedCount) {
             await page.close();
             modes.push(mode);
         }
-        console.log(`timeline browser layout tests passed (${modes.join(" and ")}; hidden/revealed, out-of-range, scroll, collapse/expand, resize)`);
+        console.log(`timeline browser layout tests passed (${modes.join(" and ")}; loading notice, hidden/revealed, out-of-range, scroll, collapse/expand, resize)`);
     }
     finally {
         await browser.close();

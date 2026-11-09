@@ -14,6 +14,53 @@ html, body {
 @import "bolt-checkbox.less";
 
 .querygantt-configuration {
+    &__display-option {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: rem(12px);
+        padding: rem(8px) 0;
+
+        input[role="switch"] {
+            appearance: none;
+            flex: 0 0 rem(36px);
+            width: rem(36px);
+            height: rem(20px);
+            margin: 0;
+            border: 1px solid var(--text-secondary-color, #666);
+            border-radius: rem(12px);
+            background: var(--background-color, #fff);
+            position: relative;
+            cursor: pointer;
+
+            &:before {
+                content: "";
+                position: absolute;
+                width: rem(12px);
+                height: rem(12px);
+                top: rem(3px);
+                left: rem(3px);
+                border-radius: 50%;
+                background: var(--text-secondary-color, #666);
+            }
+
+            &:checked {
+                background: var(--communication-background, #0078d4);
+
+                &:before {
+                    left: rem(19px);
+                    background: #fff;
+                }
+            }
+
+            &:focus-visible {
+                outline: 2px solid var(--component-grid-focus-border-color, #0078d4);
+                outline-offset: rem(2px);
+            }
+        }
+    }
+
+
     &__field-list {
         min-height: 0;
     }
