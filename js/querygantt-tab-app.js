@@ -10,13 +10,14 @@ define([
     "api/Work/index",
     "services/data",
     "services/backlog-order",
+    "services/hierarchy-analysis",
     "services/icon",
     "my/components/legend",
     "my/components/timeline",
     "my/components/message",
     "my/components/filter",
     "my/components/zerodata"
-], function (module, require, polyfills, ko, bindings, sdk, api, witApi, workApi, dataService, backlogOrderService, iconService) {
+], function (module, require, polyfills, ko, bindings, sdk, api, witApi, workApi, dataService, backlogOrderService, hierarchyAnalysisService, iconService) {
     //#region [ Fields ]
 
     const global = (function () { return this; })();
@@ -56,6 +57,8 @@ define([
         this.zero = ko.observable(null);
 
         this.showFields = ko.observableArray(Array.isArray(args.showFields) ? args.showFields : ["duration"]).extend({ rateLimit: { timeout: 1000, method: "notifyWhenChangesStop" } });
+        this.showItemActions = ko.observable(args.showItemActions === true);
+        this.showFooter = ko.observable(args.showFooter === true);
 
         this.isLoading = ko.observable(true);
         this.types = ko.observableArray([]);
@@ -103,6 +106,16 @@ define([
         this.queryType = ko.observable("");
 
         this.message = ko.observable("");
+        this.messageAction = ko.observable(null);
+        this.messageActionBusy = ko.observable(false);
+        this.messageAnalysis = ko.observable(null);
+        this._backlogAnalysisContext = null;
+        this._messageSubscription = this.message.subscribe(() => {
+            this._backlogAnalysisContext = null;
+            this.messageAction(null);
+            this.messageActionBusy(false);
+            this.messageAnalysis(null);
+        });
 
         this._timeline_expandAction = ko.observable();
         this._timeline_collapseAction = ko.observable();
@@ -509,7 +522,7 @@ define([
         const plan = backlogOrderService.planMove(this.backlogIndex(), initialItems.dragged, initialItems.target, move.position);
 
         if (!plan.valid) {
-            this.message(plan.reason);
+            this._showBacklogFailure(plan.reason, plan, initialItems);
             return Promise.resolve(false);
         }
 
@@ -518,18 +531,10 @@ define([
         const fail = (failedPlan, error, items) => {
             const detail = this._getBacklogErrorMessage(error);
             const message = `Unable to reorder work item #${failedPlan.operation.ids[0]}.${detail ? " " + detail : ""}`;
-            this.message(message);
+            this._showBacklogFailure(message, failedPlan, items);
             console.warn(`App : reorderWit() : Unable to reorder work item #${failedPlan.operation.ids[0]}.`);
             console.warn(error);
-            if (!this._isBacklogHierarchyError(error)) {
-                return false;
-            }
-            return this._getBacklogHierarchyHint(failedPlan, items, detail).then((hint) => {
-                if (this.message() === message) {
-                    this.message(message + (hint ? " " + hint : ""));
-                }
-                return false;
-            });
+            return false;
         };
         const execute = (currentPlan, items, canRetry) => Promise.resolve()
             .then(() => client.reorderBacklogWorkItems(currentPlan.operation, this._getTeamContext()))
@@ -563,7 +568,7 @@ define([
                     const freshItems = findItems();
                     const retryPlan = backlogOrderService.planMove(freshIndex, freshItems.dragged, freshItems.target, move.position);
                     if (!retryPlan.valid) {
-                        this.message(retryPlan.reason);
+                        this._showBacklogFailure(retryPlan.reason, retryPlan, freshItems);
                         return false;
                     }
                     return execute(retryPlan, freshItems, false);
@@ -865,10 +870,27 @@ define([
                 lightDismiss: false,
                 configuration: {
                     fields,
-                    fieldsValue
+                    fieldsValue,
+                    showItemActions: this.showItemActions(),
+                    showFooter: this.showFooter(),
                 },
                 onClose: (result = {}) => {
-                    if (Array.isArray(result.fieldsValue)) {
+                    const currentFields = this.showFields();
+                    if (typeof(result.showItemActions) === "boolean") {
+                        this.showItemActions(result.showItemActions);
+                        this.settings.showItemActions = result.showItemActions;
+                        if (!result.showItemActions) {
+                            this.currentId(null);
+                        }
+                    }
+                    if (typeof(result.showFooter) === "boolean") {
+                        this.showFooter(result.showFooter);
+                        this.settings.showFooter = result.showFooter;
+                    }
+                    if (Array.isArray(result.fieldsValue) && (
+                        result.fieldsValue.length !== currentFields.length ||
+                        result.fieldsValue.some((value, index) => value !== currentFields[index])
+                    )) {
                         this.showFields(result.fieldsValue);
                         this.settings.showFields = result.fieldsValue;
                     }
@@ -915,6 +937,8 @@ define([
         this.isTotalRemainingWorkVisible.dispose();
         this.isTotalCompletedWorkVisible.dispose();
         this._orderModeSubscribe.dispose();
+        this._messageSubscription.dispose();
+        this._backlogAnalysisContext = null;
     };
 
     //#endregion
@@ -963,79 +987,55 @@ define([
      * outside the query and links left behind by type changes must be checked
      * against the server, not inferred from the rendered tree/backlog index.
      */
-    Model.prototype._getBacklogHierarchyHint = function (plan, items, detail) {
-        const operation = plan.operation;
-        const target = items && items.target;
-        const candidates = [target && (target.originalId || target.id), operation.parentId, operation.previousId, operation.nextId]
-            .map(Number).filter((id) => Number.isInteger(id) && id > 0 && id !== operation.ids[0]);
-        const referenced = ((detail || "").match(/work item\s+#?\d+/gi) || [])
-            .map((reference) => Number(reference.match(/\d+/)[0]))
-            .find((id) => candidates.includes(id));
-        let id = referenced || candidates[0];
-        if (!Number.isInteger(id) || id <= 0) {
-            return Promise.resolve("");
+    Model.prototype._showBacklogFailure = function (message, plan, items) {
+        this.message(message);
+        const operation = plan.operation || {};
+        const ids = [
+            items.dragged && (items.dragged.originalId || items.dragged.id),
+            items.target && (items.target.originalId || items.target.id),
+            ...(operation.ids || []), operation.parentId, operation.previousId, operation.nextId,
+            ...((message || "").match(/work item\s+#?\d+/gi) || []).map((value) => value.match(/\d+/)[0])
+        ].map(Number).filter((id) => Number.isInteger(id) && id > 0);
+        this._backlogAnalysisContext = { ids: [...new Set(ids)].slice(0, 20) };
+        this.messageAction(ids.length ? this.analyzeBacklogFailure.bind(this) : null);
+    };
+
+
+    Model.prototype.analyzeBacklogFailure = function () {
+        const context = this._backlogAnalysisContext;
+        if (!context || this.messageActionBusy()) {
+            return Promise.resolve(false);
         }
-
-        const chain = [];
-        const seen = new Map();
-        let expired = false;
-        let timer;
-        const incomplete = "Ancestor check could not be completed. Check the drop target's Links > Parent and continue through its ancestors.";
-        const describe = () => backlogOrderService.describeParentChain(this.backlogIndex(), chain);
-        const timeout = new Promise((resolve) => {
-            timer = global.setTimeout(() => {
-                expired = true;
-                resolve([describe(), incomplete].filter(Boolean).join(" "));
-            }, 6000);
-        });
-        const read = Promise.resolve().then(() => {
-            const client = api.getClient(witApi.WorkItemTrackingRestClient);
-            const visit = () => {
-                if (expired) {
-                    return "";
-                }
-                if (!id) {
-                    return describe();
-                }
-                if (seen.has(id)) {
-                    chain.push(seen.get(id));
-                    return describe();
-                }
-                if (chain.length >= 32) {
-                    return [describe(), incomplete].filter(Boolean).join(" ");
-                }
-
-                return client.getWorkItems([id], this.project.id, ["System.Id", "System.WorkItemType", "System.Parent"], null, "relations")
-                    .then((results) => {
-                        if (expired) {
-                            return "";
-                        }
-                        const item = (results || []).find((result) => Number(result.id) === id);
-                        if (!item) {
-                            throw new Error("Ancestor was not returned.");
-                        }
-                        const fields = item.fields || {};
-                        const relation = (item.relations || []).find((link) => link.rel === "System.LinkTypes.Hierarchy-Reverse");
-                        const parent = fields["System.Parent"] !== undefined
-                            ? fields["System.Parent"]
-                            : relation ? (relation.url || "").split("/").pop() : 0;
-                        const parentId = Number(parent || 0);
-                        if (!Number.isInteger(parentId) || parentId < 0) {
-                            throw new Error("Ancestor Parent could not be read.");
-                        }
-                        const node = { id: id, type: fields["System.WorkItemType"], parentId: parentId };
-                        chain.push(node);
-                        seen.set(id, node);
-                        id = parentId;
-                        return visit();
-                    });
-            };
-            return visit();
-        }).catch(() => [describe(), incomplete].filter(Boolean).join(" "));
-
-        return Promise.race([read, timeout]).then((hint) => {
-            global.clearTimeout(timer);
-            return hint;
+        this.messageActionBusy(true);
+        this.messageAnalysis(null);
+        const url = (id) => this.path + encodeURIComponent(this.project.name || this.project.id) + "/_workitems/edit/" + id;
+        return Promise.resolve().then(() => hierarchyAnalysisService.analyze({
+            ids: context.ids,
+            client: api.getClient(witApi.WorkItemTrackingRestClient),
+            projectName: this.project.name,
+            index: this.backlogIndex(),
+            isCancelled: () => this._backlogAnalysisContext !== context
+        })).then((result) => {
+            if (this._backlogAnalysisContext !== context) {
+                return false;
+            }
+            result.findings.forEach((finding) => {
+                finding.childUrl = url(finding.child);
+                finding.parentUrl = url(finding.parent);
+            });
+            result.traces.forEach((trace) => trace.items.forEach((item) => { item.url = url(item.id); }));
+            this.messageAnalysis(result);
+            this.messageActionBusy(false);
+            return true;
+        }, () => {
+            if (this._backlogAnalysisContext === context) {
+                this.messageAnalysis({
+                    summary: "The analysis could not finish. Try again or check read permissions.",
+                    findings: [], traces: [], warnings: []
+                });
+                this.messageActionBusy(false);
+            }
+            return false;
         });
     };
 
@@ -1268,11 +1268,14 @@ define([
         const types = this.types();
         const typesOther = this.typesOther();
 
-        if (ko.computedContext.isInitial() || !current || !currentId) {
+        if (ko.computedContext.isInitial() || !this.showItemActions() || !current || !currentId) {
             return;
         }
 
         sdk.getService(api.CommonServiceIds.HostPageLayoutService).then((host) => {
+            if (!this.showItemActions() || this.currentId() !== currentId) {
+                return;
+            }
             host.openPanel(`${sdk.getExtensionContext().id}.#{Extension.Id}#-detail`, {
                 title: `#${current.id}: ${current.title}`,
                 lightDismiss: false,
@@ -1655,6 +1658,7 @@ define([
             .then((response) => ({ project: response[0], state: response[1], settings: response[2], manager: response[3] }))
             .then(({ project, state, settings, manager }) => {
                 let showFields = null;
+                let displayPreferences = {};
                 let orderMode = backlogOrderService.queryOrder;
                 let parsedSettings = {};
                 let team = null;
@@ -1669,6 +1673,7 @@ define([
                 if (settings) {
                     try {
                         const value = JSON.parse(settings);
+                        displayPreferences = value || {};
                         parsedSettings = value && (typeof(value) === "object") && !Array.isArray(value) ? value : {};
                         if (parsedSettings.showFields) {
                             showFields = parsedSettings.showFields;
@@ -1697,6 +1702,8 @@ define([
                     team,
                     query: sdk.getConfiguration().query,
                     showFields,
+                    showItemActions: displayPreferences.showItemActions,
+                    showFooter: displayPreferences.showFooter,
                     orderMode,
                     manager,
                     settings: parsedSettings,

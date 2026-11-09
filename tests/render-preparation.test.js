@@ -42,7 +42,8 @@ const context = {
                     }
                 })
             },
-            "api/WorkItemTracking/index": {}
+            "api/WorkItemTracking/index": {},
+            "services/hierarchy-analysis": {}
         };
         app = factory(...names.map((name) => dependencies[name] || {}));
     }

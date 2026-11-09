@@ -18,7 +18,7 @@
                     <div class="bolt-spinner-circle medium" aria-hidden="true"></div>
                     <div class="bolt-spinner-label">Loading Query Gantt…</div>
                 </div>
-                <my-message params="text: message"></my-message>
+                <my-message params="text: message, action: messageAction, busy: messageActionBusy, analysis: messageAnalysis"></my-message>
                 <div class="querygantt-tab__filter flex-row margin-top-16" style="display: none" data-bind="visible: (wits().length || zero() !== null) && !isLoading()">
                     <my-filter params="value: filter,
                                        valuePrimary: filterPrimary,
@@ -137,6 +137,7 @@
                                                     typesOther: typesOther, 
                                                     icons: icons, 
                                                     showFields: showFields,
+                                                    showItemActions: showItemActions,
                                                     callbacks: {
                                                         openNewWindow: openNewWindow.bind($root),
                                                         updateWit: updateWit.bind($root),
@@ -159,7 +160,7 @@
                         </div>
                     </div>
                 </div>
-                <!-- ko if: !isLoading() && !zero() -->
+                <!-- ko if: showFooter() && !isLoading() && !zero() -->
                 <div class="querygantt-tab__footer flex-row flex-wrap justify-space-around">
                     <my-legend params="items: filteredWits, title: 'Total Effort:', reduce: (a, b) => a + b.effort || 0, format: (a) => `${a} hour(s)`, isVisible: isTotalEffortVisible"></my-legend>
                     <my-legend params="items: filteredWits, title: 'Total Remaining Work:', reduce: (a, b) => a + b.remainingWork || 0, format: (a) => `${a} hour(s)`, isVisible: isTotalRemainingWorkVisible"></my-legend>

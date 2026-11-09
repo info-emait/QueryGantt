@@ -463,13 +463,11 @@ define([], () => {
      * move. Only known same-category/reversed links and cycles are diagnosed;
      * a skipped or unknown category is not proof of the server's cause.
      */
-    const describeParentChain = function (index, chain) {
+    const findParentIssue = function (index, chain) {
         if (!chain || !chain.length) {
-            return "";
+            return null;
         }
 
-        const label = (item) => `#${item.id}${item.type ? " (" + item.type + ")" : ""}`;
-        const path = "Ancestor path (child -> parent): " + chain.map(label).join(" -> ") + ".";
         const seen = new Set();
         const repeated = chain.find((item) => {
             if (seen.has(item.id)) {
@@ -501,11 +499,21 @@ define([], () => {
             }
         }
 
-        if (!child || !parent) {
+        return child && parent ? { child, parent, reason } : null;
+    };
+
+    const describeParentChain = function (index, chain) {
+        if (!chain || !chain.length) {
+            return "";
+        }
+        const label = (item) => `#${item.id}${item.type ? " (" + item.type + ")" : ""}`;
+        const path = "Ancestor path (child -> parent): " + chain.map(label).join(" -> ") + ".";
+        const issue = findParentIssue(index, chain);
+        if (!issue) {
             return path;
         }
-
-        return `Invalid ancestor Parent link: ${label(child)} -> ${label(parent)}; ${reason}. `
+        const { child, parent, reason } = issue;
+        return `Invalid ancestor Parent link: ${label(child)} -> ${label(parent)}. ${reason}. `
             + `Open #${child.id}, check Links > Parent (#${parent.id}), and correct or remove that Parent link. `
             + "Use Related instead if the association is not hierarchical. " + path;
     };
@@ -733,6 +741,7 @@ define([], () => {
         planMove: planMove,
         applyMove: applyMove,
         describeParentChain: describeParentChain,
+        findParentIssue: findParentIssue,
         isValidParent: isValidParent,
         isTeamOwned: isTeamOwned
     };

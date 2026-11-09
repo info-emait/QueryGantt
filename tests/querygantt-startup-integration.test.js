@@ -48,7 +48,7 @@ const app = loadAmd(path.join(__dirname, "../js/querygantt-tab-app.js"), {
     module: { config: function () { return {}; } },
     knockout: ko,
     sdk: {},
-    "services/backlog-order": backlogOrderService
+    "services/backlog-order": backlogOrderService, "services/hierarchy-analysis": {}
 }, true);
 
 const initCalls = [];
@@ -181,7 +181,7 @@ singleDateFilter.dispose();
         knockout: ko,
         sdk: { getService: function () { return Promise.resolve(hostNavigationService); } },
         "api/index": navigationApi,
-        "services/backlog-order": backlogOrderService
+        "services/backlog-order": backlogOrderService, "services/hierarchy-analysis": {}
     }, true);
     const queryStringModel = {
         showFields: function () { return ["duration"]; },
@@ -249,7 +249,7 @@ singleDateFilter.dispose();
         "api/index": asyncApi,
         "api/WorkItemTracking/index": witApi,
         "api/Work/index": workApi,
-        "services/backlog-order": backlogOrderService,
+        "services/backlog-order": backlogOrderService, "services/hierarchy-analysis": {},
         "services/browser-settings": { write: function () { return true; } },
         "services/date-granularity": dateGranularityService,
         "services/timeline-zoom": timelineZoomService,

@@ -70,7 +70,8 @@ const app = loadAmd(path.join(__dirname, "../js/querygantt-tab-app.js"), {
     sdk: {},
     "api/index": api,
     "api/Work/index": workApi,
-    "services/backlog-order": backlogOrderService
+    "services/backlog-order": backlogOrderService,
+    "services/hierarchy-analysis": {}
 });
 const Model = app.Model;
 let settingsManager = null;
@@ -108,6 +109,9 @@ const makeModel = function () {
     model.isHistorical = observable(false);
     model.orderMode = observable(backlogOrderService.queryOrder);
     model.message = observable("");
+    model.messageAction = observable(null);
+    model.messageActionBusy = observable(false);
+    model.messageAnalysis = observable(null);
     model.isLoading = observable(false);
     model.wits = observable([]);
     model._settingsSavePromise = Promise.resolve();
@@ -342,14 +346,16 @@ const makeModel = function () {
     const configurationModel = Object.create(configurationApp.Model.prototype);
     configurationModel.project = { id: "project-id" };
     configurationModel.fieldsValue = observable(["dates", "duration"]);
+    configurationModel.showItemActions = observable(false);
+    configurationModel.showFooter = observable(false);
     configurationModel.panel = { close: function (result) { panelResult = result; } };
     await configurationModel.save();
     assert.deepStrictEqual(JSON.parse(JSON.stringify(configurationSaved)), {
         key: "gantt_project-id",
-        value: { orderMode: "backlog", showFields: ["dates", "duration"] },
+        value: { orderMode: "backlog", showFields: ["dates", "duration"], showItemActions: false, showFooter: false },
         options: { scopeType: "User" }
     }, "saving field visibility should preserve the selected backlog order");
-    assert.deepStrictEqual(JSON.parse(JSON.stringify(panelResult)), { fieldsValue: ["dates", "duration"] });
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(panelResult)), { fieldsValue: ["dates", "duration"], showItemActions: false, showFooter: false });
 
     console.log("querygantt backlog integration tests passed");
 })().catch((error) => {
