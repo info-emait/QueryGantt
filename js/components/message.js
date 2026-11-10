@@ -1,7 +1,6 @@
 define([
-    "knockout",
-    "services/hierarchy-localization"
-], function (ko, localization) {
+    "knockout"
+], function (ko) {
     //#region [ Constructors ]
     
     /**
@@ -13,24 +12,12 @@ define([
         console.debug("Message()");
 
         this.text = ko.isObservable(args.text) ? args.text : ko.observable(args.text || "");
-        this.action = ko.isObservable(args.action) ? args.action : ko.observable(null);
-        this.busy = ko.isObservable(args.busy) ? args.busy : ko.observable(false);
-        this.analysis = ko.isObservable(args.analysis) ? args.analysis : ko.observable(null);
-        this.culture = localization.normalize(ko.unwrap(args.culture));
-        this.label = (key, values) => localization.text(this.culture, key, values);
     };
 
     //#endregion
 
 
     //#region [ Methods : Public ]
-
-    Message.prototype.runAction = function () {
-        const action = this.action();
-        if (typeof(action) === "function" && !this.busy()) {
-            return action();
-        }
-    };
 
     /**
      * Direct method to receive a descendantsComplete notification.
@@ -99,39 +86,14 @@ define([
                                 <div class="bolt-messagebar-message flex-row flex-wrap flex-grow flex-shrink flex-center body-m word-break" data-bind="text: text"></div>
                             </div>
                             <div class="bolt-messagebar-buttons flex-noshrink flex-row flex-center flex-self-stretch">
-                                <button class="bolt-button enabled bolt-focus-treatment" type="button"
-                                        data-bind="visible: action, click: runAction, disable: busy, text: label(busy() ? 'analyzing' : 'analyze')"></button>
                                 <button class="bolt-messagebar-close-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="0" type="button"
-                                        data-bind="click: () => text(''), attr: { title: label('dismiss'), 'aria-label': label('dismiss') }">
+                                        data-bind="click: () => text('')">
                                     <span class="fluent-icons-enabled">
                                         <span aria-hidden="true" class="left-icon flex-noshrink fabric-icon ms-Icon--Cancel medium"></span>
                                     </span>
                                 </button>
                             </div>
                         </div>
-                    </div>
-                    <div class="querygantt-tab__analysis" data-bind="with: analysis">
-                        <p role="status" data-bind="text: summary"></p>
-                        <ul data-bind="foreach: findings">
-                            <li>
-                                <span data-bind="text: text"></span>
-                                <a target="_blank" rel="noopener noreferrer" data-bind="attr: { href: childUrl }, text: $component.label('openItem', { id: child })"></a>
-                                <a target="_blank" rel="noopener noreferrer" data-bind="attr: { href: parentUrl }, text: $component.label('openItem', { id: parent })"></a>
-                            </li>
-                        </ul>
-                        <ul data-bind="foreach: warnings"><li data-bind="text: $data"></li></ul>
-                        <details>
-                            <summary data-bind="text: $component.label('checkedChains')"></summary>
-                            <ul data-bind="foreach: traces">
-                                <li>
-                                    <span data-bind="text: text"></span>
-                                    <div data-bind="foreach: items">
-                                        <a target="_blank" rel="noopener noreferrer" data-bind="attr: { href: url }, text: text"></a>
-                                        <span data-bind="visible: $index() < $parent.items.length - 1"> → </span>
-                                    </div>
-                                </li>
-                            </ul>
-                        </details>
                     </div>
                 </div>
             </div>`

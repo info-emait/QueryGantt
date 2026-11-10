@@ -16,17 +16,3 @@ and set `QUERYGANTT_BROWSER_CHANNEL=chromium` when running the browser tests.
 The browser suite checks the real timeline and source LESS across multiple
 one-second resize polls, including hidden-tab startup, out-of-range child items,
 page scrolling, collapse/expand, and narrower host widths.
-
-# Parent-link analysis language
-
-The rejected-move analysis uses the Azure DevOps user's page culture from
-`SDK.getPageContext().globalization.culture`, read after `SDK.ready()`.
-Japanese (`ja` and `ja-*`) selects Japanese buttons, results, warnings, and
-Parent-chain labels; other or unavailable cultures fall back to English.
-The browser language does not override this setting. Reopen the tab after
-changing the Azure DevOps language. Work Item IDs, process-specific type names,
-and server error details retain their original values.
-
-The Node regression suites cover both languages and failure paths. The browser
-suite mounts the actual message component using the application's template and
-deliberately sets a browser language different from the host culture.

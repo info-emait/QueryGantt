@@ -71,8 +71,6 @@ const app = loadAmd(path.join(__dirname, "../js/querygantt-tab-app.js"), {
     "api/index": api,
     "api/Work/index": workApi,
     "services/backlog-order": backlogOrderService,
-    "services/hierarchy-analysis": {},
-    "services/hierarchy-localization": require("./helpers/load-pure-service")("hierarchy-localization")
 });
 const Model = app.Model;
 let settingsManager = null;
@@ -110,9 +108,7 @@ const makeModel = function () {
     model.isHistorical = observable(false);
     model.orderMode = observable(backlogOrderService.queryOrder);
     model.message = observable("");
-    model.messageAction = observable(null);
-    model.messageActionBusy = observable(false);
-    model.messageAnalysis = observable(null);
+    model.messageContext = observable(null);
     model.isLoading = observable(false);
     model.wits = observable([]);
     model._settingsSavePromise = Promise.resolve();
@@ -273,6 +269,8 @@ const makeModel = function () {
     assert.strictEqual(model.isLoading(), false, "a failed request should leave the UI usable");
     assert.ok(model.message().includes("#2"), "a failed request should identify the work item");
     assert.ok(model.message().includes("reorder rejected"), "the Azure DevOps reason should be shown instead of a generic error only");
+    assert.ok(model.messageContext().workItemIds.includes(1) && model.messageContext().workItemIds.includes(2),
+        "a rejected gesture must retain both endpoint IDs even when Azure names only one");
     assert.strictEqual(refreshed, 0, "a failed request should not refresh or apply an uncommitted order");
 
     const makeOrderedStory = function (id, title, order, parentType) {

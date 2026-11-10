@@ -42,9 +42,7 @@ const context = {
                     }
                 })
             },
-            "api/WorkItemTracking/index": {},
-            "services/hierarchy-analysis": {},
-            "services/hierarchy-localization": require("./helpers/load-pure-service")("hierarchy-localization")
+            "api/WorkItemTracking/index": {}
         };
         app = factory(...names.map((name) => dependencies[name] || {}));
     }

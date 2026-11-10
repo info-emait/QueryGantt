@@ -18,7 +18,7 @@
                     <div class="bolt-spinner-circle medium" aria-hidden="true"></div>
                     <div class="bolt-spinner-label">Loading Query Gantt…</div>
                 </div>
-                <my-message params="text: message, action: messageAction, busy: messageActionBusy, culture: analysisCulture, analysis: messageAnalysis"></my-message>
+                <my-message params="text: message, context: messageContext"></my-message>
                 <div class="querygantt-tab__filter flex-row margin-top-16" style="display: none" data-bind="visible: (wits().length || zero() !== null) && !isLoading()">
                     <my-filter params="value: filter,
                                        valuePrimary: filterPrimary,
