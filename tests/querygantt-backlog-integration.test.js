@@ -215,6 +215,32 @@ const makeModel = function () {
         "the successful order should be visible immediately from local state"
     );
 
+    const projectedModel = makeModel();
+    const orderField = "Microsoft.VSTS.Common.StackRank";
+    const projectedLevels = [{ id: "stories", rank: 1, workItemTypes: ["User Story"] }];
+    const projectedResponses = [{ workItems: [
+        { source: null, target: { id: 502 } }, { source: null, target: { id: 504 } }
+    ] }];
+    const projectedIndex = backlogOrderService.createIndex(projectedLevels, projectedResponses, orderField);
+    const projectedItems = [501, 502, 503, 504].map((id, position) => {
+        projectedModel._workItemFieldValues[id] = { [orderField]: 1000000000 + position * 1000 };
+        return { id, originalId: id, type: "User Story", project: "Project", parentId: 500,
+            path: "500/" + id, parent: "500", level: 2, isCompleted: id % 2 === 1 };
+    });
+    projectedModel.backlogIndex(projectedIndex);
+    projectedModel.wits(projectedModel._decorateBacklogItems(projectedItems, projectedIndex));
+    workClient.reorderBacklogWorkItems = () => Promise.resolve([{ id: 504, order: 1000000500 }]);
+    assert.strictEqual(await projectedModel.reorderWit({ draggedId: 504, targetId: 502, position: "before" }), true);
+    const projectedOrder = () => Array.from(backlogOrderService.sortItems(projectedModel.wits(), projectedModel.backlogIndex()), (wit) => wit.id);
+    assert.deepStrictEqual(projectedOrder(), [501, 504, 502, 503], "completed rows retain their order through the actual model's drag workflow");
+    assert.strictEqual(projectedModel._workItemFieldValues[504][orderField], 1000000500);
+    assert.strictEqual(projectedModel._workItemFieldValues[501][orderField], 1000000000);
+    projectedModel._activateBacklogIndex(projectedModel.backlogIndex());
+    assert.deepStrictEqual(projectedOrder(), [501, 504, 502, 503], "redecorating the view must not restore stale ranks");
+    projectedModel._activateBacklogIndex(backlogOrderService.createIndex(projectedLevels, projectedResponses, orderField));
+    assert.deepStrictEqual(projectedOrder(), [501, 504, 502, 503], "a fresh backlog response must agree with the cached server ranks");
+    workClient.reorderBacklogWorkItems = (value) => { operation = value; return Promise.resolve([]); };
+
     const feature12Entry = backlogOrderService.getEntry(model.backlogIndex(), 12, "Feature");
     const feature12 = { id: 12, originalId: 12, type: "Feature", title: "Feature 12", path: "12", parent: "", parentId: null, level: 1, isCompleted: false, backlogOrder: Object.assign({ eligible: true }, feature12Entry) };
     model.wits(model.wits().concat([feature12]));

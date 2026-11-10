@@ -297,4 +297,38 @@ assert.deepStrictEqual(
     "reorder anchors should follow the same total sibling order shown in the Gantt"
 );
 
+// Azure may omit completed items and project a direct Epic parent as a root
+// at the Stories level. Both kinds still appear together in the query tree.
+const projectedIndex = service.createIndex(backlogs, [
+    { workItems: [{ source: null, target: { id: 500 } }] }, {},
+    { workItems: [
+        { source: null, target: { id: 502 } },
+        { source: null, target: { id: 504 } }
+    ] }
+], "Microsoft.VSTS.Common.StackRank");
+const projectedItems = [501, 502, 503, 504].map((id, position) => Object.assign(
+    item(id, "User Story", "500/" + id, "500"),
+    { parentId: 500, backlogOrderValue: 1000000000 + position * 1000, isCompleted: id % 2 === 1 }
+));
+service.includeQueryItems(projectedIndex, projectedItems);
+const idsInOrder = (value) => Array.from(service.sortItems(projectedItems, value), (wit) => wit.id);
+assert.deepStrictEqual(idsInOrder(projectedIndex), [501, 502, 503, 504]);
+const movedProjection = service.applyMove(projectedIndex,
+    { ids: [504], parentId: 0, previousId: 0, nextId: 502 },
+    [{ id: 504, order: 1000000500 }]);
+assert.deepStrictEqual(idsInOrder(movedProjection), [501, 504, 502, 503],
+    "moving one open row must preserve every other row's relative order, including omitted completed rows");
+assert.strictEqual(service.getEntry(movedProjection, 504).orderValue, 1000000500,
+    "keep the server's returned process rank rather than replacing it with a local sequence");
+assert.strictEqual(service.getEntry(movedProjection, 501).orderValue, 1000000000,
+    "an unrelated completed item's persisted rank must remain unchanged");
+assert.deepStrictEqual(idsInOrder(projectedIndex), [501, 502, 503, 504], "do not mutate the original index");
+const movedAgain = service.applyMove(movedProjection,
+    { ids: [502], parentId: 0, previousId: 504, nextId: 0 });
+assert.deepStrictEqual(idsInOrder(movedAgain), [501, 504, 502, 503],
+    "an end-of-group drop must not pull completed rows to the front on a second move");
+assert.deepStrictEqual(idsInOrder(service.applyMove(projectedIndex,
+    { ids: [504], parentId: 0, previousId: 0, nextId: 502 })), [501, 504, 502, 503],
+    "older servers without returned ranks still need a stable local display order");
+
 console.log("backlog-order tests passed");

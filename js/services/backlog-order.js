@@ -415,7 +415,7 @@ define([], () => {
      * @param {object} index Current backlog index.
      * @param {object} operation Successful Azure Boards reorder operation.
      */
-    const applyMove = function (index, operation) {
+    const applyMove = function (index, operation, serverResults) {
         const result = cloneIndex(index);
         const ids = ((operation || {}).ids || []).map(toId).filter((id) => id !== null);
         if (ids.length !== 1) {
@@ -427,6 +427,11 @@ define([], () => {
             return result;
         }
 
+        // Keep a display order across the whole level. Backlog API projections
+        // and omitted completed rows can have different parent groups while
+        // being siblings in the query. Never compare local 0..N ranks with
+        // authoritative process ranks in those other groups.
+        const display = result.allEntries.filter((entry) => entry.backlogId === moved.backlogId && entry.id !== moved.id).sort(compareEntries);
         const oldParentId = moved.parentId;
         const newParentId = toId(operation.parentId) || 0;
         const siblings = getSiblings(result, moved.backlogId, newParentId, moved.id);
@@ -446,6 +451,12 @@ define([], () => {
             }
         }
 
+        const anchorId = nextId || previousId;
+        const anchorPosition = display.findIndex((entry) => entry.id === anchorId);
+        const displayPosition = anchorPosition >= 0 ? anchorPosition + (nextId ? 0 : 1) : display.length;
+        display.splice(displayPosition, 0, moved);
+        display.forEach((entry, position) => { entry.displayOrder = position; });
+
         moved.parentId = newParentId;
         siblings.splice(insertAt, 0, moved);
         reindexSiblings(siblings);
@@ -454,6 +465,14 @@ define([], () => {
             reindexSiblings(getSiblings(result, moved.backlogId, oldParentId, moved.id));
         }
 
+        // Azure can return ranks for several items when it rebalances them.
+        // Only these values may update cached process Order fields.
+        (serverResults || []).forEach((record) => {
+            const order = toNumber(record && record.order);
+            if (order !== null) {
+                (result.entries[toId(record.id)] || []).forEach((entry) => { entry.orderValue = order; });
+            }
+        });
         return result;
     };
 
@@ -562,6 +581,9 @@ define([], () => {
      * exists; entries without one follow the ranked entries in API order.
      */
     const compareEntries = function (left, right) {
+        if (Number.isFinite(left.displayOrder) && Number.isFinite(right.displayOrder) && left.displayOrder !== right.displayOrder) {
+            return left.displayOrder - right.displayOrder;
+        }
         const leftOrder = toNumber(left && left.orderValue);
         const rightOrder = toNumber(right && right.orderValue);
 
@@ -597,10 +619,6 @@ define([], () => {
     const reindexSiblings = function (siblings) {
         (siblings || []).forEach((entry, position) => {
             entry.position = position;
-            // sortItems prefers the process Order value when present. A local
-            // sequential value therefore makes the successful move visible
-            // immediately while Azure keeps the authoritative persisted rank.
-            entry.orderValue = position;
         });
     };
 

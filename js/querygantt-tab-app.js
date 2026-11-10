@@ -540,9 +540,9 @@ define([
         };
         const execute = (currentPlan, items, canRetry) => Promise.resolve()
             .then(() => client.reorderBacklogWorkItems(currentPlan.operation, this._getTeamContext()))
-            .then(() => {
+            .then((serverResults) => {
                 try {
-                    this._applyBacklogMove(currentPlan, items.dragged, items.target);
+                    this._applyBacklogMove(currentPlan, items.dragged, items.target, serverResults);
                     if (this._backlogAnalysisContext) {
                         this.message("");
                     }
@@ -598,8 +598,14 @@ define([
     /**
      * Updates query hierarchy and backlog metadata after a successful move.
      */
-    Model.prototype._applyBacklogMove = function (plan, dragged, target) {
-        const index = backlogOrderService.applyMove(this.backlogIndex(), plan.operation);
+    Model.prototype._applyBacklogMove = function (plan, dragged, target, serverResults) {
+        const index = backlogOrderService.applyMove(this.backlogIndex(), plan.operation, serverResults);
+        (serverResults || []).forEach((record) => {
+            if (index.orderField && record.order !== null && record.order !== undefined && Number.isFinite(Number(record.order))) {
+                const fields = this._workItemFieldValues[record.id] || {};
+                this._workItemFieldValues[record.id] = Object.assign({}, fields, { [index.orderField]: Number(record.order) });
+            }
+        });
         const oldPath = (dragged.path === null || typeof(dragged.path) === "undefined") ? dragged.id + "" : dragged.path + "";
         let parentPath = "";
         if (plan.position === "inside" && target) {
