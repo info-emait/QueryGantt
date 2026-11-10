@@ -83,7 +83,7 @@ define([
                                         <span aria-hidden="true" class="bolt-messagebar-icon medium flex-noshrink fabric-icon ms-Icon--Error"></span>
                                     </span>
                                 </div>
-                                <div class="bolt-messagebar-message flex-row flex-wrap flex-grow flex-shrink flex-center body-m word-break" data-bind="html: text"></div>
+                                <div class="bolt-messagebar-message flex-row flex-wrap flex-grow flex-shrink flex-center body-m word-break" data-bind="text: text"></div>
                             </div>
                             <div class="bolt-messagebar-buttons flex-noshrink flex-row flex-center flex-self-stretch">
                                 <button class="bolt-messagebar-close-button bolt-button bolt-icon-button enabled subtle icon-only bolt-focus-treatment" role="button" tabindex="0" type="button"
