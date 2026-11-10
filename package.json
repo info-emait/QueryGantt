@@ -4,8 +4,13 @@
     "version": "#{Project.AssemblyInfo.Version}#",
     "author": "emait",
     "private": true,
+    "scripts": {
+        "test": "node tests/backlog-hierarchy-diagnostics.test.js && node tests/hierarchy-localization.test.js",
+        "test:browser": "node tests/hierarchy-analysis.browser.test.js"
+    },
     "devDependencies": {
         "grunt": "1.6.1",
+        "playwright": "1.62.1",
         "grunt-version": "3.0.2",
         "grunt-contrib-clean": "2.0.1",
         "grunt-contrib-copy": "1.0.0",
