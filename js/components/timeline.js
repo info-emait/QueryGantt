@@ -665,14 +665,22 @@ define([
      * @param {number} now Current time in milliseconds.
      */
     let createRecord = function (wit, now) {
-        var subtitle = [
-            getFormattedDate(wit.startDate) || getFormattedDate(wit.iterationStartDate) || "×",
-            getFormattedDate(wit.targetDate) || getFormattedDate(wit.iterationTargetDate) || "×"
-        ];
+        var subtitle = !isMarker(wit) 
+            ? [
+                getFormattedDate(wit.startDate) || getFormattedDate(wit.iterationStartDate) || "×",
+                getFormattedDate(wit.targetDate) || getFormattedDate(wit.iterationTargetDate) || "×"
+            ]
+            : [
+                getFormattedDate(wit.targetDate) || "×"
+            ];
 
         // Ensure dates
-        let start = wit.startDate || wit.iterationStartDate || wit.targetDate || now;
-        let end = new Date((wit.targetDate || wit.iterationTargetDate || wit.startDate || now).getTime());
+        let start = isMarker(wit)
+            ? wit.targetDate || now
+            : wit.startDate || wit.iterationStartDate || wit.targetDate || now;
+        let end = isMarker(wit) 
+            ? new Date((wit.targetDate || now).getTime())
+            : new Date((wit.targetDate || wit.iterationTargetDate || wit.startDate || now).getTime());
         end.setDate(end.getDate() + 1);
 
         return {
