@@ -300,8 +300,20 @@ define([
                         const iterations = {};
                         response.forEach((it) => this._flattenIterations(it, iterations));
                         wits.forEach((wit) => {
-                            wit.iterationStartDate = iterations[wit.iterationPath]?.startDate;
-                            wit.iterationTargetDate = iterations[wit.iterationPath]?.finishDate;
+                            wit.iterationStartDate = iterations[wit.iterationPath]?.startDate
+                                ? new Date(
+                                    iterations[wit.iterationPath].startDate.getFullYear(),
+                                    iterations[wit.iterationPath].startDate.getMonth(),
+                                    iterations[wit.iterationPath].startDate.getDate()
+                                )
+                                : null;
+                            wit.iterationTargetDate = iterations[wit.iterationPath]?.finishDate
+                                ? new Date(
+                                    iterations[wit.iterationPath].finishDate.getFullYear(),
+                                    iterations[wit.iterationPath].finishDate.getMonth(),
+                                    iterations[wit.iterationPath].finishDate.getDate()
+                                )
+                                : null;
                         });
                         this.wits(wits);
                     });
