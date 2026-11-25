@@ -1,6 +1,15 @@
 # Changelog
 
 
+## QueryGantt v1.5.3
+
+### Added
+* If Start Date and Target Date are not set, the start and end of the item is calculated from the work item's Iteration path.
+
+### Changed
+* The libraries in use have been updated to the latest versions.
+
+
 
 ## QueryGantt v1.5.2
 

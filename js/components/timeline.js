@@ -643,8 +643,8 @@ define([
             duration: getDuration(wit),
             selected: false,
             tags: wit.tags,
-            startDate: wit.startDate,
-            endDate: wit.targetDate,
+            startDate: wit.startDate || wit.iterationStartDate,
+            endDate: wit.targetDate || wit.iterationTargetDate,
             nestedGroups: items
                 .filter((child) => (child.parent === wit.path) && !isMarker(child))
                 .map((child) => child.id)
@@ -666,13 +666,13 @@ define([
      */
     let createRecord = function (wit, now) {
         var subtitle = [
-            getFormattedDate(wit.startDate) || "×",
-            getFormattedDate(wit.targetDate) || "×"
+            getFormattedDate(wit.startDate) || getFormattedDate(wit.iterationStartDate) || "×",
+            getFormattedDate(wit.targetDate) || getFormattedDate(wit.iterationTargetDate) || "×"
         ];
 
         // Ensure dates
-        let start = wit.startDate || wit.targetDate || now;
-        let end = new Date((wit.targetDate || wit.startDate || now).getTime());
+        let start = wit.startDate || wit.iterationStartDate || wit.targetDate || now;
+        let end = new Date((wit.targetDate || wit.iterationTargetDate || wit.startDate || now).getTime());
         end.setDate(end.getDate() + 1);
 
         return {
@@ -856,13 +856,13 @@ define([
      * @param {object} wit Work item.
      */
     let getDuration = function (wit) {
-        if (!wit.startDate || !wit.targetDate) {
+        if (!(wit.startDate || wit.iterationStartDate) || !(wit.targetDate || wit.iterationTargetDate)) {
             return 0;
         }
 
         // Check dates
-        var startTime = wit.startDate.getTime();
-        var targetTime = wit.targetDate.getTime();
+        var startTime = (wit.startDate || wit.iterationStartDate).getTime();
+        var targetTime = (wit.targetDate || wit.iterationTargetDate).getTime();
 
         if (startTime > targetTime) {
             return 0;

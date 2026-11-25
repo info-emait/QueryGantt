@@ -3,7 +3,7 @@ module.exports = function (grunt) {
 
     grunt.config("jshint", {
         options: {
-            esversion: 6,
+            esversion: 11,
             browser: true,
             devel: true,
             debug: true,

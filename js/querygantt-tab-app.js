@@ -181,7 +181,7 @@ define([
                 
                 // Normalize results
                 wits.forEach((wit) => {
-                    var w = {
+                    const w = {
                         id: wit.fields["System.Id"],
                         parentId: wit.fields["System.Parent"] || null,
                         rev: wit.fields["System.Rev"],
@@ -202,6 +202,8 @@ define([
                         changedDate: wit.fields["System.ChangedDate"],
                         startDate: wit.fields["Microsoft.VSTS.Scheduling.StartDate"],
                         targetDate: wit.fields["Microsoft.VSTS.Scheduling.TargetDate"],
+                        iterationStartDate: null,
+                        iterationTargetDate: null,
                         completedWork: (wit.fields["Microsoft.VSTS.Scheduling.CompletedWork"] || 0),
                         remainingWork: (wit.fields["Microsoft.VSTS.Scheduling.RemainingWork"] || 0),
                         effort: (wit.fields["Microsoft.VSTS.Scheduling.Effort"] || 0),
@@ -212,7 +214,7 @@ define([
 
                     // If there is the same item more than once in the result tree
                     this._getPaths(relations, wit.id).forEach((p, idx) => {
-                        var o = JSON.parse(JSON.stringify(w));
+                        const o = JSON.parse(JSON.stringify(w));
 
                         o.createdDate = new Date(o.createdDate);
                         o.changedDate = new Date(o.changedDate);
@@ -283,12 +285,26 @@ define([
                 icons = [...new Set(icons)];
 
                 let xhr = icons.map((url) => iconService.fetch(url));
-                Promise.all(xhr).then((response) => {
+                return Promise.all(xhr).then((response) => {
                     let tmp = {};
                     response.forEach((svg, index) => tmp[icons[index]] = svg);
                     this.icons(tmp);
-                    this.wits(wits);
+                    return wits;
                 });
+            })
+            .then((wits) => {
+                // Get all iterations for all projects
+                Promise
+                    .all([...new Set(wits.map((w) => w.project))].map((p) => client.getClassificationNode(p, 1 /*1 == Iterations*/, undefined, 10)))
+                    .then((response) => {
+                        const iterations = {};
+                        response.forEach((it) => this._flattenIterations(it, iterations));
+                        wits.forEach((wit) => {
+                            wit.iterationStartDate = iterations[wit.iterationPath]?.startDate;
+                            wit.iterationTargetDate = iterations[wit.iterationPath]?.finishDate;
+                        });
+                        this.wits(wits);
+                    });
             });
     };
 
@@ -412,8 +428,8 @@ define([
                     sheet.cell(`G${i + 8}`).value(wit.assignedTo);
                     sheet.cell(`H${i + 8}`).value(wit.state);
                     sheet.cell(`I${i + 8}`).value(wit.tags.join(";"));
-                    sheet.cell(`J${i + 8}`).value(wit.startDate || wit.targetDate);
-                    sheet.cell(`K${i + 8}`).value(wit.targetDate);
+                    sheet.cell(`J${i + 8}`).value(wit.startDate || wit.iterationStartDate || wit.targetDate);
+                    sheet.cell(`K${i + 8}`).value(wit.targetDate || wit.iterationTargetDate);
                     sheet.cell(`M${i + 8}`).value(wit.effort);
                     sheet.cell(`N${i + 8}`).value(wit.remainingWork);
                     sheet.cell(`O${i + 8}`).value(wit.completedWork);
@@ -865,13 +881,15 @@ define([
 
         if (filter.period) {
             if (filter.period.from) {
-                items = items.filter((i) => (i.startDate instanceof Date) && i.startDate.getTime() >= filter.period.from.getTime());
+                items = items.filter((i) => ((i.startDate instanceof Date) && i.startDate.getTime() >= filter.period.from.getTime())
+                                        || ((i.iterationStartDate instanceof Date) && i.iterationStartDate.getTime() >= filter.period.from.getTime()));
             }
             if (filter.period.to) {
                 const endOfDay = new Date(filter.period.to);
                 endOfDay.setHours(23, 59, 59, 999);
 
-                items = items.filter((i) => (i.targetDate instanceof Date) && i.targetDate.getTime() <= endOfDay);
+                items = items.filter((i) => ((i.targetDate instanceof Date) && i.targetDate.getTime() <= endOfDay)
+                                        || ((i.iterationTargetDate instanceof Date) && i.iterationTargetDate.getTime() <= endOfDay));
             }
         }
         
@@ -957,6 +975,40 @@ define([
         });
 
         return wits;
+    };
+
+
+    /**
+     * Makes flat array of all iterations.
+     * 
+     * @param {object} node Current node.
+     * @param {Array} result Result array.
+     * @param {string} parentPath Parent iteration path.
+     */
+    Model.prototype._flattenIterations = function(node, result = {}, parentPath = "") {
+        if (!node) {
+            return result;
+        }
+
+        const path = parentPath ? `${parentPath}\\${node.name}` : node.name;
+
+        if (node.structureType === 1) {
+            result[path] = {
+                id: node.id,
+                name: node.name,
+                path: path,
+                startDate: node.attributes?.startDate || null,
+                finishDate: node.attributes?.finishDate || null
+            };
+        }
+
+        if (!node.hasChildren) {
+            return result;
+        }
+
+        node.children.forEach((child) => this._flattenIterations(child, result, path));
+
+        return result;
     };
 
     //#endregion
