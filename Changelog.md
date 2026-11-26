@@ -5,6 +5,7 @@
 
 ### Added
 * If Start Date and Target Date are not set, the start and end of the item is calculated from the work item's Iteration path.
+* Edit of work item can be triggered by double click.
 
 ### Changed
 * The libraries in use have been updated to the latest versions.

@@ -405,15 +405,20 @@ define([
      * @param {object} e Arguments.
      */
     Timeline.prototype._onDoubleClick = function (e) {
-        // if ((e.event.type !== "dblclick") || isNaN(e.item)) {
-        //     return;
-        // }
-        // const id = e.item;
-        // this.timeline.setSelection([ id ], { focus: false });
-        // this._onSelect({
-        //     items: [id]
-        // });
-        // this.selectedItemId(id);
+        if (e?.event?.type !== "dblclick") {
+            return;
+        }
+
+        const id = parseInt(e.item);
+        if (isNaN(id)) {
+            return;
+        }
+
+        this.timeline.setSelection([ id ], { focus: false });
+        this._onSelect({
+            items: [id]
+        });
+        this.selectedItemId(id);
     };
 
 

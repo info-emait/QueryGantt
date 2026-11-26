@@ -827,6 +827,7 @@ define([
                     state: wit.fields["System.State"]
                  });
                 this.currentId(null);
+                this.refresh();
             });
         // sdk.getService(api.CommonServiceIds.HostPageLayoutService).then((host) => {
         //     host.openPanel(`${sdk.getExtensionContext().id}.#{Extension.Id}#-detail`, {
