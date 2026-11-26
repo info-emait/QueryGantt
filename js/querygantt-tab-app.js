@@ -79,8 +79,8 @@ define([
         this.filteredWits = ko.computed(this._getFilteredWits, this);
 
         this.isTotalEffortVisible = ko.computed(() => this.showFields().includes("effort"));  
-        this.isTotalRemainingWorkVisible = ko.computed(() => this.showFields().includes("remainingWork"));
-        this.isTotalCompletedWorkVisible = ko.computed(() => this.showFields().includes("completedWork"));
+        this.isTotalRemainingWorkVisible = ko.computed(() => this.showFields().includes("remainingWork") || this.showFields().includes("workProgress"));
+        this.isTotalCompletedWorkVisible = ko.computed(() => this.showFields().includes("completedWork") || this.showFields().includes("workProgress"));
 
         this.queryType = ko.observable("");
 

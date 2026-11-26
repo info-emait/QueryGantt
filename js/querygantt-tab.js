@@ -55,19 +55,21 @@ require({
             }, {
                 name: "Iteration Path", value: "iterationPath"
             }, {
+                name: "Effort", value: "effort"
+            }, {
+                name: "Remaining Work", value: "remainingWork"
+            }, {
                 name: "Completed Work", value: "completedWork"
+            }, {
+                name: "Work Progress", value: "workProgress"
             }, {
                 name: "Dates", value: "dates"
             }, {
                 name: "Duration", value: "duration"
             }, {
-                name: "Effort", value: "effort"
-            }, {
                 name: "Node Name", value: "nodeName"
             }, {
                 name: "Parent", value: "parentTitle"
-            }, {
-                name: "Remaining Work", value: "remainingWork"
             }, {
                 name: "Tags", value: "tags"
             }, {

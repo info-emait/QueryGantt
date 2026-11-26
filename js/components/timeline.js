@@ -769,7 +769,7 @@ define([
 
         if (showFields.includes("effort")) {
             result.push(`<div class="my-timeline-group__content my-timeline-group__content--effort justify-end margin-left-8 flex-row flex-center" title="Effort">
-                            ${record.effort + " h" || ""}
+                            <div>${record.effort + " h" || ""}</div>
                             <div class="bolt-pill bolt-pill--timeline flex-row flex-center outlined compact margin-left-4">
                                 <div class="bolt-pill-content text-ellipsis" role="presentation">EFF</div>
                             </div>
@@ -778,7 +778,7 @@ define([
 
         if (showFields.includes("remainingWork")) {
             result.push(`<div class="my-timeline-group__content my-timeline-group__content--remainingwork justify-end margin-left-8 flex-row flex-center" title="Remaining Work">
-                            ${record.remainingWork + " h" || ""}
+                            <div>${record.remainingWork + " h" || ""}</div>
                             <div class="bolt-pill bolt-pill--timeline flex-row flex-center outlined compact margin-left-4">
                                 <div class="bolt-pill-content text-ellipsis" role="presentation">RW</div>
                             </div>
@@ -790,6 +790,19 @@ define([
                             <div>${record.completedWork + " h" || "×"}</div>
                             <div class="bolt-pill bolt-pill--timeline flex-row flex-center outlined compact margin-left-4">
                                 <div class="bolt-pill-content text-ellipsis" role="presentation">CW</div>
+                            </div>
+                        </div>`);
+        }
+
+        if (showFields.includes("workProgress")) {
+            result.push(`<div class="my-timeline-group__content my-timeline-group__content--workprogress justify-end margin-left-8 flex-row flex-center">
+                            <div class="bolt-pill bolt-pill--workprogress bolt-pill--timeline flex-row flex-center outlined compact margin-left-4">
+                                <div class="bolt-pill-content text-ellipsis" role="presentation" title="Remaining Work" style="width:${((record.remainingWork || 0)/(((record.remainingWork || 0) + (record.completedWork || 0)) || 1))*100}%">
+                                    <div class="padding-left-8">${record.remainingWork || ""}</div>
+                                </div>
+                                <div class="bolt-pill-content text-ellipsis" role="presentation" title="Completed Work" style="width:${((record.completedWork || 0)/(((record.remainingWork || 0) + (record.completedWork || 0)) || 1))*100}%">
+                                    <div class="padding-right-8">${record.completedWork || ""}</div>
+                                </div>
                             </div>
                         </div>`);
         }
