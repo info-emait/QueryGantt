@@ -8,6 +8,7 @@
 
 ### Changed
 * The libraries in use have been updated to the latest versions.
+* Side detail panel used for work item edits has been replaced with native work item edit form.
 
 
 

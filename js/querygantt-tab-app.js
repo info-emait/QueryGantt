@@ -64,6 +64,7 @@ define([
         this.states = ko.computed(this._getStates, this);
         this.priorities = ko.observableArray(args.priorities);
         this.fields = ko.observableArray(args.fields);
+        this.iterations = ko.observable({});
 
         this.assigneesFilter = ko.observableArray();
         this.statesFilter = ko.observableArray();
@@ -299,6 +300,7 @@ define([
                     .then((response) => {
                         const iterations = {};
                         response.forEach((it) => this._flattenIterations(it, iterations));
+                        this.iterations(iterations);
                         wits.forEach((wit) => {
                             wit.iterationStartDate = iterations[wit.iterationPath]?.startDate
                                 ? new Date(
@@ -782,30 +784,67 @@ define([
     Model.prototype._showDetail = function() {
         const current = this.current();
         const currentId = this.currentId();
-        const types = this.types();
-        const typesOther = this.typesOther();
+        const iterations = this.iterations();
+        // const types = this.types();
+        // const typesOther = this.typesOther();
 
         if (ko.computedContext.isInitial() || !current || !currentId) {
             return;
         }
 
-        sdk.getService(api.CommonServiceIds.HostPageLayoutService).then((host) => {
-            host.openPanel(`${sdk.getExtensionContext().id}.#{Extension.Id}#-detail`, {
-                title: `#${current.id}: ${current.title}`,
-                lightDismiss: false,
-                configuration: {
-                    item: current,
-                    id: currentId,
-                    updateWitCallback: this.updateWit.bind(this),
-                    updateRecordCallback: this.updateRecord.bind(this),
-                    types,
-                    typesOther
-                },
-                onClose: (result = {}) => {
-                    this.currentId(null);
-                }
+        const isMarker = (wit) => {
+            return !wit.fields["Microsoft.VSTS.Scheduling.StartDate"] && wit.fields["Microsoft.VSTS.Scheduling.TargetDate"];
+        };
+
+        sdk.getService(witApi.WorkItemTrackingServiceIds.WorkItemFormNavigationService)
+            .then((svc) => svc.openWorkItem(currentId, false))
+            .then((wit) => {
+                const now = new Date();
+                const iterationStartDate = iterations[wit.fields["System.IterationPath"]]?.startDate
+                                ? new Date(
+                                    iterations[wit.fields["System.IterationPath"]].startDate.getFullYear(),
+                                    iterations[wit.fields["System.IterationPath"]].startDate.getMonth(),
+                                    iterations[wit.fields["System.IterationPath"]].startDate.getDate()
+                                )
+                                : null;
+                const iterationTargetDate = iterations[wit.fields["System.IterationPath"]]?.finishDate
+                        ? new Date(
+                            iterations[wit.fields["System.IterationPath"]].finishDate.getFullYear(),
+                            iterations[wit.fields["System.IterationPath"]].finishDate.getMonth(),
+                            iterations[wit.fields["System.IterationPath"]].finishDate.getDate()
+                        )
+                        : null;
+                const start = isMarker(wit)
+                        ? wit.fields["Microsoft.VSTS.Scheduling.TargetDate"] || now
+                        : wit.fields["Microsoft.VSTS.Scheduling.StartDate"] || iterationStartDate || wit.fields["Microsoft.VSTS.Scheduling.TargetDate"] || now;
+                const end = isMarker(wit) 
+                    ? new Date((wit.fields["Microsoft.VSTS.Scheduling.TargetDate"] || now).getTime())
+                    : new Date((wit.fields["Microsoft.VSTS.Scheduling.TargetDate"] || iterationTargetDate|| wit.fields["Microsoft.VSTS.Scheduling.StartDate"] || now).getTime());
+                end.setDate(end.getDate() + 1);
+                this.updateRecord(wit.id, { 
+                    start,
+                    end,
+                    state: wit.fields["System.State"]
+                 });
+                this.currentId(null);
             });
-        });
+        // sdk.getService(api.CommonServiceIds.HostPageLayoutService).then((host) => {
+        //     host.openPanel(`${sdk.getExtensionContext().id}.#{Extension.Id}#-detail`, {
+        //         title: `#${current.id}: ${current.title}`,
+        //         lightDismiss: false,
+        //         configuration: {
+        //             item: current,
+        //             id: currentId,
+        //             updateWitCallback: this.updateWit.bind(this),
+        //             updateRecordCallback: this.updateRecord.bind(this),
+        //             types,
+        //             typesOther
+        //         },
+        //         onClose: (result = {}) => {
+        //             this.currentId(null);
+        //         }
+        //     });
+        // });
     };
 
 
