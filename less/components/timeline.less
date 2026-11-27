@@ -113,7 +113,16 @@
             }
             
             &--assignedto {
-                width: rem(125px);
+                width: rem(145px);
+                display: flex;
+
+                > .fabric-icon {
+                    margin-right: rem(4px);
+
+                    &:before {
+                        content: "\F5BE";
+                    }
+                }
             }
 
             &--workprogress {

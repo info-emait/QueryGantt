@@ -744,7 +744,10 @@ define([
         result.push(`<div class="my-timeline-group__dividier"></div>`);
 
         if (showFields.includes("assignedTo")) {
-            result.push(`<div class="my-timeline-group__content my-timeline-group__content--assignedto text-left text-ellipsis margin-left-8">${record.assignedTo || ""}</div>`);
+            result.push(`<div class="my-timeline-group__content my-timeline-group__content--assignedto text-left text-ellipsis margin-left-8 fluent-icons-enabled">
+                            <span aria-hidden="true" class="flex-noshrink fabric-icon medium"></span>
+                            <span class="text-ellipsis">${record.assignedTo || "-"}</span>
+                        </div>`);
         }
         
         if (showFields.includes("project")) {
