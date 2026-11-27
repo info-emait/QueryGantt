@@ -567,12 +567,27 @@ define([
             return;
         }
 
+        // Unselect each group
+        if(this.groups) {
+            this.groups.forEach((g) => {
+                if(!g.className || !g.className.includes("vis-label--selected")) {
+                    return;
+                }
+                this.groups.update({ id: g.id, className: "vis-label--unselected" });
+            });
+        }
+
         if (!id) {
             this.selectedItem(null);
             return;
         }
 
         this.selectedItem(items.find((w) => w.id === id) || null);
+
+        // Select group
+        if (this.groups && this.groups.get(id)) {
+            this.groups.update({ id, className: "vis-label--selected" });            
+        }
     };    
 
     //#endregion

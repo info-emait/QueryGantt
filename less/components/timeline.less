@@ -249,6 +249,10 @@
                 font-size: rem(12px);
                 background-color: transparent !important;
                 padding: 0 !important;
+
+                &:hover {
+                    background-color: rgba(var(--palette-primary-tint-40,239, 246, 252),1) !important;
+                }
             }
 
             &.vis-group-level-1 {
@@ -353,6 +357,11 @@
                         content: "\0203A";
                     }
                 }
+            }
+
+            &--selected,
+            &.vis-label--selected {
+                background-color: rgba(var(--palette-primary-tint-40,239, 246, 252),1) !important;
             }
         }
 
