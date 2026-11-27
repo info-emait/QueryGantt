@@ -777,9 +777,8 @@ define([
 
         if (showFields.includes("remainingWork")) {
             result.push(`<div class="my-timeline-group__content my-timeline-group__content--remainingwork justify-end margin-left-8 flex-row flex-center" title="Remaining Work">
-                            <div>${record.remainingWork + " h" || ""}</div>
-                            <div class="bolt-pill bolt-pill--timeline flex-row flex-center outlined compact margin-left-4">
-                                <div class="bolt-pill-content text-ellipsis" role="presentation">RW</div>
+                            <div class="bolt-pill bolt-pill--timeline flex-row flex-center outlined compact margin-left-4 ${!Number.isFinite(record.remainingWork) ? "bolt-pill--undefined" : ""}">
+                                <div class="bolt-pill-content text-ellipsis" role="presentation">Remaining:&nbsp;<span class="font-weight-semibold">${record.remainingWork || "-"}</span></div>
                             </div>
                         </div>`);
         }
