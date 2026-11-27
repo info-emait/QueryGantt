@@ -785,9 +785,8 @@ define([
 
         if (showFields.includes("completedWork")) {
             result.push(`<div class="my-timeline-group__content my-timeline-group__content--completedwork justify-end margin-left-8 flex-row flex-center" title="Completed Work">
-                            <div>${record.completedWork + " h" || "×"}</div>
-                            <div class="bolt-pill bolt-pill--timeline flex-row flex-center outlined compact margin-left-4">
-                                <div class="bolt-pill-content text-ellipsis" role="presentation">CW</div>
+                            <div class="bolt-pill bolt-pill--timeline flex-row flex-center outlined compact margin-left-4 ${!Number.isFinite(record.completedWork) ? "bolt-pill--undefined" : ""}">
+                                <div class="bolt-pill-content text-ellipsis" role="presentation">Completed:&nbsp;<span class="font-weight-semibold">${record.completedWork || "-"}</span></div>
                             </div>
                         </div>`);
         }
