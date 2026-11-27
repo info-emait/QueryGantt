@@ -769,9 +769,8 @@ define([
 
         if (showFields.includes("effort")) {
             result.push(`<div class="my-timeline-group__content my-timeline-group__content--effort justify-end margin-left-8 flex-row flex-center" title="Effort">
-                            <div>${record.effort + " h" || ""}</div>
-                            <div class="bolt-pill bolt-pill--timeline flex-row flex-center outlined compact margin-left-4">
-                                <div class="bolt-pill-content text-ellipsis" role="presentation">EFF</div>
+                            <div class="bolt-pill bolt-pill--timeline flex-row flex-center outlined compact margin-left-4 ${!Number.isFinite(record.effort) ? "bolt-pill--undefined" : ""}">
+                                <div class="bolt-pill-content text-ellipsis" role="presentation">Effort:&nbsp;<span class="font-weight-semibold">${record.effort || "-"}</span></div>
                             </div>
                         </div>`);
         }

@@ -207,7 +207,7 @@ define([
                         iterationTargetDate: null,
                         completedWork: (wit.fields["Microsoft.VSTS.Scheduling.CompletedWork"] || 0),
                         remainingWork: (wit.fields["Microsoft.VSTS.Scheduling.RemainingWork"] || 0),
-                        effort: (wit.fields["Microsoft.VSTS.Scheduling.Effort"] || 0),
+                        effort: (wit.fields["Microsoft.VSTS.Scheduling.Effort"] || null),
                         tags: (wit.fields["System.Tags"] || "").split("; ").filter((t) => (t || "").length),
                         attachments: (wit.relations || []).filter((a) => a.rel === "AttachedFile"),
                         dependencies: (wit.relations || []).filter((a) => (a.rel === "System.LinkTypes.Dependency-Forward") && ((a.attributes || {}).name === "Successor")).map((r) => parseInt(r.url.split("/").pop()))
@@ -444,7 +444,7 @@ define([
                     sheet.cell(`I${i + 8}`).value(wit.tags.join(";"));
                     sheet.cell(`J${i + 8}`).value(wit.startDate || wit.iterationStartDate || wit.targetDate);
                     sheet.cell(`K${i + 8}`).value(wit.targetDate || wit.iterationTargetDate);
-                    sheet.cell(`M${i + 8}`).value(wit.effort);
+                    sheet.cell(`M${i + 8}`).value(Number.isFinite(wit.effort) ? wit.effort : "");
                     sheet.cell(`N${i + 8}`).value(wit.remainingWork);
                     sheet.cell(`O${i + 8}`).value(wit.completedWork);
                     sheet.cell(`P${i + 8}`).value(wit.nodeName);
