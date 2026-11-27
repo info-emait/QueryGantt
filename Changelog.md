@@ -6,13 +6,16 @@
 ### Added
 * If Start Date and Target Date are not set, the start and end of the item is calculated from the work item's Iteration path.
 * Edit of work item can be triggered by double click.
-* Added Work Progress column.
+* Added Work Progress column, including total Remaining Work and total Completed Work.
 * Higlight selected row.
 
 ### Changed
 * The libraries in use have been updated to the latest versions.
 * Side detail panel used for work item edits has been replaced with native work item edit form.
 * Changed the visualization of fields: Effort, Remaining Work, Completed Work, Assigned To.
+
+### Fixed
+* Fixed multiple initilization calls during startup, which slow down the rendering.
 
 
 

@@ -667,7 +667,10 @@ define([
             endDate: wit.targetDate || wit.iterationTargetDate,
             nestedGroups: items
                 .filter((child) => (child.parent === wit.path) && !isMarker(child))
-                .map((child) => child.id)
+                .map((child) => child.id),
+            totalEffort: wit.totalEffort,
+            totalRemainingWork: wit.totalRemainingWork,
+            totalCompletedWork: wit.totalCompletedWork
         };
 
         if (!group.nestedGroups.length) {
@@ -812,11 +815,11 @@ define([
         if (showFields.includes("workProgress")) {
             result.push(`<div class="my-timeline-group__content my-timeline-group__content--workprogress justify-end margin-left-8 flex-row flex-center">
                             <div class="bolt-pill bolt-pill--workprogress bolt-pill--timeline flex-row flex-center outlined compact margin-left-4">
-                                <div class="bolt-pill-content text-ellipsis" role="presentation" title="Remaining Work" style="width:${((record.remainingWork || 0)/(((record.remainingWork || 0) + (record.completedWork || 0)) || 1))*100}%">
-                                    <div class="padding-left-8">${record.remainingWork || ""}</div>
+                                <div class="bolt-pill-content text-ellipsis" role="presentation" title="Remaining Work: ${record.totalRemainingWork || record.remainingWork || ""}" style="width:${((record.totalRemainingWork || record.remainingWork || 0)/(((record.totalRemainingWork || record.remainingWork || 0) + (record.totalCompletedWork || record.completedWork || 0)) || 1))*100}%">
+                                    <div class="padding-left-8">${record.totalRemainingWork || record.remainingWork || ""}</div>
                                 </div>
-                                <div class="bolt-pill-content text-ellipsis" role="presentation" title="Completed Work" style="width:${((record.completedWork || 0)/(((record.remainingWork || 0) + (record.completedWork || 0)) || 1))*100}%">
-                                    <div class="padding-right-8">${record.completedWork || ""}</div>
+                                <div class="bolt-pill-content text-ellipsis" role="presentation" title="Completed Work: ${record.totalCompletedWork || record.completedWork || ""}" style="width:${((record.totalCompletedWork || record.completedWork || 0)/(((record.totalRemainingWork || record.remainingWork || 0) + (record.totalCompletedWork || record.completedWork || 0)) || 1))*100}%">
+                                    <div class="padding-right-8">${record.totalCompletedWork || record.completedWork || ""}</div>
                                 </div>
                             </div>
                         </div>`);

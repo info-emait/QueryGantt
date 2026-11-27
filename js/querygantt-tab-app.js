@@ -24,6 +24,7 @@ define([
     const global = (function () { return this; })();
     const doc = global.document;
     const cnf = module.config();
+    let initPromise = null;
 
     //#endregion
 
@@ -119,10 +120,14 @@ define([
      * @param {string} asOf Specifies a historical query by indicating a date for when the filter is to be applied.
      */
     Model.prototype.init = function (asOf = null) {
+        if (initPromise) {
+            return initPromise;
+        }
+
         const client = api.getClient(witApi.WorkItemTrackingRestClient);
         let queryAsOf = null;
 
-        return client._options.rootPath.then((path) => {
+        initPromise = client._options.rootPath.then((path) => {
                 this.path = path;
                 return sdk.getAccessToken();
             })
@@ -301,6 +306,8 @@ define([
                         const iterations = {};
                         response.forEach((it) => this._flattenIterations(it, iterations));
                         this.iterations(iterations);
+                        
+                        const childrenMap = new Map();
                         wits.forEach((wit) => {
                             wit.iterationStartDate = iterations[wit.iterationPath]?.startDate
                                 ? new Date(
@@ -316,10 +323,51 @@ define([
                                     iterations[wit.iterationPath].finishDate.getDate()
                                 )
                                 : null;
+
+                            if (!childrenMap.has(wit.parentId)) {
+                                childrenMap.set(wit.parentId, []);
+                            }
+                            childrenMap.get(wit.parentId).push(wit);
                         });
+
+                        function calculate(item) {
+                            const children = childrenMap.get(item.id) || [];
+
+                            let totalEffort = 0;
+                            let totalRemainingWork = 0;
+                            let totalCompletedWork = 0;
+
+                            children.forEach((child) => {
+                                calculate(child);
+
+                                totalEffort += child.effort ?? 0;
+                                totalEffort += child.totalEffort ?? 0;
+
+                                totalRemainingWork += child.remainingWork ?? 0;
+                                totalRemainingWork += child.totalRemainingWork ?? 0;
+
+                                totalCompletedWork += child.completedWork ?? 0;
+                                totalCompletedWork += child.totalCompletedWork ?? 0;
+                            });
+
+                            if (children.length > 0) {
+                                item.totalEffort = totalEffort;
+                                item.totalRemainingWork = totalRemainingWork;
+                                item.totalCompletedWork = totalCompletedWork;
+                            }
+
+                            return item;
+                        }
+
+                        wits
+                            .filter((item) => !item.parent)
+                            .forEach((root) => calculate(root));
+
                         this.wits(wits);
                     });
             });
+
+        return initPromise;
     };
 
 
